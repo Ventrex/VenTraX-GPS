@@ -157,7 +157,7 @@
 
         <div style="border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
           <div>
-            <div style="font-weight:600;font-size:15px"><span id="camIcon">{{ 'AAN' if me.camera_enabled else 'UIT' }}</span> Camera <span style="font-size:11px;color:var(--text2);font-weight:400">(optioneel)</span></div>
+            <div style="font-weight:600;font-size:15px"><span id="camIcon">{{ 'AAN' if me.camera_enabled else 'UIT' }}</span> Camera <span id="camReqTxt" style="font-size:11px;color:var(--text2);font-weight:400">{{ '(verplicht voor foto opdrachten)' if game.feat_photo_missions else '(optioneel)' }}</span></div>
             <div style="font-size:12px;color:var(--text2);margin-top:3px" id="camTxt">{{ 'Toegang verleend' if me.camera_enabled else 'Voor foto feed' }}</div>
           </div>
           <button id="btnCam" class="btn btn-ghost btn-sm" onclick="requestCamera()" {% if me.camera_enabled %}style="display:none"{% endif %}><i class="fas fa-camera"></i> Toestaan</button>
@@ -261,6 +261,10 @@
         <div class="card-title"><i class="fas fa-play-circle"></i> Spel Starten</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Alle spelers GPS aan + klaar. Min. 1 hunter en 1 runner.</p>
         <div id="startErr" style="font-size:13px;color:var(--danger);margin-bottom:10px;display:none"></div>
+        <div id="startWarn" style="font-size:13px;color:var(--warn);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:10px 12px;margin-bottom:10px;display:none">
+          <div id="startWarnMsg" style="margin-bottom:8px"></div>
+          <button id="btnForceStart" class="btn btn-ghost btn-sm btn-full" onclick="startGame(true)"><i class="fas fa-triangle-exclamation"></i> Toch starten zonder camera</button>
+        </div>
         <button id="btnStart" class="btn btn-primary btn-full btn-lg" onclick="startGame()"><i class="fas fa-play"></i> Start het Spel!</button>
       </div>
       {% else %}
@@ -294,6 +298,7 @@ const IS_MAKER = {{ 'true' if me.user_id == game.creator_id else 'false' }};
 const JOIN_URL = '{{ join_url }}';
 const ROLE_INIT= '{{ me.role }}';
 const GAME_STATUS = '{{ game.status }}';
+const FEAT_PHOTO = {{ 'true' if game.feat_photo_missions else 'false' }};
 
 let myGps   = {{ 'true' if me.gps_enabled else 'false' }};
 let myCam   = {{ 'true' if me.camera_enabled else 'false' }};
@@ -602,11 +607,13 @@ function onSettingsUpdate(d) {
 
 // â”€â”€ Start game â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function startGame(forceStart=false) {
-  const btn = document.getElementById('btnStart');
-  const err = document.getElementById('startErr');
+  const btn  = document.getElementById('btnStart');
+  const err  = document.getElementById('startErr');
+  const warn = document.getElementById('startWarn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Starten...';
   err.style.display = 'none';
+  warn.style.display = 'none';
 
   fetch('/api/game/' + CODE + '/start', {
     method: 'POST',
@@ -616,11 +623,13 @@ function startGame(forceStart=false) {
     .then(r => r.json())
     .then(d => {
       if (d.warning && d.can_force_start && !forceStart) {
+        // Show inline, in-page warning instead of a blocking browser popup -
+        // everything is resolved here in the lobby before anyone starts running.
+        document.getElementById('startWarnMsg').textContent =
+          d.warning + (d.missing_camera && d.missing_camera.length ? ' (' + d.missing_camera.join(', ') + ')' : '');
+        warn.style.display = '';
         btn.disabled = false;
         btn.innerHTML = '<i class="fas fa-play"></i> Start het Spel!';
-        if (confirm(d.warning + (d.missing_camera && d.missing_camera.length ? '\n\nOntbrekend: ' + d.missing_camera.join(', ') : ''))) {
-          startGame(true);
-        }
         return;
       }
       if (d.error) {
@@ -787,6 +796,13 @@ syncLobby(); // immediate first call
   } else {
     setTimeout(() => { if (!myGps) enableGPS(true); }, 700);
   }
+})();
+
+// Resolve camera permission up-front in the lobby too (when photo missions are on)
+// so nobody is asked to approve anything after "Start spel" has been pressed.
+(function requireCameraInLobby() {
+  if (!FEAT_PHOTO || myCam) return;
+  setTimeout(() => { if (!myCam) requestCamera(); }, 1200);
 })();
 </script>
 {% endblock %}

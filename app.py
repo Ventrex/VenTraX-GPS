@@ -9,13 +9,14 @@ from functools import wraps
 from flask import (Flask, render_template, request, redirect, url_for,
                    flash, jsonify, send_from_directory, session)
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text as sql_text
 from flask_login import (LoginManager, UserMixin, login_user, logout_user,
                          login_required, current_user)
 from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from itsdangerous import URLSafeTimedSerializer
-from PIL import Image
+from PIL import Image, ImageDraw
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
 
@@ -42,7 +43,9 @@ app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@venfaye.nl')
 app.config['BASE_URL'] = os.environ.get('BASE_URL', os.environ.get('APP_URL', 'http://localhost:5001'))
 
-ALLOWED_IMG = {'png', 'jpg', 'jpeg', 'webp'}
+ALLOWED_IMG   = {'png', 'jpg', 'jpeg', 'webp'}
+ALLOWED_AUDIO = {'webm', 'ogg', 'mp3', 'm4a', 'wav'}
+AUDIO_FOLDER  = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 # Code chars â€” no confusable chars (0/O, 1/I/L, 2/Z, 5/S, 6/G, 8/B)
 CODE_CHARS = 'ACDEFHJKMNPQRTUVWXY3479'
 
@@ -349,9 +352,10 @@ class Game(db.Model):
     countdown_until  = db.Column(db.DateTime, nullable=True)  # 5s countdown before start
 
     creator = db.relationship('User', foreign_keys=[creator_id])
-    players = db.relationship('GamePlayer', back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
-    posts   = db.relationship('Post',       back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
-    targets = db.relationship('Target',     back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
+    players = db.relationship('GamePlayer',   back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
+    posts   = db.relationship('Post',         back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
+    targets = db.relationship('Target',       back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
+    location_pings = db.relationship('LocationPing', back_populates='game', lazy='dynamic', cascade='all, delete-orphan')
 
     @property
     def effective_elapsed(self):
@@ -443,12 +447,26 @@ class Target(db.Model):
     runner = db.relationship('User', foreign_keys=[runner_id])
 
 
+class LocationPing(db.Model):
+    """Throttled GPS breadcrumb trail per player, used to sketch each player's
+    route in the end-of-game summary email. Not every raw update is stored -
+    see _maybe_log_location_ping() - to keep the table from growing unbounded."""
+    id          = db.Column(db.Integer, primary_key=True)
+    game_id     = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
+    user_id     = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    lat         = db.Column(db.Float, nullable=False)
+    lon         = db.Column(db.Float, nullable=False)
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    game = db.relationship('Game', back_populates='location_pings')
+
+
 class Post(db.Model):
     id             = db.Column(db.Integer, primary_key=True)
     game_id        = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=False)
     user_id        = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     caption        = db.Column(db.String(500), nullable=True)
     image_filename = db.Column(db.String(256), nullable=True)
+    audio_filename = db.Column(db.String(256), nullable=True)
     lat            = db.Column(db.Float, nullable=True)
     lon            = db.Column(db.Float, nullable=True)
     share_location = db.Column(db.Boolean, default=False)
@@ -601,6 +619,9 @@ def admin_required(f):
         return f(*a, **kw)
     return d
 
+CATCH_MAX_DISTANCE_M   = 2    # hunter must be within this many meters to tag a runner
+CATCH_MIN_PROGRESS_PCT = 50   # tagging only allowed once the game is this far along
+
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     p1, p2 = math.radians(lat1), math.radians(lat2)
@@ -653,6 +674,43 @@ def save_image(file, folder, max_size=(1400, 1400)):
     if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
     img.save(path, quality=88, optimize=True)
     return name
+
+def save_audio(file, folder):
+    fn  = secure_filename(file.filename)
+    ext = fn.rsplit('.', 1)[1].lower() if '.' in fn else 'webm'
+    if ext not in ALLOWED_AUDIO:
+        raise ValueError('unsupported audio type')
+    if upload_too_large(file, max_bytes=10 * 1024 * 1024):
+        raise ValueError('audio too large')
+    os.makedirs(folder, exist_ok=True)
+    name = f"{int(time.time())}_{random.randint(1000,9999)}.{ext}"
+    file.save(os.path.join(folder, name))
+    return name
+
+def render_route_sketch(points, size=(360, 360)):
+    """Draw a simple normalized line sketch of a player's route from (lat,lon)
+    points - no map tiles/network calls, just a schematic path for the e-mail."""
+    if len(points) < 2:
+        return None
+    lats = [p[0] for p in points]; lons = [p[1] for p in points]
+    lat_span = max(max(lats) - min(lats), 1e-6)
+    lon_span = max(max(lons) - min(lons), 1e-6)
+    pad = 24
+    w, h = size
+    img = Image.new('RGB', size, (241, 245, 249))
+    draw = ImageDraw.Draw(img)
+    def to_xy(lat, lon):
+        x = pad + (lon - min(lons)) / lon_span * (w - 2 * pad)
+        y = pad + (1 - (lat - min(lats)) / lat_span) * (h - 2 * pad)  # north = up
+        return (x, y)
+    xy = [to_xy(lat, lon) for lat, lon in points]
+    draw.line(xy, fill=(37, 99, 235), width=3, joint='curve')
+    sx, sy = xy[0]; ex, ey = xy[-1]
+    draw.ellipse([sx - 6, sy - 6, sx + 6, sy + 6], fill=(16, 185, 129))
+    draw.ellipse([ex - 6, ey - 6, ex + 6, ey + 6], fill=(239, 68, 68))
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return buf.getvalue()
 
 def assign_codename(role, game_id):
     """Assign a unique codename per role per game."""
@@ -1770,7 +1828,7 @@ def serialize_post(p, uid):
         'avatar': p.author.avatar_letter if show_author else 'F',
         'author_username': p.author.username if current_user.is_admin else None,
         'author_email': p.author.email if current_user.is_admin else None,
-        'caption': p.caption, 'image': p.image_filename,
+        'caption': p.caption, 'image': p.image_filename, 'audio': p.audio_filename,
         'lat': p.lat if show_loc else None,
         'lon': p.lon if show_loc else None,
         'likes': p.likes, 'liked': liked,
@@ -1906,6 +1964,12 @@ def send_game_summary_email(game):
         if m.team in ('all', 'proxy'):
             return (gp.codename if gp and gp.codename else m.author.username)
         return m.author.username
+    def caught_label(p):
+        if not p.is_caught:
+            return 'Nee'
+        by = p.caught_user.username if p.caught_user else '?'
+        when = p.caught_at.strftime('%H:%M') if p.caught_at else '?'
+        return f'Ja (door {esc(by)} om {when})'
     story_bits = [f'De missie "{game.name}" is afgerond.', f'{len(players)} spelers deden mee.']
     if winner:
         story_bits.append(f'{winner.codename or winner.user.username} eindigde bovenaan met {(winner.points or 0):.2f} punten.')
@@ -1932,9 +1996,14 @@ def send_game_summary_email(game):
         f'<td style="padding:8px;border-bottom:1px solid #e2e8f0">{max(0, int(game.offline_uses or 0) - int(p.offline_uses_left or 0))}</td>'
         f'<td style="padding:8px;border-bottom:1px solid #e2e8f0">{targets_by_hunter.get(p.user_id, 0)}</td>'
         f'<td style="padding:8px;border-bottom:1px solid #e2e8f0">{targeted_by_runner.get(p.user_id, 0)}</td>'
+        f'<td style="padding:8px;border-bottom:1px solid #e2e8f0">{caught_label(p)}</td>'
         f'</tr>'
         for p in standings
     )
+    most_distance = max(players, key=lambda p: p.distance or 0) if players else None
+    team_distance = {}
+    for p in players:
+        team_distance[p.role] = team_distance.get(p.role, 0) + (p.distance or 0)
     photo_rows = ''
     inline_photos = []
     for idx, p in enumerate(posts, start=1):
@@ -1959,6 +2028,39 @@ def send_game_summary_email(game):
         f'<li><strong>{m.created_at.strftime("%H:%M")}</strong> ({chat_channel(m.team)}) {esc(chat_display_name(m))}: {esc(m.message)}</li>'
         for m in chats
     ) or '<li>Geen chatberichten.</li>'
+
+    # Audio fragments - can't reliably play inline in e-mail, so link to the
+    # (still-public, no-login) /audio/<file> URL instead of embedding them.
+    audio_posts = [p for p in posts if p.audio_filename]
+    audio_rows = ''.join(
+        f'<li><strong>{p.created_at.strftime("%H:%M")}</strong> - {esc(p.author.username)}: '
+        f'<a href="{app.config["BASE_URL"]}/audio/{p.audio_filename}" style="color:#2563eb">geluidsfragment beluisteren</a>'
+        f'{" - " + esc(p.caption) if p.caption else ""}</li>'
+        for p in audio_posts
+    ) or '<li>Geen geluidsfragmenten opgenomen.</li>'
+
+    # Route sketches - a simple schematic line per player from their GPS breadcrumbs
+    route_rows = ''
+    inline_routes = []
+    for idx, p in enumerate(standings, start=1):
+        pings = (LocationPing.query.filter_by(game_id=game.id, user_id=p.user_id)
+                 .order_by(LocationPing.recorded_at.asc()).all())
+        if len(pings) < 2:
+            continue
+        png_bytes = render_route_sketch([(pp.lat, pp.lon) for pp in pings])
+        if not png_bytes:
+            continue
+        cid = f'route{idx}'
+        inline_routes.append((cid, png_bytes))
+        route_rows += (
+            f'<div style="display:inline-block;text-align:center;margin:8px;width:180px">'
+            f'<img src="cid:{cid}" alt="route" style="width:180px;height:180px;border-radius:10px;border:1px solid #e2e8f0">'
+            f'<div style="font-size:12px;color:#64748b;margin-top:4px">{esc(p.codename or p.user.username)} ({p.distance or 0:.0f}m)</div>'
+            f'</div>'
+        )
+    if not route_rows:
+        route_rows = '<p>Geen route-data beschikbaar.</p>'
+
     try:
         msg = Message(f'VenTrax missieverslag - {game.name}', recipients=recipients)
         msg.html = f'''
@@ -1975,11 +2077,13 @@ def send_game_summary_email(game):
                 <strong>Einde:</strong> {(game.ended_at or datetime.utcnow()).strftime('%d-%m-%Y %H:%M')}<br>
                 <strong>Speeltijd:</strong> {duration_txt}<br>
                 <strong>Winnaar:</strong> {role_label(winner_role) if winner_role else 'Geen winnaar'}<br>
-                <strong>Reden:</strong> {esc(end_result.get('message') or end_result.get('reason') or 'Spel afgelopen')}
+                <strong>Reden:</strong> {esc(end_result.get('message') or end_result.get('reason') or 'Spel afgelopen')}<br>
+                <strong>Meeste afstand:</strong> {esc(most_distance.codename or most_distance.user.username) + f" ({most_distance.distance or 0:.0f}m)" if most_distance else '-'}<br>
+                <strong>Totale afstand hunters:</strong> {team_distance.get('hunter', 0):.0f}m &nbsp;&middot;&nbsp; <strong>Totale afstand runners:</strong> {team_distance.get('runner', 0):.0f}m
               </div>
               <h2 style="color:#111827">Spelstatus</h2>
               <table style="width:100%;border-collapse:collapse;font-size:13px;color:#111827">
-                <tr style="background:#f1f5f9"><th align="left" style="padding:8px">Speler</th><th align="left" style="padding:8px">Rol</th><th align="left" style="padding:8px">Schuilnaam</th><th align="left" style="padding:8px">Resultaat</th><th align="left" style="padding:8px">Afstand</th><th align="left" style="padding:8px">Offline</th><th align="left" style="padding:8px">Targets gebruikt</th><th align="left" style="padding:8px">Getarget</th></tr>
+                <tr style="background:#f1f5f9"><th align="left" style="padding:8px">Speler</th><th align="left" style="padding:8px">Rol</th><th align="left" style="padding:8px">Schuilnaam</th><th align="left" style="padding:8px">Resultaat</th><th align="left" style="padding:8px">Afstand</th><th align="left" style="padding:8px">Offline</th><th align="left" style="padding:8px">Targets gebruikt</th><th align="left" style="padding:8px">Getarget</th><th align="left" style="padding:8px">Gepakt</th></tr>
                 {status_rows}
               </table>
               <h2 style="color:#111827">Standen</h2>
@@ -1987,8 +2091,12 @@ def send_game_summary_email(game):
                 <tr style="background:#f1f5f9"><th align="left" style="padding:8px">Speler</th><th align="left" style="padding:8px">Rol</th><th align="left" style="padding:8px">Schuilnaam</th><th align="left" style="padding:8px">Punten</th><th align="left" style="padding:8px">Afstand</th></tr>
                 {rows}
               </table>
+              <h2 style="color:#111827">Routes</h2>
+              <div style="text-align:center">{route_rows}</div>
               <h2 style="color:#111827">Fotos en momenten</h2>
               <div style="line-height:1.7;color:#111827">{photo_rows}</div>
+              <h2 style="color:#111827">Geluidsfragmenten</h2>
+              <ul style="line-height:1.7;color:#111827">{audio_rows}</ul>
               <h2 style="color:#111827">Chat</h2>
               <ul style="line-height:1.7;color:#111827">{chat_rows}</ul>
             </div>
@@ -2007,6 +2115,15 @@ def send_game_summary_email(game):
                 attach_total += size
             except Exception as e:
                 app.logger.warning(f"Photo attach failed for {filename}: {e}")
+        for cid, png_bytes in inline_routes:
+            try:
+                if attach_total + len(png_bytes) > 12 * 1024 * 1024:
+                    continue
+                msg.attach(f'{cid}.png', 'image/png', png_bytes, disposition='inline',
+                           headers={'Content-ID': f'<{cid}>'})
+                attach_total += len(png_bytes)
+            except Exception as e:
+                app.logger.warning(f"Route sketch attach failed: {e}")
         mail.send(msg)
         return True
     except Exception as e:
@@ -2238,6 +2355,8 @@ def new_game():
         # Validate offline timing: max_offline_sec <= 20% of total duration
         duration_minutes = _int_select('duration', 'duration_custom', 120, 5, 300)
         headstart_minutes = _int_select('headstart', 'headstart_custom', 5, 0, 30)
+        # Headstart shouldn't eat up more than a third of a (short) game
+        headstart_minutes = min(headstart_minutes, max(0, duration_minutes // 3))
         dur_sec = duration_minutes * 60
         max_off = _int('max_offline', p.get('max_offline', 300), 30, 600)
         off_uses = _int('offline_uses', 1, 1, 5)
@@ -2479,6 +2598,9 @@ def lobby_settings(code):
         return bool(f[key]) if key in f else current
     if 'duration_minutes'    in f: game.duration_minutes    = clamp_int('duration_minutes', game.duration_minutes, 5, 300)
     if 'headstart_minutes'   in f: game.headstart_minutes   = clamp_int('headstart_minutes', game.headstart_minutes, 0, 30)
+    if 'duration_minutes' in f or 'headstart_minutes' in f:
+        # Headstart shouldn't eat up more than a third of a (short) game
+        game.headstart_minutes = min(game.headstart_minutes, max(0, game.duration_minutes // 3))
     if 'hunter_interval_sec' in f: game.hunter_interval_sec = clamp_int('hunter_interval_sec', game.hunter_interval_sec, 60, 7200)
     if 'runner_interval_sec' in f:
         game.runner_interval_sec = None if f.get('runner_interval_sec') in (None, '', 'off') else clamp_int('runner_interval_sec', game.runner_interval_sec or 600, 60, 7200)
@@ -2519,7 +2641,8 @@ def game_dashboard(code):
     missions = PHOTO_MISSIONS if game.feat_photo_missions else []
     return render_template('game_dashboard.html', game=game, me=me, missions=missions,
                            playfield=get_playfield(game),
-                           my_class=get_player_class(game, current_user.id))
+                           my_class=get_player_class(game, current_user.id),
+                           CATCH_MIN_PROGRESS_PCT=CATCH_MIN_PROGRESS_PCT)
 
 # â”€â”€ API: Lobby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/api/game/<code>/gps_status', methods=['POST'])
@@ -2859,6 +2982,17 @@ def _clear_gps(game):
         p.last_lat = None; p.last_lon = None; p.last_accuracy = None
     db.session.commit()
 
+_last_ping_at = {}  # (game_id, user_id) -> time.time(), throttles LocationPing inserts
+LOCATION_PING_INTERVAL_SEC = 20
+
+def _maybe_log_location_ping(game, user_id, lat, lon):
+    key = (game.id, user_id)
+    now = time.time()
+    if now - _last_ping_at.get(key, 0) < LOCATION_PING_INTERVAL_SEC:
+        return
+    _last_ping_at[key] = now
+    db.session.add(LocationPing(game_id=game.id, user_id=user_id, lat=lat, lon=lon))
+
 def finish_game(game, reason='manual', broadcast=True):
     """Finish a game once, clear locations, send summary mail and notify clients."""
     if not game or game.status == 'finished':
@@ -2910,6 +3044,8 @@ def finish_game(game, reason='manual', broadcast=True):
         p.pause_reason = None
     db.session.commit()
     _clear_gps(game)
+    for p in game.players:
+        _last_ping_at.pop((game.id, p.user_id), None)
     send_game_summary_email(game)
     if broadcast:
         hub.broadcast(game.code, 'game_ended', {'code': game.code, 'reason': reason, 'winner_role': winner_role, 'no_points': no_points, 'message': message})
@@ -2982,13 +3118,16 @@ def api_location(code):
     me.last_lat = lat; me.last_lon = lon
     me.last_accuracy = acc; me.last_speed_ms = speed_ms
     me.last_seen = datetime.utcnow(); me.gps_enabled = True
+    _maybe_log_location_ping(game, current_user.id, lat, lon)
     hazard_messages = check_hazard_triggers(game, me, code)
     outside_m = playfield_outside_distance_m(game, lat, lon)
     zone_pressure = update_zone_pressure(game, me, outside_m)
     if outside_m > 5:
         msg = 'Je bent buiten het speelveld. Ga direct terug!'
         hazard_messages.append(msg)
-        log_activity('playfield_violation', f'{me.codename or current_user.username} buiten speelveld in {game.code}', flag=True)
+        # Not flagged as suspicious: leaving the playfield happens during normal play too.
+        # Flagging is reserved for real anti-cheat signals (see 'high_speed' below).
+        log_activity('playfield_violation', f'{me.codename or current_user.username} buiten speelveld in {game.code}')
         if zone_pressure.get('seconds', 0) >= zone_pressure.get('limit_sec', 30) and not me.is_caught:
             me.is_caught = True
             hazard_messages.append('Je was te lang buiten het speelveld en bent af.')
@@ -3196,12 +3335,20 @@ def api_catch_runner(code):
     game = Game.query.filter_by(code=code).first_or_404()
     me   = GamePlayer.query.filter_by(game_id=game.id, user_id=current_user.id).first()
     if not me or me.role != 'hunter': return jsonify(error='Alleen hunters'), 403
+    if game.status != 'active': return jsonify(error='Spel niet actief'), 400
+    if game.progress_pct < CATCH_MIN_PROGRESS_PCT:
+        return jsonify(error=f'Aantikken kan pas vanaf {CATCH_MIN_PROGRESS_PCT}% van de speeltijd.'), 400
     d = request.get_json()
     runner_id = d.get('runner_id')
     runner = GamePlayer.query.filter_by(game_id=game.id, user_id=runner_id,
                                         role='runner').first()
     if not runner: return jsonify(error='Runner niet gevonden'), 404
     if runner.is_caught: return jsonify(error='Al gepakt'), 400
+    if me.last_lat is None or me.last_lon is None or runner.last_lat is None or runner.last_lon is None:
+        return jsonify(error='Locatie onbekend, probeer opnieuw'), 400
+    dist = haversine(me.last_lat, me.last_lon, runner.last_lat, runner.last_lon)
+    if dist > CATCH_MAX_DISTANCE_M:
+        return jsonify(error=f'Te ver weg ({round(dist)}m) - kom binnen {CATCH_MAX_DISTANCE_M}m van de runner.'), 400
 
     runner.is_caught = True; runner.caught_by = current_user.id
     runner.caught_at = datetime.utcnow()
@@ -3344,11 +3491,23 @@ def create_post(code):
             except Exception as e:
                 app.logger.exception(f"Post image upload failed: {e}")
                 return jsonify(error='Foto kon niet worden verwerkt. Probeer een jpg/png/webp.'), 400
-    if not filename and not caption:
-        return jsonify(error='Voeg een foto of tekst toe.'), 400
+    audio_filename = None
+    if 'audio' in request.files:
+        f3 = request.files['audio']
+        if f3 and f3.filename:
+            try:
+                audio_filename = save_audio(f3, AUDIO_FOLDER)
+            except ValueError:
+                return jsonify(error='Geluidsfragment kon niet worden opgeslagen (max 10 MB, webm/ogg/mp3/m4a/wav).'), 400
+            except Exception as e:
+                app.logger.exception(f"Post audio upload failed: {e}")
+                return jsonify(error='Geluidsfragment kon niet worden verwerkt.'), 400
+    if not filename and not audio_filename and not caption:
+        return jsonify(error='Voeg een foto, geluidsfragment of tekst toe.'), 400
     post = Post(
         game_id=game.id, user_id=current_user.id,
         caption=caption or None, image_filename=filename,
+        audio_filename=audio_filename,
         lat=float(lat) if lat else None, lon=float(lon) if lon else None,
         share_location=share_loc, mission_id=mission_id,
         approved=None,
@@ -3613,7 +3772,8 @@ def admin_reports():
 @admin_required
 def admin_photos():
     status = request.args.get('status', 'pending')
-    q = Post.query.filter(Post.image_filename.isnot(None)).order_by(Post.created_at.desc())
+    q = Post.query.filter(db.or_(Post.image_filename.isnot(None),
+                                  Post.audio_filename.isnot(None))).order_by(Post.created_at.desc())
     if status == 'pending':
         q = q.filter(Post.approved.is_(None))
     elif status == 'approved':
@@ -4059,6 +4219,8 @@ def admin_cleanup():
 # â”€â”€ Static files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/uploads/<fn>')
 def uploaded_file(fn): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
+@app.route('/audio/<fn>')
+def audio_file(fn): return send_from_directory(AUDIO_FOLDER, fn)
 @app.route('/backgrounds/<fn>')
 def bg_file(fn): return send_from_directory(app.config['BG_FOLDER'], fn)
 @app.route('/handleiding')
@@ -4071,9 +4233,25 @@ def gps_test(): return render_template('gps_test.html')
 def gps_help(): return render_template('gps_help.html')
 
 # â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+def ensure_column(table, column, coltype):
+    """Lightweight SQLite auto-migration: add a column if it's missing.
+    There's no Alembic in this project, so db.create_all() alone won't pick up
+    new columns on tables that already exist - this keeps existing deployments
+    in sync when a model gains a field."""
+    try:
+        existing = {row[1] for row in db.session.execute(sql_text(f'PRAGMA table_info({table})'))}
+        if column not in existing:
+            db.session.execute(sql_text(f'ALTER TABLE {table} ADD COLUMN {column} {coltype}'))
+            db.session.commit()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception(f"ensure_column failed for {table}.{column}")
+
 def init_db():
     with app.app_context():
         db.create_all()
+        ensure_column('post', 'audio_filename', 'VARCHAR(256)')
+        os.makedirs(AUDIO_FOLDER, exist_ok=True)
         if not SiteSetting.get('site_logo'):
             SiteSetting.set('site_logo', 'logo_default.png')
         if not SiteSetting.get('site_bg'):

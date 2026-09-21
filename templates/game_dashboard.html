@@ -154,10 +154,10 @@
 .pr-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;flex-shrink:0}
 
 /* Notification popup */
-#notifPop{position:absolute;top:58px;left:50%;transform:translateX(-50%);z-index:350;width:min(300px,90vw);display:none;animation:notifIn .3s ease}
+#notifPop{position:fixed;top:calc(env(safe-area-inset-top, 0px) + 64px);left:50%;transform:translateX(-50%);z-index:1100;width:min(320px,92vw);display:none;animation:notifIn .3s ease}
 #notifPop.show{display:block}
 @keyframes notifIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
-.notif-box{background:rgba(10,10,15,.95);border:1px solid var(--warn);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.6)}
+.notif-box{background:rgba(10,10,15,.95);border:1px solid var(--warn);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.6);cursor:pointer}
 #endScreen{position:fixed;inset:0;z-index:1200;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(30,41,59,.96);color:#fff}
 #endScreen.show{display:flex}
 .end-title{font-family:var(--hfont);font-size:32px;font-weight:800;margin-bottom:8px}
@@ -371,6 +371,15 @@
         <i class="fas fa-images"></i> Uploaden
       </button>
     </div>
+    <div style="padding:8px 14px 0">
+      <button class="btn btn-ghost btn-full" id="audioRecBtn" onclick="toggleAudioRecording()">
+        <i class="fas fa-microphone"></i> Geluidsfragment opnemen
+      </button>
+    </div>
+    <div id="audioPreviewWrap" style="display:none;margin:10px 14px 0;background:var(--bg3);border-radius:10px;padding:10px;align-items:center;gap:8px">
+      <audio id="audioPreviewPlayer" controls style="flex:1;height:32px"></audio>
+      <button onclick="clearAudio()" style="background:rgba(0,0,0,.35);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px;flex-shrink:0"><i class="fas fa-xmark"></i></button>
+    </div>
     <div class="photo-drop" style="margin:10px 14px 0;border-style:dashed"
          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
          ondragleave="this.style.borderColor='var(--border)'"
@@ -449,7 +458,7 @@
     <div class="am-title" id="am-name"></div>
     <div class="am-sub" id="am-sub"></div>
     <button class="am-btn warn-btn" id="am-target" onclick="doTarget()"><i class="fas fa-bullseye" style="color:var(--warn)"></i> Target instellen - dubbele punten</button>
-    <button class="am-btn danger" id="am-catch" onclick="doCatch()"><i class="fas fa-handcuffs" style="color:var(--danger)"></i> Markeer als gepakt!</button>
+    <button class="am-btn danger" id="am-catch" onclick="doCatch()"><i class="fas fa-handcuffs" style="color:var(--danger)"></i> Markeer als gepakt! (binnen 2m)</button>
     <button class="am-btn" id="am-guess" onclick="doGuessName()" style="display:none"><i class="fas fa-user-secret"></i> Naam raden</button>
     <button class="am-btn" onclick="closeActionModal()"><i class="fas fa-xmark"></i> Annuleren</button>
   </div>
@@ -486,11 +495,15 @@ let elapsed = {{ [0, (game.effective_elapsed or 0)]|max }};
 let hsLeft  = {{ [0, game.headstart_minutes * 60 - (game.effective_elapsed or 0)]|max }};
 let timeLeft= {{ [0, game.duration_minutes * 60 - (game.effective_elapsed or 0)]|max }};
 let headstartOver = {{ 'true' if game.is_headstart_over else 'false' }};
+let progressPct = {{ (game.progress_pct or 0)|round(1) }};
+const CATCH_MIN_PROGRESS_PCT = {{ CATCH_MIN_PROGRESS_PCT }};
 let isOffline = false, offUsesLeft = {{ me.offline_uses_left }};
 let isPaused  = {{ 'true' if me.is_paused else 'false' }};
 let pauseActive = false;
 let targetCooldown = 0, targetExpiry = 0;
 let photoFile = null;
+let audioFile = null, audioRecorder = null, audioChunks = [], audioRecTimer = null, audioRecStop = null;
+const AUDIO_MAX_SEC = 30;
 let activePanel = null;
 let pauseCdIv = null;
 let unreadFeed = 0, unreadChat = 0;
@@ -592,6 +605,35 @@ function syncDeadlinesFromState(d) {
   headstartOver = !!d.headstart_over;
 }
 
+// â”€â”€ Wake Lock: a phone screen that locks/dims suspends GPS updates in the
+// browser, so we keep the screen awake for the duration of the game instead.
+// (True background GPS with the screen off isn't possible for a web app -
+// only a native app can do that - so this is the closest reliable fix.)
+let wakeLock = null, wakeLockToastShown = false;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    if (!wakeLockToastShown) {
+      wakeLockToastShown = true;
+      showToast('Beeldscherm blijft aan zodat GPS blijft werken tijdens het spel', 'info', 6000);
+    }
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (err) {
+    // Permission denied or unsupported in this context - nothing we can do
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  requestWakeLock();
+  // Tab/screen may have suspended the GPS watcher while hidden - force a fresh fix
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(onGPS, () => {}, {
+      enableHighAccuracy: true, timeout: 15000, maximumAge: 0
+    });
+  }
+});
+
 // â”€â”€ Map init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function initMap() {
   map = L.map('map', {zoomControl: false, attributionControl: false}).setView([52.15, 5.38], 15);
@@ -685,6 +727,7 @@ function claimLootbox(id) {
 
 function startGPS() {
   if (!navigator.geolocation) { document.getElementById('gpsBadge').textContent = 'GPS niet ondersteund'; return; }
+  requestWakeLock();
   gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {
     enableHighAccuracy: true, timeout: 30000, maximumAge: 5000
   });
@@ -790,6 +833,7 @@ function pollState() {
       updatePowerButton();
       updateZoneBar(d.zone_pressure);
       headstartOver = d.headstart_over;
+      progressPct = d.progress_pct || 0;
 
       // Headstart overlay
       const hso = document.getElementById('hsOverlay');
@@ -912,7 +956,18 @@ function openActionModal(r) {
   document.getElementById('am-name').textContent = actionRunnerName;
   document.getElementById('am-sub').textContent  = r.real_revealed ? `Echte naam: ${r.username}` : 'Echte naam onbekend';
   document.getElementById('am-target').style.display = r.is_caught ? 'none' : '';
-  document.getElementById('am-catch').style.display  = r.is_caught ? 'none' : '';
+  const catchBtn = document.getElementById('am-catch');
+  if (r.is_caught) {
+    catchBtn.style.display = 'none';
+  } else if (progressPct < CATCH_MIN_PROGRESS_PCT) {
+    catchBtn.style.display = '';
+    catchBtn.disabled = true;
+    catchBtn.innerHTML = `<i class="fas fa-lock"></i> Aantikken vanaf ${CATCH_MIN_PROGRESS_PCT}% (nu ${Math.round(progressPct)}%)`;
+  } else {
+    catchBtn.style.display = '';
+    catchBtn.disabled = false;
+    catchBtn.innerHTML = '<i class="fas fa-handcuffs" style="color:var(--danger)"></i> Markeer als gepakt! (binnen 2m)';
+  }
   // Show naam raden only when it can actually work
   const guessBtn = document.getElementById('am-guess');
   const oppositePlayers = lastStatePlayers.filter(p => p.role !== MY_ROLE && !p.is_caught);
@@ -1009,6 +1064,7 @@ function doGuessName() {
 
 // â”€â”€ Catch runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function doCatch() {
+  if (document.getElementById('am-catch').disabled) return;
   const runnerId = actionRunnerId;
   const name = actionRunnerName;
   closeActionModal();
@@ -1279,14 +1335,16 @@ function updateInfoPlayers(players) {
 }
 
 // â”€â”€ Notification popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function showNotif(msg, dur=5000) {
+function showNotif(msg, dur=5000, onTap=null) {
   const el = document.getElementById('notifPop');
   const tx = document.getElementById('notifTxt');
   if (!el || !tx) return;
   tx.innerHTML = msg;
   el.classList.add('show');
+  tx.onclick = () => { el.classList.remove('show'); clearTimeout(notifTimer); if (onTap) onTap(); };
   clearTimeout(notifTimer);
   notifTimer = setTimeout(() => el.classList.remove('show'), dur);
+  if (navigator.vibrate) navigator.vibrate(120);
 }
 
 // â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1387,20 +1445,63 @@ function clearPhoto() {
   document.getElementById('photoPreviewWrap').style.display='none';
 }
 
+// â”€â”€ Audio recording â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function toggleAudioRecording() {
+  if (audioRecorder && audioRecorder.state === 'recording') { audioRecorder.stop(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) {
+    showToast('Geluid opnemen wordt niet ondersteund op dit toestel', 'error'); return;
+  }
+  const btn = document.getElementById('audioRecBtn');
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    audioChunks = [];
+    audioRecorder = new MediaRecorder(stream);
+    audioRecorder.ondataavailable = e => { if (e.data && e.data.size) audioChunks.push(e.data); };
+    audioRecorder.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(audioRecTimer); audioRecTimer = null;
+      btn.classList.remove('btn-danger'); btn.classList.add('btn-ghost');
+      btn.innerHTML = '<i class="fas fa-microphone"></i> Geluidsfragment opnemen';
+      if (!audioChunks.length) return;
+      audioFile = new Blob(audioChunks, {type: audioRecorder.mimeType || 'audio/webm'});
+      const url = URL.createObjectURL(audioFile);
+      document.getElementById('audioPreviewPlayer').src = url;
+      document.getElementById('audioPreviewWrap').style.display = 'flex';
+    };
+    audioRecorder.start();
+    btn.classList.remove('btn-ghost'); btn.classList.add('btn-danger');
+    let secLeft = AUDIO_MAX_SEC;
+    btn.innerHTML = `<i class="fas fa-stop"></i> Stop opname (${secLeft}s)`;
+    audioRecTimer = setInterval(() => {
+      secLeft--;
+      if (secLeft <= 0) { audioRecorder.stop(); return; }
+      btn.innerHTML = `<i class="fas fa-stop"></i> Stop opname (${secLeft}s)`;
+    }, 1000);
+  } catch (err) {
+    showToast('Microfoon toegang geweigerd', 'error');
+  }
+}
+function clearAudio() {
+  audioFile = null;
+  document.getElementById('audioPreviewWrap').style.display = 'none';
+  document.getElementById('audioPreviewPlayer').src = '';
+}
+
 function submitPost() {
   const cap = (document.getElementById('captionIn').value||'').trim();
-  if (!photoFile && !cap) { showToast('Voeg foto of tekst toe','error'); return; }
+  if (!photoFile && !audioFile && !cap) { showToast('Voeg foto, geluid of tekst toe','error'); return; }
   const btn = document.getElementById('postBtn');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
   const fd=new FormData();
   if(photoFile) fd.append('image',photoFile);
+  if(audioFile) fd.append('audio',audioFile,'voice.webm');
   if(cap)       fd.append('caption',cap);
   if(lastLat)   {fd.append('lat',lastLat);fd.append('lon',lastLon);}
   fd.append('share_location', document.getElementById('shareLocCb').checked?'1':'0');
   fetch('/game/'+CODE+'/post',{method:'POST',body:fd})
     .then(r=>r.json()).then(d=>{
       btn.disabled=false; btn.innerHTML='<i class="fas fa-paper-plane"></i> Posten';
-      if(d.success){clearPhoto();document.getElementById('captionIn').value='';loadFeed();showToast('Gepost!','success');}
+      if(d.success){clearPhoto();clearAudio();document.getElementById('captionIn').value='';loadFeed();showToast('Gepost!','success');}
       else showToast(d.error||'Fout bij posten','error');
     }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Posten';showToast('Fout bij uploaden','error');});
 }
@@ -1418,6 +1519,7 @@ function loadFeed() {
           ${p.can_delete?`<button onclick="delPost(${p.id})" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px"><i class="fas fa-trash"></i></button>`:''}
         </div>
         ${p.image?`<img src="/uploads/${p.image}" style="width:100%;border-radius:8px;max-height:200px;object-fit:cover;margin-bottom:7px;cursor:pointer" onclick="openLB('/uploads/${p.image}')">`: ''}
+        ${p.audio?`<audio controls src="/audio/${p.audio}" style="width:100%;height:32px;margin-bottom:7px"></audio>`: ''}
         ${p.caption?`<div style="font-size:13px;margin-bottom:7px">${p.caption}</div>`:''}
         ${p.approved===null?`<div style="font-size:11px;color:var(--warn);margin-bottom:7px"><i class="fas fa-hourglass-half"></i> Wacht op goedkeuring</div>`:''}
         ${p.approved===false?`<div style="font-size:11px;color:var(--danger);margin-bottom:7px"><i class="fas fa-xmark"></i> Afgewezen</div>`:''}
@@ -1650,7 +1752,9 @@ function connectWS() {
           const bb = document.getElementById('bb-feed');
           if (bb) bb.style.color = 'var(--accent)';
         } else { loadFeed(); }
-        showNotif('Nieuwe foto geplaatst!', 3000);
+        if (activePanel !== 'feedPanel') {
+          showNotif('<i class="fas fa-image"></i> Nieuwe foto geplaatst! Tik om te bekijken.', 6000, () => togglePanel('feedPanel', 'bb-feed'));
+        }
         break;
       case 'chat':
         if (d.user_id === MY_ID) break;
@@ -1661,7 +1765,9 @@ function connectWS() {
         );
         if (showMsg) {
           addChatMsg(d);
-          if (activePanel !== 'chatPanel') showNotif(`${d.codename||d.username}: ${d.message}`, 4000);
+          if (activePanel !== 'chatPanel') {
+            showNotif(`<i class="fas fa-comment"></i> <strong>${escHtml(d.codename||d.username)}</strong>: ${escHtml(d.message)}`, 6000, () => togglePanel('chatPanel', 'bb-chat'));
+          }
         }
         break;
       case 'runner_caught':
