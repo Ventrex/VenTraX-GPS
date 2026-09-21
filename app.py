@@ -2,7 +2,7 @@
 VenTrax - Real-time GPS hunting game
 WebSockets: native gevent-websocket (fixes the threading/greenlet conflict)
 """
-import os, json, random, string, math, time, threading, io, base64, html, mimetypes
+import os, json, random, string, math, time, threading, io, base64, html, mimetypes, ipaddress
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
@@ -19,6 +19,7 @@ from itsdangerous import URLSafeTimedSerializer
 from PIL import Image, ImageDraw
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
+import requests as http_requests
 
 # gevent-websocket (NOT flask-sock â€” that causes greenlet threading conflicts)
 from geventwebsocket import WebSocketError
@@ -43,6 +44,17 @@ app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@venfaye.nl')
 app.config['BASE_URL'] = os.environ.get('BASE_URL', os.environ.get('APP_URL', 'http://localhost:5001'))
 
+# Cloudflare Turnstile (bot protection on registration) - see docs/CLOUDFLARE_SECURITY.md.
+# Leave TURNSTILE_SECRET_KEY empty for local dev: the check is then skipped (logged loudly)
+# instead of locking registration entirely.
+app.config['TURNSTILE_SITE_KEY']   = os.environ.get('TURNSTILE_SITE_KEY', '')
+app.config['TURNSTILE_SECRET_KEY'] = os.environ.get('TURNSTILE_SECRET_KEY', '')
+
+# Extra CIDRs (comma-separated) to trust for CF-Connecting-IP, on top of Cloudflare's own
+# ranges - e.g. a local reverse proxy sitting between Cloudflare and this app. Never trust
+# X-Forwarded-For; only Cloudflare's own header, and only from a verified hop.
+app.config['TRUSTED_PROXY_CIDRS'] = [c.strip() for c in os.environ.get('TRUSTED_PROXY_CIDRS', '').split(',') if c.strip()]
+
 ALLOWED_IMG   = {'png', 'jpg', 'jpeg', 'webp'}
 ALLOWED_AUDIO = {'webm', 'ogg', 'mp3', 'm4a', 'wav'}
 AUDIO_FOLDER  = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
@@ -62,6 +74,57 @@ login_manager.login_view = 'login'
 login_manager.login_message = 'Log in om verder te gaan.'
 mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+# â”€â”€ Client IP (Cloudflare-aware) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Cloudflare's published IPv4/IPv6 ranges (https://www.cloudflare.com/ips/).
+# Update this list if Cloudflare changes it - see docs/CLOUDFLARE_SECURITY.md.
+CLOUDFLARE_IP_RANGES = [
+    '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22',
+    '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+    '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13',
+    '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+    '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32',
+    '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
+]
+
+def _parse_cidrs(cidrs):
+    nets = []
+    for c in cidrs:
+        try:
+            nets.append(ipaddress.ip_network(c, strict=False))
+        except ValueError:
+            app.logger.warning(f"Ignoring invalid CIDR in trusted-proxy config: {c!r}")
+    return nets
+
+_CLOUDFLARE_NETWORKS = _parse_cidrs(CLOUDFLARE_IP_RANGES)
+
+def _trusted_forwarder_networks():
+    return _CLOUDFLARE_NETWORKS + _parse_cidrs(app.config['TRUSTED_PROXY_CIDRS'])
+
+def get_client_ip():
+    """Real client IP, Cloudflare-aware.
+
+    Only trusts the CF-Connecting-IP header when the request's actual TCP peer
+    (request.remote_addr - not spoofable by the client) is itself a known
+    Cloudflare edge IP, or an operator-configured trusted proxy (TRUSTED_PROXY_CIDRS).
+    Otherwise - e.g. the app is reachable directly, bypassing Cloudflare - falls back to
+    the real peer address and never trusts X-Forwarded-For for security decisions.
+    """
+    peer = request.remote_addr
+    if peer:
+        try:
+            peer_ip = ipaddress.ip_address(peer)
+            if any(peer_ip in net for net in _trusted_forwarder_networks()):
+                cf_ip = request.headers.get('CF-Connecting-IP', '').strip()
+                if cf_ip:
+                    try:
+                        ipaddress.ip_address(cf_ip)  # validate it's a real IP, not garbage
+                        return cf_ip
+                    except ValueError:
+                        pass
+        except ValueError:
+            pass
+    return peer or 'unknown'
 
 # Stoere schuilnamen pool
 CODENAMES_HUNTERS = [
@@ -177,7 +240,7 @@ hub = WSHub()
 def log_activity(event, detail=None, user_id=None, game_id=None, flag=False):
     """Write to ActivityLog. Safe to call from anywhere."""
     try:
-        ip = request.remote_addr if request else None
+        ip = get_client_ip() if request else None
     except Exception:
         ip = None
     entry = ActivityLog(
@@ -273,6 +336,10 @@ class User(UserMixin, db.Model):
     is_admin        = db.Column(db.Boolean, default=False)
     is_owner        = db.Column(db.Boolean, default=False)
     email_verified  = db.Column(db.Boolean, default=False)
+    # New-registration-only gate (see register()). Existing rows default to False
+    # (no new column = no new obligation) so no existing account is ever restricted
+    # by this. Distinct from email_verified/admin_ban_user's use of it for bans.
+    requires_email_verification = db.Column(db.Boolean, default=False)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     total_points    = db.Column(db.Float,   default=0.0)
     hunter_wins     = db.Column(db.Integer, default=0)
@@ -1877,6 +1944,97 @@ PHOTO_MISSIONS = [
 ]
 
 # â”€â”€ Mail helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Registration abuse protection --------------------------------------------
+# All of this only ever affects NEW registration attempts. It never touches,
+# blocks, re-verifies or cleans up existing accounts. See docs/CLOUDFLARE_SECURITY.md
+# for the Cloudflare-side controls this complements (WAF rules, edge rate limiting).
+
+def verify_turnstile(token, remote_ip):
+    """Server-side Cloudflare Turnstile check. Always returns True/False; never trust
+    a client-side-only check. With no TURNSTILE_SECRET_KEY configured (local dev, or
+    before Cloudflare is set up), the check is skipped - loudly logged - rather than
+    locking registration out entirely."""
+    secret = app.config.get('TURNSTILE_SECRET_KEY')
+    if not secret:
+        app.logger.warning('TURNSTILE_SECRET_KEY not set - registration Turnstile check is DISABLED (dev mode).')
+        return True
+    if not token:
+        return False
+    try:
+        resp = http_requests.post(
+            'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+            data={'secret': secret, 'response': token, 'remoteip': remote_ip},
+            timeout=6,
+        )
+        data = resp.json()
+        return bool(data.get('success'))
+    except Exception as e:
+        app.logger.warning(f'Turnstile verify request failed: {e}')
+        return False  # fail closed: a configured check that can't be reached does not pass
+
+# Small, conservative list of well-known disposable/throwaway mail providers.
+# Deliberately does NOT include any real Dutch or mainstream provider.
+DISPOSABLE_EMAIL_DOMAINS = {
+    'mailinator.com', 'guerrillamail.com', 'guerrillamail.info', 'sharklasers.com',
+    '10minutemail.com', '10minutemail.net', 'tempmail.com', 'temp-mail.org',
+    'yopmail.com', 'yopmail.fr', 'trashmail.com', 'throwawaymail.com',
+    'getnada.com', 'dispostable.com', 'fakeinbox.com', 'maildrop.cc',
+    'mintemail.com', 'mohmal.com', 'moakt.com', 'emailondeck.com',
+}
+
+def normalize_email(email):
+    """Conservative normalization: trim + lowercase only. No provider-specific
+    tricks (e.g. Gmail dot-stripping) - those cause false 'duplicate' hits."""
+    return (email or '').strip().lower() or None
+
+def is_disposable_email(email):
+    email = normalize_email(email)
+    if not email or '@' not in email:
+        return False
+    domain = email.rsplit('@', 1)[1]
+    return domain in DISPOSABLE_EMAIL_DOMAINS
+
+# In-memory, per-process sliding-window counters for registration attempts.
+# Resets on restart - that's fine, Cloudflare Rate Limiting Rules (see the docs)
+# provide the durable, edge-level backstop; this is just the app-side layer.
+_register_attempts  = {}  # ip -> [timestamps of all POST attempts]
+_register_successes = {}  # ip -> [timestamps of accounts actually created]
+REGISTER_MAX_SUCCESS_PER_WINDOW = 3
+REGISTER_MAX_ATTEMPTS_PER_WINDOW = 12  # guards against a flood of failed attempts too
+REGISTER_WINDOW_SEC = 10 * 60
+
+def _prune(bucket, now):
+    return [t for t in bucket if now - t < REGISTER_WINDOW_SEC]
+
+def check_register_rate_limit(ip):
+    """Returns None if the attempt may proceed, or a Dutch error string if it's
+    rate-limited. Does not record the attempt - call record_register_attempt()
+    once the request has actually been handled."""
+    now = time.time()
+    attempts = _prune(_register_attempts.get(ip, []), now)
+    successes = _prune(_register_successes.get(ip, []), now)
+    if len(successes) >= REGISTER_MAX_SUCCESS_PER_WINDOW:
+        return 'Te veel nieuwe accounts vanaf dit adres. Probeer het over een paar minuten opnieuw.'
+    if len(attempts) >= REGISTER_MAX_ATTEMPTS_PER_WINDOW:
+        return 'Te veel registratiepogingen vanaf dit adres. Probeer het over een paar minuten opnieuw.'
+    return None
+
+def record_register_attempt(ip, success):
+    now = time.time()
+    _register_attempts[ip] = _prune(_register_attempts.get(ip, []), now) + [now]
+    if success:
+        _register_successes[ip] = _prune(_register_successes.get(ip, []), now) + [now]
+
+def log_register_blocked(reason, extra=None):
+    """Compact abuse log entry: timestamp/IP are recorded by log_activity itself.
+    Never logs passwords, Turnstile secrets, or the raw request body."""
+    ua = (request.headers.get('User-Agent') or '')[:200]
+    detail = f'reason={reason} ua={ua}'
+    if extra:
+        detail += f' {extra}'
+    log_activity('register_blocked', detail, flag=True)
+    db.session.commit()
+
 def send_verify_email(user):
     if not app.config['MAIL_USERNAME']:
         return  # mail not configured
@@ -2176,7 +2334,7 @@ def login():
     if request.method == 'POST':
         u = User.query.filter_by(username=request.form.get('username', '').strip()).first()
         if u and u.check_password(request.form.get('password', '')):
-            ip = request.remote_addr or 'unknown'
+            ip = get_client_ip()
             # Log the login
             log_activity('login', f'IP:{ip}', user_id=u.id)
             db.session.commit()
@@ -2194,33 +2352,69 @@ def register():
     if User.query.count() == 0: return redirect(url_for('setup'))
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
     if request.method == 'POST':
+        ip = get_client_ip()
+
+        # Honeypot: a real visitor never fills this in (hidden off-screen, not
+        # display:none). A bot that blindly fills every field trips it.
+        if request.form.get('website'):
+            log_register_blocked('honeypot')
+            flash('Registreren is niet gelukt. Probeer het opnieuw.', 'danger')
+            record_register_attempt(ip, success=False)
+            return render_template('register.html', turnstile_site_key=app.config['TURNSTILE_SITE_KEY'])
+
+        rl_error = check_register_rate_limit(ip)
+        if rl_error:
+            log_register_blocked('rate_limited')
+            record_register_attempt(ip, success=False)
+            flash(rl_error, 'danger')
+            return render_template('register.html', turnstile_site_key=app.config['TURNSTILE_SITE_KEY']), 429
+
+        turnstile_token = request.form.get('cf-turnstile-response', '')
+        if not verify_turnstile(turnstile_token, ip):
+            log_register_blocked('turnstile_failed')
+            record_register_attempt(ip, success=False)
+            flash('Bot-controle mislukt. Vernieuw de pagina en probeer het opnieuw.', 'danger')
+            return render_template('register.html', turnstile_site_key=app.config['TURNSTILE_SITE_KEY'])
+
         username = request.form.get('username', '').strip()
-        email    = request.form.get('email',    '').strip() or None
+        email    = normalize_email(request.form.get('email', ''))
         password = request.form.get('password', '')
         confirm  = request.form.get('confirm_password', '')
+
         if len(username) < 3:
             flash('Gebruikersnaam min. 3 tekens.', 'danger')
         elif User.query.filter_by(username=username).first():
             flash('Gebruikersnaam al in gebruik.', 'danger')
-        elif email and User.query.filter_by(email=email).first():
+        elif not email:
+            flash('E-mailadres is verplicht.', 'danger')
+        elif User.query.filter_by(email=email).first():
+            log_register_blocked('duplicate', f'email_domain={email.rsplit("@",1)[-1]}')
             flash('E-mail al in gebruik.', 'danger')
+        elif is_disposable_email(email):
+            log_register_blocked('disposable_email', f'email_domain={email.rsplit("@",1)[-1]}')
+            flash('Tijdelijke/wegwerp-e-mailadressen zijn niet toegestaan. Gebruik een normaal e-mailadres.', 'danger')
         elif len(password) < 6:
             flash('Wachtwoord min. 6 tekens.', 'danger')
         elif password != confirm:
             flash('Wachtwoorden komen niet overeen.', 'danger')
         else:
-            user = User(username=username, email=email,
-                        email_verified=not bool(email))  # auto-verified if no email
+            user = User(username=username, email=email, email_verified=False,
+                        requires_email_verification=True)
             user.set_password(password)
             db.session.add(user); db.session.commit()
-            if email and app.config['MAIL_USERNAME']:
+            record_register_attempt(ip, success=True)
+            log_activity('register', f'email_domain={email.rsplit("@",1)[-1]}', user_id=user.id)
+            db.session.commit()
+            if app.config['MAIL_USERNAME']:
                 send_verify_email(user)
-                flash('Account aangemaakt! Controleer je e-mail om te bevestigen.', 'info')
+                flash('Account aangemaakt! Bevestig je e-mailadres via de link die we je stuurden om spellen te kunnen maken of joinen.', 'info')
             else:
-                flash(f'Welkom {username}!', 'success')
+                # Mail not configured on this deployment - don't dead-end the user.
+                flash(f'Welkom {username}! (E-mailverificatie is niet actief op deze server.)', 'success')
             login_user(user, remember=True)
             return redirect(url_for('dashboard'))
-    return render_template('register.html')
+        record_register_attempt(ip, success=False)
+    return render_template('register.html', turnstile_site_key=app.config['TURNSTILE_SITE_KEY'])
 
 @app.route('/logout')
 @login_required
@@ -2233,12 +2427,27 @@ def verify_email(token):
         email = serializer.loads(token, salt='email-verify', max_age=86400)
         user  = User.query.filter_by(email=email).first()
     except Exception:
-        flash('Ongeldige of verlopen verificatielink.', 'danger')
+        flash('Ongeldige of verlopen verificatielink. Vraag desgewenst een nieuwe aan.', 'danger')
         return redirect(url_for('index'))
     if user:
-        user.email_verified = True; db.session.commit()
+        user.email_verified = True
+        user.requires_email_verification = False
+        db.session.commit()
         login_user(user, remember=True)
-        flash(f'âœ… E-mail bevestigd! Welkom {user.username}!', 'success')
+        flash(f'E-mail bevestigd! Welkom {user.username}!', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/resend-verification', methods=['POST'])
+@login_required
+def resend_verification():
+    if not current_user.requires_email_verification:
+        flash('Je account heeft geen verificatie nodig.', 'info')
+        return redirect(url_for('dashboard'))
+    if not current_user.email or not app.config['MAIL_USERNAME']:
+        flash('Kan geen verificatiemail versturen (geen e-mailadres of mail niet geconfigureerd).', 'danger')
+        return redirect(url_for('dashboard'))
+    send_verify_email(current_user)
+    flash('Verificatiemail opnieuw verstuurd. Check ook je spamfolder.', 'info')
     return redirect(url_for('dashboard'))
 
 @app.route('/forgot', methods=['GET', 'POST'])
@@ -2298,9 +2507,20 @@ def account():
     return render_template('account.html', recent=recent, my_articles=my_articles)
 
 # â”€â”€ Game creation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+def require_verified_for_play():
+    """Blocks creating/joining a game for a new (unverified) account. Never
+    applies to existing accounts - see User.requires_email_verification."""
+    if current_user.requires_email_verification:
+        flash('Bevestig eerst je e-mailadres om een spel te maken of te joinen. '
+              'Check je inbox (ook spam), of vraag op je account-pagina een nieuwe link aan.', 'warning')
+        return redirect(url_for('dashboard'))
+    return None
+
 @app.route('/new_game', methods=['GET', 'POST'])
 @login_required
 def new_game():
+    blocked = require_verified_for_play()
+    if blocked: return blocked
     existing = open_game_for_user(current_user.id)
     if existing:
         flash(f'Je zit al in een spel. Je wordt doorgestuurd naar {existing.game.name}.', 'warning')
@@ -2445,6 +2665,8 @@ def api_profile_playfield():
 @app.route('/join', methods=['GET', 'POST'])
 @login_required
 def join():
+    blocked = require_verified_for_play()
+    if blocked: return blocked
     existing = open_game_for_user(current_user.id)
     if existing:
         flash(f'Je zit al in een spel. Je wordt doorgestuurd naar {existing.game.name}.', 'warning')
@@ -2473,6 +2695,8 @@ def join():
 @app.route('/join/<code>/team', methods=['GET', 'POST'])
 @login_required
 def join_team(code):
+    blocked = require_verified_for_play()
+    if blocked: return blocked
     code = code.upper()
     existing = open_game_for_user(current_user.id)
     if existing and existing.game.code != code:
@@ -4251,6 +4475,7 @@ def init_db():
     with app.app_context():
         db.create_all()
         ensure_column('post', 'audio_filename', 'VARCHAR(256)')
+        ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
         os.makedirs(AUDIO_FOLDER, exist_ok=True)
         if not SiteSetting.get('site_logo'):
             SiteSetting.set('site_logo', 'logo_default.png')

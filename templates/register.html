@@ -1,5 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Registreren – {{ site_name }}{% endblock %}
+{% block extra_head %}
+{% if turnstile_site_key %}
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
+<style>
+/* Honeypot: kept off-screen rather than display:none, which some bots skip past. */
+.hp-field{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
+</style>
+{% endblock %}
 {% block content %}
 <div class="container-sm" style="padding-top:56px">
   <div style="text-align:center;margin-bottom:36px">
@@ -9,14 +18,20 @@
   <div class="card">
     <div class="card-title"><i class="fas fa-user-plus"></i> Registreren</div>
     <form method="POST">
+      <!-- Honeypot - real users never see or fill this in -->
+      <div class="hp-field" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
       <div class="form-group">
         <label class="form-label">Gebruikersnaam</label>
         <input name="username" id="un" class="form-control" placeholder="Min. 3 tekens" autocomplete="username" required minlength="3" autofocus>
         <div id="unH" class="form-hint"></div>
       </div>
       <div class="form-group">
-        <label class="form-label">E-mail <span style="text-transform:none;font-weight:400">(optioneel)</span></label>
-        <input name="email" type="email" class="form-control" placeholder="jouw@email.nl">
+        <label class="form-label">E-mail</label>
+        <input name="email" type="email" class="form-control" placeholder="jouw@email.nl" autocomplete="email" required>
+        <div class="form-hint">Nodig om je account te bevestigen voor je een spel kan maken of joinen.</div>
       </div>
       <div class="form-group">
         <label class="form-label">Wachtwoord</label>
@@ -31,6 +46,11 @@
         <input name="confirm_password" id="pw2" type="password" class="form-control" placeholder="Herhaal wachtwoord" required>
         <div id="pwM" class="form-hint"></div>
       </div>
+      {% if turnstile_site_key %}
+      <div class="form-group">
+        <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="dark"></div>
+      </div>
+      {% endif %}
       <button type="submit" class="btn btn-runner btn-full btn-lg">
         <i class="fas fa-user-plus"></i> Account Aanmaken
       </button>
