@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Kies Rol – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-sm" style="padding-top:48px">
+  <div style="text-align:center;margin-bottom:28px">
+    <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Je wordt deelnemer van</div>
+    <h1 style="font-family:'Syne',sans-serif;font-size:28px;font-weight:800">{{ game.name }}</h1>
+    <div style="margin-top:8px">Code: <span class="code" style="font-size:16px;letter-spacing:3px">{{ game.code }}</span></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;font-size:14px;flex-wrap:wrap;gap:8px">
+      <div><i class="fas fa-clock" style="color:var(--text2)"></i> <span style="color:var(--text2)">Duur:</span> <strong>{{ game.duration_minutes }} min</strong></div>
+      <div><i class="fas fa-hourglass-start" style="color:var(--text2)"></i> <span style="color:var(--text2)">Voorsprong:</span> <strong>{{ game.headstart_minutes }} min</strong></div>
+      <div><i class="fas fa-user" style="color:var(--text2)"></i> <span style="color:var(--text2)">Maker:</span> <strong>{{ game.creator.username }}</strong></div>
+    </div>
+  </div>
+
+  <div style="font-family:'Syne',sans-serif;font-size:17px;font-weight:700;text-align:center;margin-bottom:16px">Kies jouw rol</div>
+
+  <form method="POST">
+    <div class="grid g2" style="margin-bottom:20px">
+      <label>
+        <input type="radio" name="role" value="hunter" style="display:none" onchange="selR(this)">
+        <div class="role-pick" id="rh" onclick="this.closest('label').querySelector('input').click()">
+          <div class="role-icon"><i class="fas fa-crosshairs" style="color:var(--hunter)"></i></div>
+          <div class="role-name" style="color:var(--hunter)">Hunter</div>
+          <div style="font-size:13px;color:var(--text2);margin-top:4px">Jij jaagt op runners</div>
+          <div style="margin-top:12px">
+            <span class="badge badge-hunter"><i class="fas fa-users"></i> {{ hunters }} aanwezig</span>
+          </div>
+        </div>
+      </label>
+      <label>
+        <input type="radio" name="role" value="runner" style="display:none" onchange="selR(this)">
+        <div class="role-pick" id="rr" onclick="this.closest('label').querySelector('input').click()">
+          <div class="role-icon"><i class="fas fa-person-running" style="color:var(--runner)"></i></div>
+          <div class="role-name" style="color:var(--runner)">Runner</div>
+          <div style="font-size:13px;color:var(--text2);margin-top:4px">Jij ontsnapt!</div>
+          <div style="margin-top:12px">
+            <span class="badge badge-runner"><i class="fas fa-users"></i> {{ runners }} aanwezig</span>
+          </div>
+        </div>
+      </label>
+    </div>
+    <button type="submit" id="subBtn" class="btn btn-primary btn-full btn-lg" disabled>
+      <i class="fas fa-arrow-right"></i> Kies een rol om verder te gaan
+    </button>
+  </form>
+</div>
+<script>
+function selR(inp){
+  const rh=document.getElementById('rh'), rr=document.getElementById('rr');
+  rh.className='role-pick'+(inp.value==='hunter'?' selected-hunter':'');
+  rr.className='role-pick'+(inp.value==='runner'?' selected-runner':'');
+  const btn=document.getElementById('subBtn');
+  btn.disabled=false;
+  btn.innerHTML=`<i class="fas fa-arrow-right"></i> Ga als ${inp.value==='hunter'?'Hunter 🎯':'Runner 🏃'} naar de Lobby`;
+  btn.className='btn btn-'+(inp.value==='hunter'?'hunter':'runner')+' btn-full btn-lg';
+}
+</script>
+{% endblock %}

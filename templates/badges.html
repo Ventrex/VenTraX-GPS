@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Badges - {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.badges-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;margin-bottom:32px}
+.badge-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;text-align:center;transition:all .2s}
+.badge-card.earned{border-color:var(--accent);background:rgba(225,29,72,.04)}
+.badge-card.locked{opacity:.45;filter:grayscale(1)}
+.badge-icon{font-size:36px;margin-bottom:8px;line-height:1;color:var(--accent)}
+.badge-name{font-family:var(--hfont);font-size:14px;font-weight:700;margin-bottom:4px}
+.badge-desc{font-size:11px;color:var(--text2);line-height:1.5}
+.badge-date{font-size:10px;color:var(--accent);margin-top:6px;font-weight:600}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px}
+.stat-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;text-align:center}
+.stat-n{font-family:var(--hfont);font-size:28px;font-weight:800;color:var(--accent);line-height:1}
+.stat-l{font-size:11px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+@media(max-width:640px){.stats-row{grid-template-columns:repeat(2,1fr)}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+    <div>
+      <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800"><i class="fas fa-medal" style="color:var(--accent)"></i> Badges</h1>
+      <p style="color:var(--text2);margin-top:4px">{{ user.username }} - {{ earned|length }} van {{ badge_defs|length }} badges behaald</p>
+    </div>
+    <a href="{{ url_for('account') }}" class="btn btn-ghost btn-sm"><i class="fas fa-user"></i> Profiel</a>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-n">{{ user.total_games }}</div><div class="stat-l">Spellen</div></div>
+    <div class="stat-box"><div class="stat-n">{{ '%.0f'|format(user.total_points) }}</div><div class="stat-l">Punten</div></div>
+    <div class="stat-box"><div class="stat-n">{{ (user.total_distance / 1000)|round(1) }}km</div><div class="stat-l">Gelopen</div></div>
+    <div class="stat-box"><div class="stat-n">{{ user.runners_caught }}</div><div class="stat-l">Gepakt</div></div>
+  </div>
+
+  {% set pct = ((earned|length / badge_defs|length) * 100)|round|int %}
+  <div style="margin-bottom:24px">
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2);margin-bottom:6px">
+      <span>Voortgang</span><span>{{ earned|length }}/{{ badge_defs|length }}</span>
+    </div>
+    <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:{{ pct }}%;background:var(--accent);border-radius:4px;transition:width .5s"></div>
+    </div>
+  </div>
+
+  {% if earned %}
+  <div class="sec-title" style="margin-bottom:14px"><i class="fas fa-check-circle" style="color:var(--runner)"></i> Behaald</div>
+  <div class="badges-grid">
+    {% for btype, bdef in badge_defs.items() %}
+    {% if btype in earned %}
+    <div class="badge-card earned">
+      <div class="badge-icon"><i class="fas {{ bdef.icon }}"></i></div>
+      <div class="badge-name">{{ bdef.name }}</div>
+      <div class="badge-desc"><strong>Waarom verdiend:</strong><br>{{ bdef.desc }}</div>
+      <div class="badge-date"><i class="fas fa-calendar-check"></i> {{ earned[btype].earned_at.strftime('%d %b %Y') }}</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="sec-title" style="margin-bottom:14px"><i class="fas fa-lock" style="color:var(--text2)"></i> Nog te behalen</div>
+  <div class="badges-grid">
+    {% for btype, bdef in badge_defs.items() %}
+    {% if btype not in earned %}
+    <div class="badge-card locked">
+      <div class="badge-icon"><i class="fas {{ bdef.icon }}"></i></div>
+      <div class="badge-name">{{ bdef.name }}</div>
+      <div class="badge-desc">{{ bdef.desc }}</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Admin TODO - {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.todo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin-bottom:22px}
+.todo-card{border:1px solid var(--border);background:var(--bg2);border-radius:var(--r);padding:16px}
+.todo-form{display:grid;grid-template-columns:90px 120px 1fr;gap:10px;align-items:start}
+.todo-form textarea{min-height:74px;resize:vertical}
+.todo-section{margin:22px 0}
+.todo-title{font-family:var(--hfont);font-size:19px;font-weight:800;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.todo-item{border:1px solid var(--border);background:var(--bg2);border-radius:var(--r2);padding:12px;margin-bottom:10px}
+.todo-item.done{opacity:.58}
+.todo-row{display:grid;grid-template-columns:86px 118px 1fr auto;gap:8px;align-items:start}
+.todo-row textarea{min-height:62px;resize:vertical}
+.prio-dot{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-weight:900;color:#fff}
+.p0{background:#7f1d1d}.p1{background:#dc2626}.p2{background:#ea580c}.p3{background:#d97706}.p4{background:#16a34a}.p5{background:#64748b}
+.status-pill{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;border:1px solid var(--border);color:var(--text2)}
+.quick-copy{font-family:monospace;font-size:12px;line-height:1.45;min-height:120px}
+.todo-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:720px){
+  .todo-form,.todo-row{grid-template-columns:1fr}
+  .todo-actions{justify-content:flex-start}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <h1 style="font-family:var(--hfont);font-size:28px;font-weight:800;margin-bottom:6px">
+    <i class="fas fa-list-check" style="color:var(--accent)"></i> Admin TODO
+  </h1>
+  <p style="color:var(--text2);margin-bottom:22px">Gebruik deze lijst om ideeen, bugs en prioriteiten vast te leggen. Doel: Prio 0 naar nul.</p>
+
+  <div class="todo-grid">
+    <a href="{{ url_for('admin_reports') }}" class="todo-card" style="text-decoration:none;text-align:center">
+      <div style="font-family:var(--hfont);font-size:34px;font-weight:800;color:{{ 'var(--danger)' if open_reports else 'var(--runner)' }}">{{ open_reports }}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px"><i class="fas fa-flag"></i> Open meldingen</div>
+    </a>
+    <a href="{{ url_for('admin_log', flagged=1) }}" class="todo-card" style="text-decoration:none;text-align:center">
+      <div style="font-family:var(--hfont);font-size:34px;font-weight:800;color:{{ 'var(--warn)' if flagged_logs else 'var(--runner)' }}">{{ flagged_logs }}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px"><i class="fas fa-triangle-exclamation"></i> Verdachte logs</div>
+    </a>
+    <a href="{{ url_for('news') }}" class="todo-card" style="text-decoration:none;text-align:center">
+      <div style="font-family:var(--hfont);font-size:34px;font-weight:800;color:{{ 'var(--hunter)' if pending_news else 'var(--runner)' }}">{{ pending_news }}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px"><i class="fas fa-newspaper"></i> Nieuws goedkeuren</div>
+    </a>
+    <div class="todo-card" style="text-align:center">
+      <div style="font-family:var(--hfont);font-size:34px;font-weight:800;color:{{ 'var(--danger)' if p0_open else 'var(--runner)' }}">{{ p0_open }}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px"><i class="fas fa-fire"></i> Open Prio 0</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><i class="fas fa-plus"></i> Nieuw punt toevoegen</div>
+    <form method="POST" action="{{ url_for('admin_todo_add') }}" class="todo-form">
+      <div class="form-group">
+        <label class="form-label">Prio</label>
+        <select name="prio" class="form-control">
+          {% for p in range(0,6) %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-control">
+          {% for s in ['Open','Deels','Test','Later'] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Titel</label>
+        <input name="title" class="form-control" placeholder="Kort punt, bug of idee" required>
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">Uitleg</label>
+        <textarea name="body" class="form-control" placeholder="Wat moet er gebeuren, wanneer is het klaar, waar zag je het?"></textarea>
+      </div>
+      <div style="grid-column:1/-1;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary"><i class="fas fa-plus"></i> Toevoegen</button>
+        <a href="{{ url_for('admin') }}" class="btn btn-ghost"><i class="fas fa-arrow-left"></i> Admin</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card" style="margin-bottom:18px">
+    <div class="card-title"><i class="fas fa-copy"></i> Prio 0 kopieren voor Codex</div>
+    <textarea id="p0Copy" class="form-control quick-copy" readonly>{{ p0_clipboard or 'Geen open Prio 0 punten. Netjes.' }}</textarea>
+    <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="copyP0()"><i class="fas fa-copy"></i> Kopieer Prio 0</button>
+  </div>
+
+  {% for prio in range(0,6) %}
+  <div class="todo-section">
+    <div class="todo-title">
+      <span class="prio-dot p{{ prio }}">{{ prio }}</span>
+      Prio {{ prio }}
+      <span class="status-pill">{{ grouped_todos.get(prio, [])|length }} punt(en)</span>
+    </div>
+    {% for t in grouped_todos.get(prio, []) %}
+    <div class="todo-item {{ 'done' if t.get('done') else '' }}">
+      <form method="POST" action="{{ url_for('admin_todo_update', todo_id=t.get('id')) }}" class="todo-row">
+        <div class="form-group">
+          <label class="form-label">Prio</label>
+          <select name="prio" class="form-control">
+            {% for p in range(0,6) %}<option value="{{ p }}" {{ 'selected' if p == t.get('prio')|int }}>{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-control">
+            {% for s in ['Open','Deels','Test','Later'] %}<option value="{{ s }}" {{ 'selected' if s == t.get('status') }}>{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label class="form-label">Titel</label>
+            <input name="title" class="form-control" value="{{ t.get('title','') }}">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Uitleg</label>
+            <textarea name="body" class="form-control">{{ t.get('body','') }}</textarea>
+          </div>
+          <div style="font-size:11px;color:var(--text2);margin-top:6px">Aangemaakt: {{ t.get('created_at','') }}</div>
+        </div>
+        <div class="todo-actions">
+          <button class="btn btn-primary btn-sm"><i class="fas fa-save"></i></button>
+          <button class="btn btn-ghost btn-sm" name="toggle_done" value="1" title="Afvinken / heropenen">
+            <i class="fas {{ 'fa-rotate-left' if t.get('done') else 'fa-check' }}"></i>
+          </button>
+        </div>
+      </form>
+      <form method="POST" action="{{ url_for('admin_todo_delete', todo_id=t.get('id')) }}" onsubmit="return confirm('TODO verwijderen?')" style="text-align:right;margin-top:8px">
+        <button class="btn btn-danger btn-xs"><i class="fas fa-trash"></i> Verwijderen</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="todo-card" style="color:var(--text2);font-size:13px">Geen punten in deze prioriteit.</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+function copyP0(){
+  const el=document.getElementById('p0Copy');
+  el.select();
+  navigator.clipboard?.writeText(el.value).then(()=>showToast('Prio 0 gekopieerd','success')).catch(()=>{
+    document.execCommand('copy');
+    showToast('Prio 0 gekopieerd','success');
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Nieuws indienen – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-md" style="padding-top:40px">
+  <div style="margin-bottom:28px">
+    <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800"><i class="fas fa-pen-to-square" style="color:var(--accent)"></i> Nieuws Indienen</h1>
+    <p style="color:var(--text2);margin-top:4px">Deel jouw VenTrax succesverhaal met de community</p>
+  </div>
+
+  <!-- Privacy notice -->
+  <div class="alert alert-warning" style="margin-bottom:24px">
+    <i class="fas fa-shield-halved"></i>
+    <div><strong>Privacy Regels – Lees dit goed!</strong><br>
+    Je mag <strong>geen foto's plaatsen van personen zonder hun toestemming</strong>. Kentekens, adressen en andere privacygevoelige informatie mogen niet zichtbaar zijn.
+    Beheerders kunnen foto's verwijderen die deze regels schenden. Je account kan worden geblokkeerd bij misbruik.</div>
+  </div>
+
+  <div class="card">
+    <form method="POST" enctype="multipart/form-data">
+      <div class="form-group">
+        <label class="form-label">Titel</label>
+        <input name="title" class="form-control" placeholder="Geef jouw artikel een pakkende titel" maxlength="200" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Verhaal</label>
+        <textarea name="content" class="form-control" rows="8" placeholder="Beschrijf je succes, beleving of tip voor andere spelers..." maxlength="5000" required style="resize:vertical"></textarea>
+        <div class="form-hint">Max. 5000 tekens</div>
+      </div>
+
+      <!-- Photo upload -->
+      <div class="form-group">
+        <label class="form-label">Foto <span style="text-transform:none;font-weight:400">(optioneel)</span></label>
+        <div style="border:2px dashed var(--border);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all var(--tr)" id="photoZone" onclick="document.getElementById('photoIn').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor='var(--border)'" ondrop="handleDrop(event)">
+          <i class="fas fa-image" style="font-size:32px;color:var(--accent);margin-bottom:10px;display:block"></i>
+          <div style="font-weight:600;margin-bottom:4px">Klik of sleep een foto</div>
+          <div style="font-size:12px;color:var(--text2)">JPG, PNG, WEBP · max 32MB</div>
+          <input type="file" id="photoIn" name="image" accept="image/*" style="display:none" onchange="previewPhoto(this)">
+        </div>
+        <div id="photoPreview" style="display:none;position:relative;margin-top:12px">
+          <img id="prevImg" src="" style="border-radius:8px;max-height:280px;width:100%;object-fit:cover">
+          <button type="button" onclick="clearPhoto()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.7);border:none;color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:14px"><i class="fas fa-xmark"></i></button>
+        </div>
+      </div>
+
+      <!-- Consent checkbox (shown only when photo selected) -->
+      <div id="consentBlock" style="display:none">
+        <div class="alert alert-info" style="margin-bottom:12px">
+          <i class="fas fa-circle-info"></i>
+          <div>Je uploadt een foto. Bevestig hieronder dat alle afgebeelde personen toestemming hebben gegeven voor publicatie.</div>
+        </div>
+        <div class="form-group" style="margin-bottom:20px">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;line-height:1.5">
+            <input type="checkbox" name="photo_consent" id="consentCb" style="width:20px;height:20px;margin-top:2px;accent-color:var(--accent);flex-shrink:0" required>
+            <span style="font-size:14px">Ik bevestig dat <strong>alle afgebeelde personen</strong> op de foto toestemming hebben gegeven voor publicatie op VenTrax. Er zijn geen kentekens of andere privacygevoelige gegevens zichtbaar.</span>
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-paper-plane"></i> Indienen voor Goedkeuring</button>
+        <a href="{{ url_for('news') }}" class="btn btn-ghost btn-lg"><i class="fas fa-arrow-left"></i> Terug</a>
+      </div>
+      {% if not current_user.is_admin %}
+      <div style="font-size:13px;color:var(--text2);margin-top:14px"><i class="fas fa-clock"></i> Je artikel wordt eerst beoordeeld door een admin voordat het zichtbaar is.</div>
+      {% else %}
+      <div style="font-size:13px;color:var(--runner);margin-top:14px"><i class="fas fa-check-circle"></i> Als admin wordt jouw artikel direct gepubliceerd.</div>
+      {% endif %}
+    </form>
+  </div>
+</div>
+
+<script>
+function previewPhoto(inp){
+  const f=inp.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=e=>{document.getElementById('prevImg').src=e.target.result;document.getElementById('photoPreview').style.display='';document.getElementById('consentBlock').style.display='';};
+  r.readAsDataURL(f);
+}
+function handleDrop(e){
+  e.preventDefault(); document.getElementById('photoZone').style.borderColor='var(--border)';
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')){const dt=new DataTransfer();dt.items.add(f);document.getElementById('photoIn').files=dt.files;previewPhoto(document.getElementById('photoIn'));}
+}
+function clearPhoto(){
+  document.getElementById('photoIn').value=''; document.getElementById('photoPreview').style.display='none';
+  document.getElementById('consentBlock').style.display='none'; document.getElementById('consentCb').checked=false;
+}
+</script>
+{% endblock %}

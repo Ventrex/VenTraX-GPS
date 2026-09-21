@@ -1,0 +1,792 @@
+﻿{% extends "base.html" %}
+{% block title %}Lobby - {{ game.name }}{% endblock %}
+{% block extra_head %}
+<style>
+.pc{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:8px;display:flex;align-items:center;gap:11px;transition:border-color .3s}
+.pc.ready{border-color:rgba(16,185,129,.45)}
+.p-av{width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--hfont);font-weight:800;font-size:17px;color:#fff;flex-shrink:0;transition:box-shadow .3s}
+.p-av.gps-on{box-shadow:0 0 0 3px rgba(16,185,129,.5),0 0 12px rgba(16,185,129,.3)}
+.si{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:14px}
+.si:last-child{border:none}
+.sk{color:var(--text2)}
+.code-big{font-family:var(--hfont);font-size:clamp(36px,8vw,56px);font-weight:800;letter-spacing:12px;color:var(--text);padding:16px 24px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border);text-align:center;cursor:pointer;transition:all .2s;user-select:all}
+.code-big:hover{border-color:var(--accent);color:var(--accent)}
+.qr-wrap{background:white;border-radius:var(--r);padding:12px;display:inline-block;box-shadow:var(--sh2);cursor:pointer;transition:transform .2s}
+.qr-wrap:hover{transform:scale(1.05)}
+.edit-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);gap:12px}
+.edit-row:last-child{border:none}
+.edit-row label{font-size:13px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.3px;flex-shrink:0}
+.edit-row input,.edit-row select{width:130px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:var(--r2);padding:6px 10px;font-size:14px;font-family:inherit;outline:none;text-align:right}
+.edit-row input:focus,.edit-row select:focus{border-color:var(--accent)}
+/* Countdown overlay */
+.cd-overlay{position:fixed;inset:0;z-index:9999;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+.cd-overlay.show{display:flex}
+.cd-num{font-family:var(--hfont);font-size:clamp(80px,20vw,160px);font-weight:800;line-height:1;color:#fff;animation:cdPop 1s infinite}
+@keyframes cdPop{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.cd-role{font-size:20px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:20px}
+.cd-sub{font-size:15px;color:rgba(255,255,255,.75);margin-top:16px;max-width:320px}
+/* QR fullscreen */
+.qr-fs{position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px}
+.qr-fs.open{display:flex}
+.qr-fs img{border-radius:12px;max-width:min(320px,85vw);max-height:85vw}
+/* Role switch */
+.role-switch{display:flex;gap:8px;margin-top:8px}
+.rs-btn{flex:1;padding:10px;border-radius:var(--r2);border:2px solid var(--border);background:none;color:var(--text2);cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.rs-btn.active-hunter{border-color:var(--hunter);background:rgba(59,130,246,.1);color:var(--hunter)}
+.rs-btn.active-runner{border-color:var(--runner);background:rgba(16,185,129,.1);color:var(--runner)}
+</style>
+{% endblock %}
+{% block content %}
+
+{# â”€â”€ Player card macro â€” defined BEFORE use â”€â”€ #}
+{% macro player_card(p) %}
+<div class="pc {% if p.is_ready %}ready{% endif %}" id="pc-{{ p.user_id }}">
+  <div class="p-av {% if p.gps_enabled %}gps-on{% endif %}" id="pav-{{ p.user_id }}"
+       style="background:{{ 'var(--hunter)' if p.role=='hunter' else 'var(--runner)' }}">{{ p.user.avatar_letter }}</div>
+  <div style="flex:1;min-width:0">
+    <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+      {{ p.user.username }}
+      {% if p.user_id == game.creator_id %}<span style="font-size:10px;background:rgba(245,158,11,.15);color:var(--warn);padding:1px 7px;border-radius:10px;border:1px solid rgba(245,158,11,.3)"><i class="fas fa-crown"></i> Maker</span>{% endif %}
+    </div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
+      <span class="badge badge-{{ p.role }}" id="roleBadge-{{ p.user_id }}"><i class="fas fa-{{ 'crosshairs' if p.role=='hunter' else 'person-running' }}"></i> {{ p.role|title }}</span>
+      <span id="gpsBadge-{{ p.user_id }}" class="badge" style="{{ 'background:rgba(16,185,129,.12);color:var(--runner);border:1px solid rgba(16,185,129,.25)' if p.gps_enabled else 'background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.25)' }}">
+        <i class="fas fa-satellite-dish"></i> GPS {{ 'AAN' if p.gps_enabled else 'UIT' }}
+      </span>
+      <span id="readyBadge-{{ p.user_id }}" class="badge" style="{{ 'background:rgba(16,185,129,.12);color:var(--runner);border:1px solid rgba(16,185,129,.25)' if p.is_ready else 'background:rgba(245,158,11,.12);color:var(--warn);border:1px solid rgba(245,158,11,.25)' }}">
+        <i class="fas fa-{{ 'check' if p.is_ready else 'clock' }}"></i> {{ 'Klaar!' if p.is_ready else 'Wacht...' }}
+      </span>
+    </div>
+  </div>
+</div>
+{% endmacro %}
+
+<div class="container" style="max-width:900px">
+
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px">
+    <div>
+      <h1 style="font-family:var(--hfont);font-size:26px;font-weight:800">{{ game.name }}</h1>
+      <div style="color:var(--text2);font-size:13px;margin-top:4px">
+        Gemaakt door <strong>{{ game.creator.username }}</strong> ·
+        <span class="badge" style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:var(--warn);font-size:11px"><i class="fas fa-hourglass-half"></i> Lobby</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-danger btn-sm" onclick="leaveLobby()"><i class="fas fa-door-open"></i> Spel verlaten</button>
+      <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> Dashboard</a>
+    </div>
+  </div>
+
+  <div id="gpsBanner" class="alert alert-warning" {% if me.gps_enabled %}style="display:none"{% endif %}>
+    <i class="fas fa-satellite-dish"></i>
+    <div><strong>GPS vereist!</strong> Schakel GPS in voor deelname. <a href="{{ url_for('gps_help') }}" style="color:inherit">Hulp?</a></div>
+  </div>
+  <div id="gpsErr" class="alert alert-danger" style="display:none">
+    <i class="fas fa-triangle-exclamation"></i><span id="gpsErrMsg"></span>
+  </div>
+<div id="gpsGate" style="position:fixed;inset:0;z-index:3000;background:rgba(9,12,20,.94);display:{% if me.gps_enabled %}none{% else %}flex{% endif %};align-items:center;justify-content:center;padding:18px">
+    <div style="width:min(460px,100%);background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 22px 60px rgba(0,0,0,.45);text-align:center">
+      <div style="width:58px;height:58px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:rgba(16,185,129,.14);color:var(--runner);font-size:26px">
+        <i class="fas fa-location-crosshairs"></i>
+      </div>
+      <h2 style="font-family:var(--hfont);font-size:22px;font-weight:800;margin-bottom:8px">Locatie nodig</h2>
+      <p style="color:var(--text2);font-size:14px;line-height:1.5;margin-bottom:16px">
+        {% if game.status == 'active' %}
+        Het spel is al gestart. Sta nu locatie toe zodat je direct naar het spel kunt.
+        {% else %}
+        Sta locatie toe voordat je klaar kunt zijn. Zonder locatie werkt VenTrax tijdens het spel niet goed.
+        {% endif %}
+      </p>
+      <div id="gpsGateErr" style="display:none;color:var(--danger);font-size:13px;line-height:1.4;margin-bottom:12px"></div>
+      <button id="gpsGateBtn" class="btn btn-runner btn-lg btn-full" onclick="enableGPS(true)"><i class="fas fa-satellite-dish"></i> Locatie toestaan</button>
+      <a href="{{ url_for('gps_help') }}" class="btn btn-ghost btn-full" style="margin-top:8px"><i class="fas fa-circle-question"></i> GPS hulp</a>
+    </div>
+  </div>
+
+  <div class="grid g2" style="gap:18px;align-items:start">
+
+    <!-- LEFT -->
+    <div>
+      <!-- Code -->
+      <div style="margin-bottom:18px;text-align:center">
+        <div class="code-big" onclick="copyJoinUrl()">{{ game.code }}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:8px"><i class="fas fa-copy"></i> Klik om join-link te kopiëren</div>
+        <div id="copyMsg" style="font-size:12px;color:var(--runner);margin-top:4px;display:none">Link gekopieerd!</div>
+      </div>
+
+      <!-- QR + Join URL -->
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap">
+        <div class="qr-wrap" onclick="openQRFullscreen()" title="Klik voor fullscreen QR">
+          <img id="qrImg" src="/qr/{{ game.code }}.png" alt="QR Code" style="width:110px;height:110px;display:block">
+        </div>
+        <div style="flex:1;min-width:160px">
+          <div style="font-size:12px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Join Link</div>
+          <div style="font-size:12px;word-break:break-all;background:var(--bg3);padding:8px 10px;border-radius:var(--r2);border:1px solid var(--border)">{{ join_url }}</div>
+          <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="copyJoinUrl()"><i class="fas fa-copy"></i> Kopieer</button>
+            <button class="btn btn-ghost btn-sm" onclick="shareUrl()"><i class="fas fa-share-nodes"></i> Delen</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Players -->
+      <div class="sec-title"><i class="fas fa-users"></i> Spelers <span id="pCount" style="color:var(--text2);font-size:15px;font-family:var(--bfont)">({{ players|length }})</span></div>
+      <div id="playersList">
+        {% for p in players %}
+        {{ player_card(p) }}
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <!-- Permissions -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-shield-check"></i> Toestemmingen</div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:15px"><span id="gpsIcon">{{ 'AAN' if me.gps_enabled else 'UIT' }}</span> GPS &amp; Locatie</div>
+            <div id="gpsAccTxt" style="font-size:12px;color:var(--text2);margin-top:3px">{{ 'Actief' if me.gps_enabled else 'Niet ingeschakeld' }}</div>
+          </div>
+          <div style="display:flex;gap:7px">
+            <button id="btnGpsOn" class="btn btn-runner btn-sm" onclick="enableGPS()" {% if me.gps_enabled %}style="display:none"{% endif %}><i class="fas fa-satellite-dish"></i> Inschakelen</button>
+            <button id="btnGpsOff" class="btn btn-danger btn-sm" onclick="disableGPS()" {% if not me.gps_enabled %}style="display:none"{% endif %}><i class="fas fa-xmark"></i> Uit</button>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:15px"><span id="camIcon">{{ 'AAN' if me.camera_enabled else 'UIT' }}</span> Camera <span style="font-size:11px;color:var(--text2);font-weight:400">(optioneel)</span></div>
+            <div style="font-size:12px;color:var(--text2);margin-top:3px" id="camTxt">{{ 'Toegang verleend' if me.camera_enabled else 'Voor foto feed' }}</div>
+          </div>
+          <button id="btnCam" class="btn btn-ghost btn-sm" onclick="requestCamera()" {% if me.camera_enabled %}style="display:none"{% endif %}><i class="fas fa-camera"></i> Toestaan</button>
+        </div>
+
+        <!-- Role switcher -->
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
+          <div style="font-size:13px;color:var(--text2);font-weight:600;margin-bottom:8px">Jouw Rol</div>
+          <div class="role-switch">
+            <button class="rs-btn {{ 'active-hunter' if me.role=='hunter' else '' }}" id="rsHunter" onclick="switchRole('hunter')"><i class="fas fa-crosshairs"></i> Hunter</button>
+            <button class="rs-btn {{ 'active-runner' if me.role=='runner' else '' }}" id="rsRunner" onclick="switchRole('runner')"><i class="fas fa-person-running"></i> Runner</button>
+          </div>
+          <div id="roleSwitchMsg" style="font-size:12px;color:var(--text2);margin-top:6px;display:none"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:10px">
+          <button id="btnReady" class="btn btn-runner btn-full" onclick="setReady(true)"
+            {% if not me.gps_enabled or me.is_ready %}disabled{% endif %}
+            {% if me.is_ready %}style="display:none"{% endif %}>
+            <i class="fas fa-check"></i> Ik ben Klaar!
+          </button>
+          <button id="btnNotReady" class="btn btn-warn btn-full" onclick="setReady(false)" {% if not me.is_ready %}style="display:none"{% endif %}>
+            <i class="fas fa-xmark"></i> Niet klaar
+          </button>
+          {% if me.is_ready %}<div style="text-align:center;color:var(--runner);font-weight:600;padding:10px 0">Jij bent klaar!</div>{% endif %}
+        </div>
+      </div>
+
+      {% if game_extras %}
+      <details class="card" style="margin-bottom:16px">
+        <summary class="card-title" style="cursor:pointer;list-style:none"><i class="fas fa-box-open"></i> Extra's in dit spel</summary>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">
+          <div><strong style="color:var(--text)">Spelstijl:</strong> {{ game_extras.game_style|default('classic')|title }}</div>
+          {% if game_extras.classes_enabled %}<div><strong style="color:var(--text)">Classes:</strong> Random classes aan, thema {{ game_extras.class_theme|default('street')|title }}, cooldown {{ game_extras.class_cooldown_sec|default(180) }}s.</div>{% endif %}
+          {% if game_extras.dropboxes %}<div><strong style="color:var(--text)">Dropboxes:</strong> {{ game_extras.dropboxes_per_team }} per team en {{ game_extras.dropboxes_global }} algemeen. Openen binnen 50 meter{% if game_extras.dropbox_wait_enabled %}, na {{ game_extras.dropbox_wait_sec }} seconden wachten{% endif %}.</div>{% endif %}
+          {% if game_extras.dropboxes %}<div><strong style="color:var(--text)">Dropbox afstand:</strong> binnen speelveld, of {{ game_extras.dropbox_min_m|default(500) }}-{{ game_extras.dropbox_max_m|default(1500) }}m als er geen speelveld is.</div>{% endif %}
+          {% if game_extras.landmine %}<div><strong style="color:var(--text)">Landmijn:</strong> tegenstander binnen bereik moet stilstaan om te ontmantelen.</div>{% endif %}
+          {% if game_extras.laser %}<div><strong style="color:var(--text)">Laser detectie:</strong> plaats een laser; je team krijgt melding als iemand erdoor loopt.</div>{% endif %}
+          {% if game_extras.tripwire %}<div><strong style="color:var(--text)">Tripwire:</strong> kan op dropboxes worden geplaatst en verraadt de opener kort.</div>{% endif %}
+          {% if game_extras.hacker %}<div><strong style="color:var(--text)">Hacker:</strong> slimme informatie-acties zoals dichtbijzijnde tegenstander of chat onderscheppen.</div>{% endif %}
+          {% if game_extras.glitch %}<div><strong style="color:var(--text)">Glitch:</strong> runner-locatie kan tijdelijk verwarrend of verschoven worden.</div>{% endif %}
+          {% if game_extras.echo %}<div><strong style="color:var(--text)">Echo:</strong> geeft afstand en richting van de dichtstbijzijnde tegenstander, zonder exacte locatie.</div>{% endif %}
+          {% if not (game_extras.dropboxes or game_extras.landmine or game_extras.laser or game_extras.tripwire or game_extras.hacker or game_extras.glitch or game_extras.echo) %}
+          <div>Geen extra's ingeschakeld.</div>
+          {% endif %}
+        </div>
+      </details>
+      {% endif %}
+
+      <!-- Settings -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="justify-content:space-between">
+          <span><i class="fas fa-sliders"></i> Spelinstellingen</span>
+          {% if me.user_id == game.creator_id %}
+          <button class="btn btn-ghost btn-sm" id="editToggle" onclick="toggleEdit()"><i class="fas fa-pen"></i> Aanpassen</button>
+          {% endif %}
+        </div>
+        <div id="settingsView">
+          <div class="si"><span class="sk">Duur</span><strong id="sv-dur">{{ game.duration_minutes }} min</strong></div>
+          <div class="si"><span class="sk">Voorsprong</span><strong id="sv-hs">{{ game.headstart_minutes }} min</strong></div>
+          <div class="si"><span class="sk">Hunter interval</span><strong id="sv-hi">{{ game.hunter_interval_sec }}s</strong></div>
+          <div class="si"><span class="sk">Runner interval</span><strong id="sv-ri">{{ game.runner_interval_sec if game.runner_interval_sec else 'uit' }}{% if game.runner_interval_sec %}s{% endif %}</strong></div>
+          <div class="si"><span class="sk">Afstand</span><strong id="sv-dist">{{ 'aan' if game.show_distance else 'uit' }} / live {{ 'aan' if game.live_tracking else 'uit' }}</strong></div>
+          <div class="si"><span class="sk">Target</span><strong id="sv-target">{{ 'aan' if game.target_enabled else 'uit' }}{% if game.target_enabled %} / {{ game.target_duration_sec }}s{% endif %}</strong></div>
+          <div class="si"><span class="sk">Offline knoppen</span><strong id="sv-offline">{{ 'aan' if game.offline_button else 'uit' }} / {{ game.offline_uses }}x / {{ game.max_offline_sec }}s</strong></div>
+          <div class="si"><span class="sk">Pauze</span><strong id="sv-pause">{{ 'aan' if game.pause_allowed else 'uit' }}</strong></div>
+          <div class="si"><span class="sk">Multiplier</span><strong>x{{ game.points_multiplier }}</strong></div>
+        </div>
+        {% if me.user_id == game.creator_id %}
+        <div id="settingsEdit" style="display:none;margin-top:4px">
+          <div class="edit-row"><label>Duur (min)</label><input type="number" id="e-dur" value="{{ game.duration_minutes }}" min="5" max="300"></div>
+          <div class="edit-row"><label>Voorsprong (min)</label><input type="number" id="e-hs" value="{{ game.headstart_minutes }}" min="0" max="30"></div>
+          <div class="edit-row"><label>Hunter interval</label><select id="e-hi"><option value="180" {% if game.hunter_interval_sec==180 %}selected{% endif %}>3 min</option><option value="300" {% if game.hunter_interval_sec==300 %}selected{% endif %}>5 min</option><option value="600" {% if game.hunter_interval_sec==600 %}selected{% endif %}>10 min</option><option value="900" {% if game.hunter_interval_sec==900 %}selected{% endif %}>15 min</option><option value="1200" {% if game.hunter_interval_sec==1200 %}selected{% endif %}>20 min</option></select></div>
+          <div class="edit-row"><label>Runner interval</label><select id="e-ri"><option value="off" {% if not game.runner_interval_sec %}selected{% endif %}>Uit</option><option value="180" {% if game.runner_interval_sec==180 %}selected{% endif %}>3 min</option><option value="300" {% if game.runner_interval_sec==300 %}selected{% endif %}>5 min</option><option value="600" {% if game.runner_interval_sec==600 %}selected{% endif %}>10 min</option><option value="900" {% if game.runner_interval_sec==900 %}selected{% endif %}>15 min</option><option value="1200" {% if game.runner_interval_sec==1200 %}selected{% endif %}>20 min</option></select></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-show" {% if game.show_distance %}checked{% endif %}> Afstand tonen</label></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-live" {% if game.live_tracking %}checked{% endif %}> Live afstand</label></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-target" {% if game.target_enabled %}checked{% endif %}> Target systeem</label></div>
+          <div class="edit-row"><label>Target duur (sec)</label><input type="number" id="e-target-dur" value="{{ game.target_duration_sec }}" min="60" max="1800"></div>
+          <div class="edit-row"><label>Target cooldown (sec)</label><input type="number" id="e-target-cd" value="{{ game.target_cooldown_sec }}" min="60" max="3600"></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-offline" {% if game.offline_button %}checked{% endif %}> Offline knop</label></div>
+          <div class="edit-row"><label>Offline keren</label><input type="number" id="e-off-uses" value="{{ game.offline_uses }}" min="1" max="5"></div>
+          <div class="edit-row"><label>Max offline (sec)</label><input type="number" id="e-off-max" value="{{ game.max_offline_sec }}" min="30" max="600"></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-team" {% if game.team_mode %}checked{% endif %}> Offline als team</label></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-pause" {% if game.pause_allowed %}checked{% endif %}> Pauze toestaan</label></div>
+          <div class="form-hint" style="padding:8px 0 0">Pauze is nu alleen aan of uit. De server bepaalt wanneer die eindigt.</div>
+          <div class="edit-row"><label><input type="checkbox" id="e-bike" {% if game.bike_allowed %}checked{% endif %}> Fiets toestaan</label></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-hacker" {% if game.feat_hacker %}checked{% endif %}> Hacker</label></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-glitch" {% if game.feat_glitch %}checked{% endif %}> Glitch</label></div>
+          <div class="edit-row"><label><input type="checkbox" id="e-photo" {% if game.feat_photo_missions %}checked{% endif %}> Foto opdrachten</label></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-ghost btn-sm" onclick="toggleEdit()"><i class="fas fa-xmark"></i></button>
+            <button class="btn btn-primary btn-full btn-sm" onclick="saveSettings()"><i class="fas fa-save"></i> Opslaan</button>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Start -->
+      {% if me.user_id == game.creator_id %}
+      <div class="card">
+        <div class="card-title"><i class="fas fa-play-circle"></i> Spel Starten</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Alle spelers GPS aan + klaar. Min. 1 hunter en 1 runner.</p>
+        <div id="startErr" style="font-size:13px;color:var(--danger);margin-bottom:10px;display:none"></div>
+        <button id="btnStart" class="btn btn-primary btn-full btn-lg" onclick="startGame()"><i class="fas fa-play"></i> Start het Spel!</button>
+      </div>
+      {% else %}
+      <div class="card" style="text-align:center;color:var(--text2);padding:24px">
+        <i class="fas fa-hourglass-half fa-2x" style="margin-bottom:12px;display:block;color:var(--warn)"></i>
+        Wachten op de maker...
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Countdown overlay -->
+<div id="cdOverlay" class="cd-overlay">
+  <div class="cd-role" id="cdRole"></div>
+  <div class="cd-num" id="cdNum">5</div>
+  <div class="cd-sub" id="cdSub"></div>
+</div>
+
+<!-- QR fullscreen -->
+<div class="qr-fs" id="qrFs" onclick="if(event.target===this)closeQR()">
+  <img src="/qr/{{ game.code }}.png" alt="QR" style="">
+  <button onclick="closeQR()" style="background:rgba(255,255,255,.15);border:none;color:#fff;padding:10px 24px;border-radius:20px;cursor:pointer;font-size:15px;font-weight:600"><i class="fas fa-xmark"></i> Sluiten</button>
+  <div style="color:rgba(255,255,255,.7);font-size:13px">Scan met je camera om te joinen</div>
+</div>
+
+<script>
+const CODE     = '{{ game.code }}';
+const MY_ID    = {{ current_user.id }};
+const IS_MAKER = {{ 'true' if me.user_id == game.creator_id else 'false' }};
+const JOIN_URL = '{{ join_url }}';
+const ROLE_INIT= '{{ me.role }}';
+const GAME_STATUS = '{{ game.status }}';
+
+let myGps   = {{ 'true' if me.gps_enabled else 'false' }};
+let myCam   = {{ 'true' if me.camera_enabled else 'false' }};
+let myReady = {{ 'true' if me.is_ready else 'false' }};
+let myRole  = ROLE_INIT;
+let gpsWatcher = null;
+let gpsRequesting = false;
+
+// â”€â”€ WebSocket â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let ws, wsRetry = 500;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${CODE}`);
+  ws.onopen = () => { wsRetry = 500; };
+  ws.onmessage = e => {
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    const d = msg.data;
+    switch(msg.event) {
+      case 'permissions_update': updateGpsBadge(d.user_id, d.gps); break;
+      case 'player_ready':       updateReadyBadge(d.user_id, d.is_ready); break;
+      case 'player_role_change': updateRoleBadge(d.user_id, d.role); break;
+      case 'settings_updated':   onSettingsUpdate(d); break;
+      case 'countdown_start':    triggerCountdown(d); break;
+      case 'game_started':
+        if (myGps) window.location.href = '/game/' + CODE;
+        else setGpsGate(true, 'Het spel is gestart. Sta locatie toe om direct mee te doen.');
+        break;
+      case 'player_joined':      addPlayerToDOM(d); break;
+      case 'player_left':        removePlayerFromDOM(d.user_id); break;
+    }
+  };
+  ws.onclose = () => { wsRetry = Math.min(wsRetry * 1.5, 8000); setTimeout(connectWS, wsRetry); };
+  setInterval(() => ws && ws.readyState === 1 && ws.send(JSON.stringify({event:'ping'})), 25000);
+}
+// Connect immediately
+connectWS();
+
+// â”€â”€ Add new player to DOM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function addPlayerToDOM(d) {
+  if (document.getElementById('pc-' + d.user_id)) return;
+  const list = document.getElementById('playersList');
+  const col  = d.role === 'hunter' ? 'var(--hunter)' : 'var(--runner)';
+  const el   = document.createElement('div');
+  el.id = 'pc-' + d.user_id;
+  el.className = 'pc';
+  el.innerHTML = `
+    <div class="p-av" id="pav-${d.user_id}" style="background:${col}">${(d.username||'?')[0].toUpperCase()}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600;font-size:14px">${d.username}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
+        <span class="badge badge-${d.role}" id="roleBadge-${d.user_id}"><i class="fas fa-${d.role==='hunter'?'crosshairs':'person-running'}"></i> ${d.role==='hunter'?'Hunter':'Runner'}</span>
+        <span id="gpsBadge-${d.user_id}" class="badge" style="background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.25)"><i class="fas fa-satellite-dish"></i> GPS UIT</span>
+        <span id="readyBadge-${d.user_id}" class="badge" style="background:rgba(245,158,11,.12);color:var(--warn);border:1px solid rgba(245,158,11,.25)"><i class="fas fa-clock"></i> Wacht...</span>
+      </div>
+    </div>`;
+  list.appendChild(el);
+  const cnt = document.querySelectorAll('[id^="pc-"]').length;
+  document.getElementById('pCount').textContent = `(${cnt})`;
+  showToast(`${d.username} heeft zich aangesloten als ${d.role}!`, 'info');
+}
+function removePlayerFromDOM(uid) {
+  const el = document.getElementById('pc-' + uid);
+  if (el) el.remove();
+  const cnt = document.querySelectorAll('[id^="pc-"]').length;
+  document.getElementById('pCount').textContent = `(${cnt})`;
+}
+
+// â”€â”€ Badge helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function gBadge(on) { return on
+  ? 'background:rgba(16,185,129,.12);color:var(--runner);border:1px solid rgba(16,185,129,.25)'
+  : 'background:rgba(239,68,68,.12);color:var(--danger);border:1px solid rgba(239,68,68,.25)'; }
+function rBadge(on) { return on
+  ? 'background:rgba(16,185,129,.12);color:var(--runner);border:1px solid rgba(16,185,129,.25)'
+  : 'background:rgba(245,158,11,.12);color:var(--warn);border:1px solid rgba(245,158,11,.25)'; }
+
+function updateGpsBadge(uid, on) {
+  const b = document.getElementById('gpsBadge-' + uid);
+  const a = document.getElementById('pav-' + uid);
+  if (b) { b.style.cssText = gBadge(on); b.innerHTML = `<i class="fas fa-satellite-dish"></i> GPS ${on?'AAN':'UIT'}`; }
+  if (a) a.className = 'p-av' + (on ? ' gps-on' : '');
+}
+function updateReadyBadge(uid, ready) {
+  const b = document.getElementById('readyBadge-' + uid);
+  const c = document.getElementById('pc-' + uid);
+  if (b) { b.style.cssText = rBadge(ready); b.innerHTML = `<i class="fas fa-${ready?'check':'clock'}"></i> ${ready?'Klaar!':'Wacht...'}`; }
+  if (c) c.className = 'pc' + (ready ? ' ready' : '');
+}
+function updateRoleBadge(uid, role) {
+  const b = document.getElementById('roleBadge-' + uid);
+  const a = document.getElementById('pav-' + uid);
+  if (b) {
+    b.className = 'badge badge-' + role;
+    b.innerHTML = `<i class="fas fa-${role==='hunter'?'crosshairs':'person-running'}"></i> ${role==='hunter'?'Hunter':'Runner'}`;
+  }
+  if (a) a.style.background = role === 'hunter' ? 'var(--hunter)' : 'var(--runner)';
+}
+
+// â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function setGpsGate(open, msg) {
+  const gate = document.getElementById('gpsGate');
+  const err = document.getElementById('gpsGateErr');
+  const btn = document.getElementById('gpsGateBtn');
+  if (gate) gate.style.display = open ? 'flex' : 'none';
+  if (err) {
+    err.style.display = msg ? 'block' : 'none';
+    err.textContent = msg || '';
+  }
+  if (btn) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-satellite-dish"></i> Locatie toestaan';
+  }
+}
+function enableGPS(fromGate=false) {
+  if (!navigator.geolocation) { showGpsErr('GPS niet ondersteund.'); return; }
+  if (gpsRequesting) return;
+  gpsRequesting = true;
+  document.getElementById('gpsAccTxt').textContent = 'Toestemming ophalen...';
+  const gateBtn = document.getElementById('gpsGateBtn');
+  if (gateBtn) {
+    gateBtn.disabled = true;
+    gateBtn.innerHTML = '<span class="spinner"></span> Wachten op locatie...';
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    gpsRequesting = false;
+    myGps = true;
+    setGpsGate(false);
+    document.getElementById('gpsBanner').style.display = 'none';
+    document.getElementById('gpsErr').style.display    = 'none';
+    document.getElementById('gpsIcon').textContent     = 'AAN';
+    document.getElementById('gpsAccTxt').textContent   = `Actief +/-${Math.round(pos.coords.accuracy)}m`;
+    document.getElementById('btnGpsOn').style.display  = 'none';
+    document.getElementById('btnGpsOff').style.display = '';
+    document.getElementById('btnReady').disabled       = false;
+    gpsWatcher = navigator.geolocation.watchPosition(
+      p => { document.getElementById('gpsAccTxt').textContent = `Actief +/-${Math.round(p.coords.accuracy)}m`; },
+      null, {enableHighAccuracy: true}
+    );
+    fetch('/api/game/' + CODE + '/gps_status', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({gps: true, camera: myCam, lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy})
+    }).then(r=>r.json()).then(d=>{
+      if (d && d.redirect) {
+        location.href = d.redirect;
+      } else if (GAME_STATUS === 'active') {
+        location.href = '/game/' + CODE;
+      }
+    }).catch(()=>{});
+    updateGpsBadge(MY_ID, true);
+    showToast('GPS ingeschakeld!', 'success');
+  }, err => {
+    gpsRequesting = false;
+    const msgs = {1:'GPS geweigerd. Ga naar browserinstellingen en zet Locatie op Toestaan.', 2:'Locatie niet beschikbaar.', 3:'GPS time-out.'};
+    const msg = msgs[err.code] || 'GPS fout.';
+    showGpsErr(msg);
+    setGpsGate(true, msg + ' Druk daarna opnieuw op Locatie toestaan.');
+    myGps = false;
+    document.getElementById('gpsIcon').textContent = 'X';
+    document.getElementById('gpsAccTxt').textContent = 'Geweigerd';
+    document.getElementById('btnReady').disabled = true;
+    fetch('/api/game/' + CODE + '/gps_status', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({gps: false, camera: myCam})
+    }).then(r=>r.json()).then(d=>{
+      if(d && d.redirect) {
+        alert(d.error || 'Locatie is verplicht om mee te doen.');
+        location.href = d.redirect;
+      }
+    }).catch(()=>{});
+    updateGpsBadge(MY_ID, false);
+  }, {enableHighAccuracy: true, timeout: 20000, maximumAge: 0});
+}
+function disableGPS() {
+  if (gpsWatcher) { navigator.geolocation.clearWatch(gpsWatcher); gpsWatcher = null; }
+  myGps = false; myReady = false;
+  document.getElementById('gpsIcon').textContent     = 'UIT';
+  document.getElementById('gpsAccTxt').textContent   = 'Uitgeschakeld';
+  document.getElementById('btnGpsOn').style.display  = '';
+  document.getElementById('btnGpsOff').style.display = 'none';
+  document.getElementById('btnReady').disabled       = true;
+  document.getElementById('btnReady').style.display  = '';
+  document.getElementById('btnNotReady').style.display = 'none';
+  document.getElementById('gpsBanner').style.display = '';
+  setGpsGate(true, 'Locatie staat uit. Zet locatie weer aan om mee te doen.');
+  fetch('/api/game/' + CODE + '/gps_status', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({gps: false, camera: myCam})
+  }).then(r=>r.json()).then(d=>{
+    if(d && d.redirect) {
+      alert(d.error || 'Locatie is verplicht om mee te doen.');
+      location.href = d.redirect;
+    }
+  }).catch(()=>{});
+  updateGpsBadge(MY_ID, false);
+}
+function showGpsErr(msg) { document.getElementById('gpsErr').style.display='flex'; document.getElementById('gpsErrMsg').textContent=msg; }
+
+// â”€â”€ Camera â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function requestCamera() {
+  try {
+    await navigator.mediaDevices.getUserMedia({video: true});
+    myCam = true;
+    document.getElementById('camIcon').textContent = 'AAN';
+    document.getElementById('camTxt').textContent  = 'Toegang verleend';
+    document.getElementById('btnCam').style.display = 'none';
+    fetch('/api/game/' + CODE + '/gps_status', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({gps: myGps, camera: true})
+    });
+    showToast('Camera toegang verleend!', 'success');
+  } catch { showToast('Camera geweigerd - foto feed niet beschikbaar', 'warn'); }
+}
+
+// â”€â”€ Role switch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function switchRole(newRole) {
+  if (newRole === myRole) return;
+  fetch('/api/game/' + CODE + '/switch_role', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({role: newRole})
+  }).then(r => r.json()).then(d => {
+    if (d.error) { showToast(d.error, 'error'); return; }
+    myRole = newRole;
+    // Update own buttons
+    document.getElementById('rsHunter').className = 'rs-btn' + (newRole==='hunter' ? ' active-hunter' : '');
+    document.getElementById('rsRunner').className = 'rs-btn' + (newRole==='runner' ? ' active-runner' : '');
+    updateRoleBadge(MY_ID, newRole);
+    // Reset ready status
+    myReady = false;
+    document.getElementById('btnReady').style.display    = '';
+    document.getElementById('btnNotReady').style.display = 'none';
+    if (myGps) document.getElementById('btnReady').disabled = false;
+    showToast(`Rol gewisseld naar ${newRole==='hunter'?'Hunter':'Runner'}`, 'success');
+  });
+}
+
+// â”€â”€ Ready â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function setReady(r) {
+  if (r && !myGps) { showToast('Schakel eerst GPS in!', 'error'); return; }
+  fetch('/api/game/' + CODE + '/ready', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ready: r})
+  }).then(res => res.json()).then(d => {
+    if (d.error) { showToast(d.error, 'error'); return; }
+    myReady = r;
+    document.getElementById('btnReady').style.display    = r ? 'none' : '';
+    document.getElementById('btnNotReady').style.display = r ? ''     : 'none';
+    updateReadyBadge(MY_ID, r);
+    showToast(r ? 'Klaar!' : 'Klaar-status ingetrokken', r ? 'success' : 'info');
+  });
+}
+
+// â”€â”€ Settings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let editMode = false;
+function toggleEdit() {
+  editMode = !editMode;
+  document.getElementById('settingsView').style.display  = editMode ? 'none' : '';
+  document.getElementById('settingsEdit').style.display  = editMode ? '' : 'none';
+  document.getElementById('editToggle').innerHTML = editMode ? '<i class="fas fa-xmark"></i>' : '<i class="fas fa-pen"></i> Aanpassen';
+}
+function saveSettings() {
+  const payload = {
+    duration_minutes:    parseInt(document.getElementById('e-dur').value),
+    headstart_minutes:   parseInt(document.getElementById('e-hs').value),
+    hunter_interval_sec: parseInt(document.getElementById('e-hi').value),
+    runner_interval_sec: document.getElementById('e-ri').value === 'off' ? 'off' : parseInt(document.getElementById('e-ri').value),
+    show_distance:       document.getElementById('e-show').checked,
+    live_tracking:       document.getElementById('e-live').checked,
+    target_enabled:      document.getElementById('e-target').checked,
+    target_duration_sec: parseInt(document.getElementById('e-target-dur').value),
+    target_cooldown_sec: parseInt(document.getElementById('e-target-cd').value),
+    offline_button:      document.getElementById('e-offline').checked,
+    offline_uses:        parseInt(document.getElementById('e-off-uses').value),
+    max_offline_sec:     parseInt(document.getElementById('e-off-max').value),
+    team_mode:           document.getElementById('e-team').checked,
+    pause_allowed:       document.getElementById('e-pause').checked,
+    bike_allowed:        document.getElementById('e-bike').checked,
+    feat_hacker:         document.getElementById('e-hacker').checked,
+    feat_glitch:         document.getElementById('e-glitch').checked,
+    feat_photo_missions: document.getElementById('e-photo').checked,
+  };
+  fetch('/lobby/' + CODE + '/settings', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(r => r.json()).then(d => {
+    if (d.error) { showToast(d.error, 'error'); return; }
+    showToast('Instellingen opgeslagen!', 'success');
+    toggleEdit();
+    document.getElementById('sv-dur').textContent = payload.duration_minutes + ' min';
+    document.getElementById('sv-hs').textContent  = payload.headstart_minutes + ' min';
+    document.getElementById('sv-hi').textContent  = payload.hunter_interval_sec + 's';
+    document.getElementById('sv-ri').textContent  = payload.runner_interval_sec === 'off' ? 'uit' : payload.runner_interval_sec + 's';
+    document.getElementById('sv-dist').textContent = (payload.show_distance ? 'aan' : 'uit') + ' / live ' + (payload.live_tracking ? 'aan' : 'uit');
+    document.getElementById('sv-target').textContent = (payload.target_enabled ? 'aan / ' + payload.target_duration_sec + 's' : 'uit');
+    document.getElementById('sv-offline').textContent = (payload.offline_button ? 'aan' : 'uit') + ' / ' + payload.offline_uses + 'x / ' + payload.max_offline_sec + 's';
+    document.getElementById('sv-pause').textContent = payload.pause_allowed ? 'aan' : 'uit';
+  });
+}
+function onSettingsUpdate(d) {
+  if (!editMode) {
+    if (d.duration)        document.getElementById('sv-dur').textContent = d.duration + ' min';
+    if (d.headstart)       document.getElementById('sv-hs').textContent  = d.headstart + ' min';
+    if (d.hunter_interval) document.getElementById('sv-hi').textContent  = d.hunter_interval + 's';
+    if ('runner_interval' in d) document.getElementById('sv-ri').textContent = d.runner_interval ? d.runner_interval + 's' : 'uit';
+  }
+  showToast('Instellingen bijgewerkt door maker', 'info');
+}
+
+// â”€â”€ Start game â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function startGame(forceStart=false) {
+  const btn = document.getElementById('btnStart');
+  const err = document.getElementById('startErr');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Starten...';
+  err.style.display = 'none';
+
+  fetch('/api/game/' + CODE + '/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({force_start: forceStart})
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.warning && d.can_force_start && !forceStart) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Start het Spel!';
+        if (confirm(d.warning + (d.missing_camera && d.missing_camera.length ? '\n\nOntbrekend: ' + d.missing_camera.join(', ') : ''))) {
+          startGame(true);
+        }
+        return;
+      }
+      if (d.error) {
+        err.textContent = d.error; err.style.display = '';
+        btn.disabled = false; btn.innerHTML = '<i class="fas fa-play"></i> Start het Spel!';
+        return;
+      }
+      // Server broadcasts countdown_start via WS to ALL players simultaneously
+      // including the maker, so everyone starts at exactly the same moment
+      // triggerCountdown is called via the WS 'countdown_start' event below
+      btn.innerHTML = '<span class="spinner"></span> Bezig...';
+    });
+}
+
+// â”€â”€ Countdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let countdownStarted = false;
+let countdownTimer = null;
+function parseServerTime(v) {
+  if (!v) return 0;
+  const s = String(v);
+  const normalized = /(?:z|[+-]\d{2}:?\d{2})$/i.test(s) ? s : s + 'Z';
+  const ms = Date.parse(normalized);
+  return Number.isFinite(ms) ? ms : 0;
+}
+function triggerCountdown(d) {
+  if (countdownStarted) return;  // prevent double-fire from WS + API response
+  countdownStarted = true;
+
+  const overlay  = document.getElementById('cdOverlay');
+  const numEl    = document.getElementById('cdNum');
+  const roleEl   = document.getElementById('cdRole');
+  const subEl    = document.getElementById('cdSub');
+  const isHunter = (myRole || ROLE_INIT) === 'hunter';
+
+  overlay.style.background = isHunter ? 'rgba(59,130,246,.95)' : 'rgba(16,185,129,.95)';
+  overlay.classList.add('show');
+  roleEl.textContent = isHunter ? 'Jij bent Hunter!' : 'Jij bent Runner!';
+  subEl.textContent  = isHunter
+    ? `Runners hebben ${d.headstart_minutes || '?'} min voorsprong. Wacht op start!`
+    : 'Gebruik je voorsprong - vlucht!';
+
+  const fallbackSec = Math.max(1, Number(d.seconds || 5));
+  const deadline = d.countdown_until ? parseServerTime(d.countdown_until) : Date.now() + fallbackSec * 1000;
+  const finish = () => {
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = null;
+    numEl.textContent = 'GO!';
+    overlay.classList.remove('show');
+    setTimeout(() => { window.location.href = '/game/' + CODE; }, 450);
+  };
+  const render = () => {
+    const sec = Math.ceil((deadline - Date.now()) / 1000);
+    if (sec <= 0) { finish(); return; }
+    numEl.textContent = sec;
+  };
+  render();
+  countdownTimer = setInterval(render, 250);
+}
+
+// â”€â”€ QR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function openQRFullscreen() { document.getElementById('qrFs').classList.add('open'); }
+function closeQR()          { document.getElementById('qrFs').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeQR(); });
+
+// â”€â”€ Share â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function copyJoinUrl() {
+  navigator.clipboard.writeText(JOIN_URL).then(() => {
+    const m = document.getElementById('copyMsg');
+    m.style.display = 'block';
+    setTimeout(() => m.style.display = 'none', 2500);
+  }).catch(() => showToast('Kopieer de link handmatig: ' + JOIN_URL, 'info', 8000));
+}
+function shareUrl() {
+  if (navigator.share) { navigator.share({title:'Join VenTrax!', url: JOIN_URL}).catch(() => copyJoinUrl()); }
+  else { copyJoinUrl(); }
+}
+
+function leaveLobby() {
+  if (!confirm('Spel verlaten? Je kunt later opnieuw joinen met de code.')) return;
+  fetch('/api/game/' + CODE + '/leave', {method:'POST'})
+    .then(r=>r.json()).then(d=>{ location.href = d.redirect || '/dashboard'; })
+    .catch(()=>{ location.href = '/dashboard'; });
+}
+
+// â”€â”€ Lobby sync: poll every 3s as WS fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// This ensures players appear even if WS packet was missed
+function syncLobby() {
+  fetch('/api/game/' + CODE + '/lobby_state')
+    .then(r => r.json())
+    .then(d => {
+      if (!d || d.error) return;
+      if (d.countdown_remaining > 0) {
+        if (myGps) {
+          triggerCountdown({seconds: d.countdown_remaining, countdown_until: d.countdown_until, headstart_minutes: d.headstart_minutes});
+        } else {
+          setGpsGate(true, 'Het spel start bijna. Sta locatie toe om direct mee te doen.');
+        }
+        return;
+      }
+      if (d.status === 'active') {
+        if (myGps) {
+          triggerCountdown({seconds: d.countdown_remaining || 3});
+        } else {
+          setGpsGate(true, 'Het spel is al gestart. Sta locatie toe om direct mee te doen.');
+        }
+        return;
+      }
+      // Add any missing players
+      d.players.forEach(p => {
+        if (!document.getElementById('pc-' + p.user_id)) {
+          addPlayerToDOM(p);
+        }
+        // Sync GPS badge
+        updateGpsBadge(p.user_id, p.gps);
+        // Sync ready badge
+        updateReadyBadge(p.user_id, p.is_ready);
+        // Sync role badge
+        if (p.user_id !== MY_ID) updateRoleBadge(p.user_id, p.role);
+      });
+      document.querySelectorAll('[id^="pc-"]').forEach(el => {
+        const uid = parseInt(el.id.replace('pc-', ''), 10);
+        if (!d.players.some(p => p.user_id === uid)) el.remove();
+      });
+      // Update count
+      const cnt = document.querySelectorAll('[id^="pc-"]').length;
+      document.getElementById('pCount').textContent = '(' + cnt + ')';
+    })
+    .catch(() => {});
+}
+// Poll every 3 seconds â€” reliable fallback for missed WS events
+setInterval(syncLobby, 3000);
+syncLobby(); // immediate first call
+
+// â”€â”€ Auto-redirect if game already active â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+(function checkActive() {
+  fetch('/api/game/' + CODE + '/lobby_state')
+    .then(r => r.json())
+    .then(d => {
+      if (d && d.countdown_remaining > 0) {
+        if (myGps) triggerCountdown({seconds: d.countdown_remaining, countdown_until: d.countdown_until, headstart_minutes: d.headstart_minutes});
+        else setGpsGate(true, 'Het spel start bijna. Sta locatie toe om direct mee te doen.');
+        return;
+      }
+      if (d && d.status === 'active') {
+        if (myGps) triggerCountdown({seconds: d.countdown_remaining || 3});
+        else setGpsGate(true, 'Het spel is al gestart. Sta locatie toe om direct mee te doen.');
+      }
+    })
+    .catch(() => {});
+  setTimeout(checkActive, 8000);
+})();
+
+(function requireLocationInLobby() {
+  if (myGps) { setGpsGate(false); return; }
+  setGpsGate(true);
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({name: 'geolocation'}).then(p => {
+      if (p.state === 'denied') {
+        setGpsGate(true, 'Locatie is geblokkeerd. Zet bij de site-instellingen Locatie op Toestaan en probeer opnieuw.');
+      } else {
+        setTimeout(() => { if (!myGps) enableGPS(true); }, 700);
+      }
+    }).catch(() => setTimeout(() => { if (!myGps) enableGPS(true); }, 700));
+  } else {
+    setTimeout(() => { if (!myGps) enableGPS(true); }, 700);
+  }
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,1892 @@
+﻿{% extends "base_game.html" %}
+{% block title %}{{ game.name }}{% endblock %}
+{% block extra_head %}
+<style>
+/* â”€â”€ Layout â”€â”€ */
+.gw{position:fixed;inset:0;display:flex;flex-direction:column}
+#map{flex:1;min-height:0;z-index:1;background:#1a1a24}
+
+/* â”€â”€ Topbar â”€â”€ */
+.topbar{
+  position:relative;z-index:10;height:52px;flex-shrink:0;
+  background:rgba(10,10,15,.92);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 10px;gap:8px;
+}
+.role-pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;white-space:nowrap}
+.role-pill.hunter{background:rgba(59,130,246,.2);color:var(--hunter);border:1px solid rgba(59,130,246,.35)}
+.role-pill.runner{background:rgba(16,185,129,.2);color:var(--runner);border:1px solid rgba(16,185,129,.35)}
+.t-timers{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+.t-pill{font-family:var(--hfont);font-size:12px;font-weight:700;padding:4px 9px;border-radius:9px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;gap:4px;white-space:nowrap}
+
+/* â”€â”€ Map overlays (absolute inside map-wrap) â”€â”€ */
+.map-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* Headstart */
+#hsOverlay{position:absolute;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+#hsOverlay.gone{display:none!important}
+.hs-num{font-family:var(--hfont);font-size:72px;font-weight:800;line-height:1;color:#fff}
+.hs-label{font-size:16px;color:rgba(255,255,255,.8);margin-top:10px;font-weight:600}
+.hs-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:8px;max-width:280px}
+
+/* Countdown start */
+#cdOverlay{position:absolute;inset:0;z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
+#cdOverlay.show{display:flex}
+.cd-num{font-family:var(--hfont);font-size:120px;font-weight:800;color:#fff;line-height:1;animation:cdPop 1s ease-in-out infinite}
+@keyframes cdPop{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.cd-role{font-size:20px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:16px}
+.cd-sub{font-size:14px;color:rgba(255,255,255,.7);margin-top:16px;max-width:300px}
+
+/* Target alert */
+#targetAlert{position:absolute;inset:0;z-index:450;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;pointer-events:none;background:rgba(185,28,28,.94)}
+#targetAlert.show{display:flex}
+#zoneBar{position:absolute;left:12px;right:12px;top:106px;z-index:360;background:rgba(20,20,26,.94);border:1px solid var(--danger);border-radius:12px;padding:10px;display:none;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#zoneBar .zb-title{font-weight:800;font-size:13px;color:#fff;margin-bottom:7px;display:flex;justify-content:space-between;gap:8px}
+#zoneBar .zb-track{height:10px;background:rgba(255,255,255,.15);border-radius:999px;overflow:hidden}
+#zoneBarFill{height:100%;width:0;background:linear-gradient(90deg,#f59e0b,#ef4444);transition:width .25s}
+#zoneBarText{font-size:11px;color:rgba(255,255,255,.75);margin-top:6px}
+.ta-box{background:rgba(239,68,68,.95);border-radius:12px;padding:13px 16px;text-align:center;box-shadow:0 4px 20px rgba(239,68,68,.5)}
+.ta-title{font-family:var(--hfont);font-size:15px;font-weight:800;color:#fff;margin-bottom:4px}
+.ta-timer{font-family:var(--hfont);font-size:28px;font-weight:800;color:#fff;margin:4px 0}
+.ta-dist{font-size:13px;color:rgba(255,255,255,.85)}
+
+/* Nearest hunter badge (runner) */
+#nearBadge{position:absolute;top:8px;left:8px;z-index:300;background:rgba(10,10,15,.88);border:1px solid var(--border);border-radius:10px;padding:8px 12px;display:none}
+#nearBadge.show{display:block}
+.nb-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.nb-val{font-family:var(--hfont);font-size:22px;font-weight:800;color:var(--danger);line-height:1.1}
+
+/* Runner panel (hunter only) */
+#runnerPanel{position:absolute;left:8px;top:58px;z-index:300;width:160px;display:flex;flex-direction:column;gap:5px;max-height:calc(55vh - 50px);overflow-y:auto}
+.rcard{background:rgba(10,10,15,.9);border:1px solid var(--border);border-radius:9px;padding:9px;cursor:pointer;transition:border-color .2s}
+.rcard:hover{border-color:var(--accent)}
+.rcard.targeted{border-color:var(--warn);animation:tpulse 1.5s infinite}
+.rcard.caught{border-color:var(--danger);opacity:.6}
+@keyframes tpulse{0%,100%{border-color:var(--warn)}50%{border-color:rgba(245,158,11,.3)}}
+.rc-name{font-size:12px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:4px}
+.rc-info{font-size:10px;color:var(--text2);line-height:1.5}
+
+/* Offline uses */
+#offUsesBadge{position:absolute;bottom:10px;right:8px;z-index:300;background:rgba(10,10,15,.88);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--text2);text-align:center;min-width:52px}
+#btnOffline .mab-label{position:absolute;right:-2px;bottom:-2px;background:rgba(10,10,15,.9);border:1px solid var(--border);border-radius:8px;padding:1px 4px;font-size:9px;line-height:1;color:#fff;font-weight:800;min-width:18px;text-align:center}
+
+/* Map action buttons */
+.mab{position:absolute;z-index:300;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;transition:all .2s;box-shadow:0 3px 14px rgba(0,0,0,.6)}
+.mab:active{transform:scale(.9)}
+#btnOffline{bottom:38px;right:8px;background:var(--runner);color:#fff}
+#btnOffline.active{background:var(--danger)}
+#btnOffline.empty{background:#444;color:#777;cursor:not-allowed}
+#btnPowerMap{bottom:38px;left:8px;background:var(--danger);color:#fff}
+#btnPowerMap.ready{background:var(--runner);color:#fff}
+#btnPowerMap.wait{background:var(--danger);color:#fff}
+#btnPowerMap .mab-label{position:absolute;right:-2px;bottom:-2px;background:rgba(10,10,15,.9);border:1px solid var(--border);border-radius:8px;padding:1px 4px;font-size:9px;line-height:1;color:#fff;font-weight:800;min-width:18px;text-align:center}
+#btnEmergency{bottom:68px;left:8px;background:#c0392b;color:#fff}
+#btnCameraRunner{top:8px;right:8px;background:rgba(10,10,15,.85);color:var(--text);border:1px solid var(--border)}
+
+/* GPS badge */
+#gpsBadge{position:absolute;bottom:68px;left:50%;transform:translateX(-50%);z-index:300;background:rgba(10,10,15,.8);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--text2);white-space:nowrap}
+#speedWarn{position:absolute;left:50%;bottom:112px;transform:translateX(-50%);z-index:360;background:rgba(239,68,68,.95);color:#fff;border-radius:14px;padding:10px 16px;font-family:var(--hfont);font-weight:800;font-size:16px;display:none;text-align:center;box-shadow:0 4px 24px rgba(239,68,68,.45)}
+#speedWarn.show{display:block;animation:screenShake .35s linear 2}
+@keyframes screenShake{0%,100%{transform:translateX(-50%)}25%{transform:translateX(calc(-50% - 5px))}75%{transform:translateX(calc(-50% + 5px))}}
+#hunterTargetInfo{position:absolute;top:8px;left:8px;z-index:330;display:none;width:160px;background:rgba(245,158,11,.96);color:#111;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:800;box-shadow:0 4px 18px rgba(0,0,0,.45);text-align:left;line-height:1.3}
+
+/* â”€â”€ Bottom bar â”€â”€ */
+.bbar{position:relative;z-index:10;flex-shrink:0;background:rgba(10,10,15,.95);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;align-items:stretch;height:58px}
+.bb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;transition:color .2s;border-right:1px solid var(--border);position:relative;padding:0 2px}
+.bb:last-child{border-right:none}
+.bb:hover,.bb.active-btn{color:var(--accent)}
+.bb.power-ready{color:var(--runner)!important}
+.bb.power-cooldown{color:var(--text2)!important}
+.bb i{font-size:20px}
+.bb-dot{position:absolute;top:6px;right:calc(50% - 18px);background:var(--accent);color:#fff;border-radius:10px;font-size:9px;padding:1px 5px;font-weight:700;min-width:16px;text-align:center;display:none}
+
+/* â”€â”€ Sliding panels â”€â”€ */
+.panel{position:fixed;bottom:0;left:0;right:0;z-index:800;background:var(--bg2);border-top:1px solid var(--border);border-radius:16px 16px 0 0;transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:78vh;display:flex;flex-direction:column}
+.panel.open{transform:none}
+.panel-drag{flex-shrink:0;padding:10px;display:flex;justify-content:center;cursor:grab}
+.panel-drag-bar{width:36px;height:4px;background:var(--border);border-radius:2px}
+.panel-head{flex-shrink:0;padding:0 44px 12px 16px;font-family:var(--hfont);font-size:16px;font-weight:700;border-bottom:1px solid var(--border)}
+.panel-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+/* Hunter camera position */
+#btnCameraHunter{top:8px;right:8px;background:rgba(10,10,15,.85);color:var(--text);border:1px solid var(--border)}
+
+/* Runner action modal */
+#actionModal{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.7);display:none;align-items:flex-end;justify-content:center;padding-bottom:0}
+#actionModal.open{display:flex}
+.am-box{background:var(--bg2);border-radius:16px 16px 0 0;width:100%;max-width:500px;padding:20px;border-top:1px solid var(--border)}
+.am-title{font-family:var(--hfont);font-size:17px;font-weight:700;margin-bottom:4px}
+.am-sub{font-size:13px;color:var(--text2);margin-bottom:16px}
+.am-btn{display:flex;align-items:center;gap:12px;padding:14px;border-radius:var(--r2);border:none;background:var(--bg3);color:var(--text);cursor:pointer;width:100%;margin-bottom:8px;font-size:14px;font-weight:500;font-family:inherit;transition:background .2s;border:1px solid var(--border)}
+.am-btn:hover{background:var(--bg4)}
+.am-btn i{font-size:18px;width:24px;text-align:center}
+.am-btn.danger{color:var(--danger);border-color:rgba(239,68,68,.3)}
+.am-btn.warn-btn{color:var(--warn);border-color:rgba(245,158,11,.3)}
+
+/* Pause dialog */
+#pauseDlg{position:fixed;inset:0;z-index:850;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:20px}
+#pauseDlg.open{display:flex}
+.pd-box{background:var(--bg2);border-radius:var(--r);padding:24px;max-width:360px;width:100%;border:1px solid var(--border)}
+.pd-title{font-family:var(--hfont);font-size:18px;font-weight:700;margin-bottom:10px}
+.pd-cd{font-family:var(--hfont);font-size:48px;font-weight:800;text-align:center;color:var(--warn);margin:12px 0;display:none}
+
+/* Chat messages */
+.chat-msg{padding:10px 14px;border-bottom:1px solid var(--border)}
+.chat-msg:last-child{border:none}
+.cm-author{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px}
+.cm-text{font-size:14px;line-height:1.5}
+.chat-input-row{flex-shrink:0;display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border);background:var(--bg2)}
+
+/* Photo upload */
+.photo-drop{border:2px dashed var(--border);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;margin:14px;transition:border-color .2s}
+.photo-drop:hover{border-color:var(--accent)}
+.photo-preview{position:relative;margin:0 14px}
+.photo-preview img{width:100%;max-height:180px;object-fit:cover;border-radius:var(--r2)}
+
+/* Info panel stats */
+.info-stat{display:flex;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);font-size:14px}
+.info-stat:last-child{border:none}
+.is-lbl{color:var(--text2)}
+
+/* Player list in info */
+.player-row{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.player-row:last-child{border:none}
+.pr-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;flex-shrink:0}
+
+/* Notification popup */
+#notifPop{position:absolute;top:58px;left:50%;transform:translateX(-50%);z-index:350;width:min(300px,90vw);display:none;animation:notifIn .3s ease}
+#notifPop.show{display:block}
+@keyframes notifIn{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.notif-box{background:rgba(10,10,15,.95);border:1px solid var(--warn);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.6)}
+#endScreen{position:fixed;inset:0;z-index:1200;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(30,41,59,.96);color:#fff}
+#endScreen.show{display:flex}
+.end-title{font-family:var(--hfont);font-size:32px;font-weight:800;margin-bottom:8px}
+.end-stats{display:grid;grid-template-columns:repeat(3,minmax(82px,1fr));gap:10px;width:min(420px,100%);margin-bottom:16px}
+.end-stat{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:10px}
+.end-stat-n{font-family:var(--hfont);font-size:22px;font-weight:800}
+.end-stat-l{font-size:11px;color:rgba(255,255,255,.78);margin-top:2px}
+#badgePopup{position:fixed;left:12px;right:12px;bottom:14px;z-index:1300;display:none;gap:8px;flex-direction:column;align-items:center;pointer-events:none}
+#badgePopup.show{display:flex}
+.badge-toast{display:flex;align-items:center;gap:10px;max-width:360px;background:rgba(10,10,15,.96);border:1px solid var(--warn);border-radius:10px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.45);text-align:left}
+.badge-icon-sm{font-size:22px;color:var(--warn);flex-shrink:0}
+.badge-info-name{font-weight:800;font-size:13px}
+.badge-info-desc{font-size:12px;color:rgba(255,255,255,.75)}
+#endScreen.win{background:rgba(16,185,129,.95)!important;color:#fff}
+#endScreen.lose{background:rgba(185,28,28,.95)!important;color:#fff}
+#endScreen.neutral{background:rgba(30,41,59,.96)!important;color:#fff}
+#endScreen.win #endSubtitle,#endScreen.lose #endSubtitle,#endScreen.neutral #endSubtitle{color:rgba(255,255,255,.86)!important}
+.runner-headstart{inset:auto 10px auto 10px!important;top:60px!important;z-index:320!important;border-radius:14px!important;background:rgba(16,185,129,.86)!important;padding:10px 14px!important;display:block!important;pointer-events:none}
+.runner-headstart .hs-title{font-size:13px!important;margin-bottom:4px!important}
+.runner-headstart #hsNum{font-size:28px!important}
+.runner-headstart .hs-desc{display:none}
+.runner-headstart #hsTip{margin-top:6px!important;padding:5px 8px!important;font-size:11px!important;max-width:none!important}
+
+@media(min-width:600px){ #runnerPanel,#hunterTargetInfo{width:190px} }
+</style>
+{% endblock %}
+{% block content %}
+<div class="gw">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <img src="/static/img/logo_round.png" style="height:32px;width:32px;border-radius:50%;object-fit:cover;flex-shrink:0" alt="VenTrax">
+    <span class="role-pill {{ me.role }}">
+      {{ 'Hunter' if me.role=='hunter' else 'Runner' }} {{ me.codename or me.user.username }}
+    </span>
+    <div class="t-timers">
+      <div class="t-pill" style="color:var(--text2)"><i class="fas fa-stopwatch"></i><span id="tv-el">00:00</span></div>
+      <div class="t-pill" id="tp-left" style="color:{{ 'var(--hunter)' if me.role=='hunter' else 'var(--runner)' }}"><i class="fas fa-flag-checkered"></i><span id="tv-left">--:--</span></div>
+    </div>
+  </div>
+
+  <!-- MAP WRAP -->
+  <div class="map-wrap">
+    <div id="map"></div>
+
+    <!-- Countdown overlay (before game starts) -->
+    <div id="cdOverlay" style="background:{{ 'rgba(59,130,246,.94)' if me.role=='hunter' else 'rgba(16,185,129,.94)' }}">
+      <div class="cd-role">{{ 'Jij bent Hunter!' if me.role=='hunter' else 'Jij bent Runner!' }}</div>
+      <div class="cd-num" id="cdNum">5</div>
+      <div class="cd-sub" id="cdSub">{{ 'Runners hebben voorsprong. Wacht op je kaart!' if me.role=='hunter' else 'Gebruik je voorsprong - vlucht!' }}</div>
+    </div>
+
+    <!-- Headstart overlay -->
+    {% if not game.is_headstart_over %}
+    <div id="hsOverlay" class="{{ 'runner-headstart' if me.role=='runner' else '' }}" style="background:{{ 'rgba(59,130,246,.92)' if me.role=='hunter' else 'rgba(16,185,129,.92)' }}">
+      <div class="hs-title" style="font-family:var(--hfont);font-size:clamp(14px,4vw,20px);font-weight:700;color:#fff;margin-bottom:14px">
+        {% if me.role=='hunter' %}Wacht op de runners{% else %}Je hebt een voorsprong!{% endif %}
+      </div>
+      <div style="font-family:var(--hfont);font-size:clamp(48px,15vw,80px);font-weight:800;color:#fff;line-height:1" id="hsNum">{{ game.headstart_minutes }}:00</div>
+      <div class="hs-desc" style="font-size:clamp(13px,3vw,16px);color:rgba(255,255,255,.85);margin-top:14px;max-width:280px;text-align:center">
+        {% if me.role=='hunter' %}Runners hebben voorsprong. Je kunt ze nog niet zien.{% else %}Loop zo ver mogelijk weg! Hunters kunnen je nog niet zien.{% endif %}
+      </div>
+      <div id="hsTip" style="margin-top:20px;background:rgba(0,0,0,.25);border-radius:10px;padding:10px 18px;font-size:13px;color:rgba(255,255,255,.8);max-width:300px;text-align:center">
+        <span id="hsTipText"></span>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Notification popup -->
+    <div id="notifPop"><div class="notif-box" id="notifTxt"></div></div>
+
+    <div id="zoneBar">
+      <div class="zb-title"><span>Buiten speelveld</span><span id="zoneBarPct">0%</span></div>
+      <div class="zb-track"><div id="zoneBarFill"></div></div>
+      <div id="zoneBarText">Ga terug binnen de grens. Je hebt 5 meter GPS-marge.</div>
+    </div>
+
+    <!-- Target alert (runner) â€” full-screen overlay -->
+    {% if me.role == 'runner' %}
+    <div id="targetAlert">
+      <div style="font-family:var(--hfont);font-size:22px;font-weight:800;color:#fff;margin-bottom:8px">JIJ BENT EEN TARGET!</div>
+      <div style="font-family:var(--hfont);font-size:56px;font-weight:800;color:#fff;line-height:1" id="taTimer">--:--</div>
+      <div style="font-size:16px;color:rgba(255,255,255,.85);margin-top:8px" id="taDist"></div>
+      <div style="font-size:13px;color:rgba(255,255,255,.7);margin-top:12px;background:rgba(0,0,0,.3);padding:8px 16px;border-radius:10px">
+        Offline knop geblokkeerd. Dubbele punten actief.
+      </div>
+    </div>
+
+    <!-- Nearest hunter (runner) -->
+    <div id="nearBadge" style="left:8px!important;right:auto!important">
+      <div class="nb-lbl"><i class="fas fa-crosshairs"></i> Dichtste hunter</div>
+      <div class="nb-val" id="nearVal">-- m</div>
+      <div style="font-size:10px;color:var(--text2)" id="nearTs"></div>
+    </div>
+
+    <!-- Offline uses counter -->
+    {% if game.offline_button %}
+    <button class="mab" id="btnOffline" onclick="toggleOffline()" title="Verberg locatie">
+      <i class="fas fa-eye-slash" id="offlineIcon"></i>
+      <span class="mab-label" id="offlineBtnLabel">{{ me.offline_uses_left if me.offline_uses_left > 1 else '' }}</span>
+    </button>
+    <div id="offUsesBadge"><i class="fas fa-eye-slash"></i> <span id="offUsesNum">{{ me.offline_uses_left }}</span></div>
+    {% endif %}
+
+    <!-- Camera (runner) -->
+    <button class="mab" id="btnCameraRunner" onclick="openPanel('feedPanel')" title="Foto" style="top:8px;right:8px">
+      <i class="fas fa-camera"></i>
+      <span class="bb-dot" id="feedDotR" style="top:-3px;right:-3px"></span>
+    </button>
+    {% endif %}
+
+    <!-- Runner panel + camera (hunter) -->
+    {% if me.role == 'hunter' %}
+    <div id="hunterTargetInfo"></div>
+    <div id="runnerPanel"></div>
+    <button class="mab" id="btnCameraHunter" onclick="openPanel('feedPanel')" title="Foto" style="top:8px;right:8px">
+      <i class="fas fa-camera"></i>
+      <span class="bb-dot" id="feedDotH" style="top:-3px;right:-3px"></span>
+    </button>
+    {% endif %}
+
+    <!-- Emergency: verwijderd van kaart, staat in Menu -->
+
+    {% if my_class %}
+    <button class="mab wait" id="btnPowerMap" onclick="useClassPower()" title="Power: {{ my_class.power }}">
+      <i class="fas fa-bolt"></i>
+      <span class="mab-label" id="powerMapLabel"></span>
+    </button>
+    {% endif %}
+
+    <!-- GPS accuracy -->
+    <div id="gpsBadge"><i class="fas fa-satellite-dish"></i> GPS ophalen...</div>
+    <!-- Speed warning -->
+    <div id="speedWarn">Te snel! Punten gaan omlaag</div>
+  </div>
+
+  <!-- BOTTOM BAR -->
+  <div class="bbar">
+    <button class="bb" id="bb-info" onclick="togglePanel('infoPanel','bb-info')"><i class="fas fa-circle-info"></i>Info</button>
+    <button class="bb" id="bb-feed" onclick="togglePanel('feedPanel','bb-feed')"><i class="fas fa-images"></i>Feed<span class="bb-dot" id="feedBadge"></span></button>
+    <button class="bb" id="bb-chat" onclick="togglePanel('chatPanel','bb-chat')"><i class="fas fa-comments"></i>Chat<span class="bb-dot" id="chatBadge"></span></button>
+
+    <button class="bb" id="bb-menu" onclick="togglePanel('menuPanel','bb-menu')"><i class="fas fa-bars"></i>Menu</button>
+  </div>
+</div>
+
+<!-- End screen -->
+<div id="endScreen">
+  <div id="endEmoji" style="font-size:64px;margin-bottom:8px"><i class="fas fa-flag-checkered"></i></div>
+  <div class="end-title" id="endTitle">Spel Afgelopen!</div>
+  <div id="endSubtitle" style="color:var(--text2);margin-bottom:16px;font-size:15px"></div>
+  <div class="end-stats">
+    <div class="end-stat"><div class="end-stat-n" id="es-pts">0</div><div class="end-stat-l">Punten</div></div>
+    <div class="end-stat"><div class="end-stat-n" id="es-dist">0m</div><div class="end-stat-l">Afstand</div></div>
+    <div class="end-stat"><div class="end-stat-n" id="es-badges">0</div><div class="end-stat-l">Nieuwe badges</div></div>
+  </div>
+  <div id="endStatusDetails" style="max-width:420px;margin:0 auto 18px;text-align:left;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.7"></div>
+  <div id="endBadges" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:20px;max-width:400px"></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+    <a href="/dashboard" class="btn btn-primary btn-lg" id="endOkBtn"><i class="fas fa-check"></i> OK</a>
+    <a href="/badges" class="btn btn-ghost btn-lg"><i class="fas fa-medal"></i> Badges</a>
+  </div>
+</div>
+
+<!-- Badge popup -->
+<div id="badgePopup"></div>
+
+<!-- â•â• PANELS â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• -->
+
+<!-- Info panel -->
+<div class="panel" id="infoPanel">
+  <div class="panel-drag" onclick="closePanel('infoPanel','bb-info')"><div class="panel-drag-bar"></div></div>
+  <button onclick="closePanel('infoPanel','bb-info')" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;z-index:1"><i class="fas fa-xmark"></i></button>
+  <div class="panel-head"><i class="fas fa-circle-info" style="color:var(--accent)"></i> Spelinfo</div>
+  <div class="panel-body">
+    <div class="info-stat"><span class="is-lbl">Jouw punten</span><strong id="ip-pts" style="color:var(--warn)">{{ me.points|round(2) }}</strong></div>
+    <div class="info-stat"><span class="is-lbl">Jouw afstand</span><strong id="ip-dist" style="color:var(--hunter)">{{ me.distance|round }}m</strong></div>
+    <div class="info-stat"><span class="is-lbl">Rol / Naam</span><span class="badge badge-{{ me.role }}">{{ me.codename }}</span></div>
+    {% if my_class %}
+    <div class="info-stat"><span class="is-lbl">Class</span><strong>{{ my_class.name }}</strong></div>
+    <div style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;line-height:1.5">
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:4px">
+        <span class="is-lbl">Power</span><strong>{{ my_class.power }}</strong>
+      </div>
+      <div style="color:var(--text2)">{{ my_class.desc or 'Gebruik deze power op de kaart zodra de knop groen is.' }}</div>
+    </div>
+    {% endif %}
+    <div class="info-stat"><span class="is-lbl">Multiplier</span><strong>x{{ game.points_multiplier }}</strong></div>
+    {% if me.role == 'runner' and game.offline_button %}
+    <div class="info-stat"><span class="is-lbl">Offline knoppen</span><strong id="ip-off">{{ me.offline_uses_left }} van {{ game.offline_uses }}</strong></div>
+    {% endif %}
+    {% if game.pause_allowed %}
+    <div class="info-stat"><span class="is-lbl">Pauze</span><strong id="ip-pause">{{ 'Actief' if game.pause_allowed else 'Uit' }}</strong></div>
+    {% endif %}
+    <div style="padding:12px 14px;font-weight:700;font-size:13px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)">Spelers</div>
+    <div id="ip-players"></div>
+  </div>
+</div>
+
+<!-- Feed panel -->
+<div class="panel" id="feedPanel">
+  <div class="panel-drag" onclick="closePanel('feedPanel','bb-feed')"><div class="panel-drag-bar"></div></div>
+  <button onclick="closePanel('feedPanel','bb-feed')" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;z-index:1"><i class="fas fa-xmark"></i></button>
+  <div class="panel-head"><i class="fas fa-images" style="color:var(--accent)"></i> Foto Feed</div>
+  <div class="panel-body">
+    <div style="display:flex;gap:10px;padding:14px 14px 0">
+      <button class="btn btn-primary" style="flex:1" onclick="document.getElementById('photoCamIn').click()">
+        <i class="fas fa-camera"></i> Foto Maken
+      </button>
+      <button class="btn btn-ghost" style="flex:1" onclick="document.getElementById('photoGalIn').click()">
+        <i class="fas fa-images"></i> Uploaden
+      </button>
+    </div>
+    <div class="photo-drop" style="margin:10px 14px 0;border-style:dashed"
+         ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+         ondragleave="this.style.borderColor='var(--border)'"
+         ondrop="handleDrop(event)">
+      <i class="fas fa-camera-retro" style="font-size:24px;color:var(--text2);display:block;margin-bottom:6px;opacity:.4"></i>
+      <div style="font-size:12px;color:var(--text2)">Of sleep een foto hierheen</div>
+    </div>
+    <input type="file" id="photoCamIn" accept="image/*" capture="environment" style="display:none" onchange="previewPhoto(this)">
+    <input type="file" id="photoGalIn" accept="image/*" style="display:none" onchange="previewPhoto(this)">
+    <div id="photoPreviewWrap" style="display:none" class="photo-preview">
+      <img id="photoPreviewImg" src="" alt="">
+      <button onclick="clearPhoto()" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.65);border:none;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:13px"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div style="padding:8px 14px;display:flex;flex-direction:column;gap:8px">
+      <input id="captionIn" class="form-control" placeholder="Beschrijving..." maxlength="300">
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--text2)">
+          <input type="checkbox" id="shareLocCb" style="accent-color:var(--accent)"> Deel locatie
+        </label>
+      </div>
+      <button class="btn btn-primary btn-full" id="postBtn" onclick="submitPost()"><i class="fas fa-paper-plane"></i> Posten</button>
+    </div>
+    <div id="feedItems"></div>
+  </div>
+</div>
+
+<!-- Chat panel -->
+<div class="panel" id="chatPanel">
+  <div class="panel-drag" onclick="closePanel('chatPanel','bb-chat')"><div class="panel-drag-bar"></div></div>
+  <button onclick="closePanel('chatPanel','bb-chat')" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;z-index:1"><i class="fas fa-xmark"></i></button>
+  <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <span><i class="fas fa-comments" style="color:var(--accent)"></i> Chat</span>
+    <div style="display:flex;gap:4px">
+      <button onclick="setChatMode('team',this)" id="cm-team" class="btn btn-sm btn-primary" style="padding:3px 10px;font-size:11px">Team <span class="bb-dot" id="chatModeBadge-team" style="position:static;display:none;margin-left:3px"></span></button>
+      <button onclick="setChatMode('all',this)" id="cm-all" class="btn btn-sm btn-ghost" style="padding:3px 10px;font-size:11px">Globaal <span class="bb-dot" id="chatModeBadge-all" style="position:static;display:none;margin-left:3px"></span></button>
+      <button onclick="setChatMode('proxy',this)" id="cm-proxy" class="btn btn-sm btn-ghost" style="padding:3px 10px;font-size:11px">Proxy <span class="bb-dot" id="chatModeBadge-proxy" style="position:static;display:none;margin-left:3px"></span></button>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--text2);padding:4px 14px" id="chatModeDesc">Stuur naar: je eigen team</div>
+  <div class="panel-body" id="chatMsgs" style="min-height:180px;max-height:320px;overflow-y:auto">
+    <div id="chatEmpty" style="padding:24px;text-align:center;color:var(--text2);font-size:13px">
+      <i class="fas fa-comments" style="font-size:24px;opacity:.3;display:block;margin-bottom:8px"></i>
+      Nog geen berichten. Stuur het eerste!
+    </div>
+  </div>
+  <div class="chat-input-row">
+    <input type="text" id="chatIn" class="form-control" placeholder="Stuur bericht aan je team..." maxlength="300" onkeydown="if(event.key==='Enter')sendChat()" style="font-size:14px">
+    <button class="btn btn-primary btn-sm" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
+  </div>
+</div>
+
+<!-- Menu panel -->
+<div class="panel" id="menuPanel">
+  <div class="panel-drag" onclick="closePanel('menuPanel','bb-menu')"><div class="panel-drag-bar"></div></div>
+  <button onclick="closePanel('menuPanel','bb-menu')" style="position:absolute;top:10px;right:12px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px;z-index:1"><i class="fas fa-xmark"></i></button>
+  <div class="panel-head"><i class="fas fa-bars" style="color:var(--accent)"></i> Menu</div>
+  <div class="panel-body" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <a href="/dashboard" class="btn btn-ghost btn-full"><i class="fas fa-home"></i> Dashboard</a>
+    <button class="btn btn-danger btn-full" onclick="leaveGame()" style="margin-top:4px"><i class="fas fa-door-open"></i> Spel Verlaten</button>
+    {% if game.pause_allowed %}
+    <button class="btn btn-warn btn-full" onclick="closePanel('menuPanel','bb-menu');openPauseDlg()" id="pauseMenuBtn"><i class="fas fa-pause"></i> Pauze <span id="pauseMenuLabel"></span></button>
+    {% endif %}
+    {% if game.feat_emergency %}
+    <button class="btn btn-danger btn-full" onclick="emergency()"><i class="fas fa-circle-exclamation"></i> NOODKNOP</button>
+    {% endif %}
+    {% if me.user_id == game.creator_id %}
+    <hr style="border-color:var(--border)">
+    <button class="btn btn-danger btn-full" onclick="confirmEnd()"><i class="fas fa-stop"></i> Spel Stoppen</button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Runner action modal (hunter clicks on runner) -->
+<div id="actionModal">
+  <div class="am-box">
+    <div class="am-title" id="am-name"></div>
+    <div class="am-sub" id="am-sub"></div>
+    <button class="am-btn warn-btn" id="am-target" onclick="doTarget()"><i class="fas fa-bullseye" style="color:var(--warn)"></i> Target instellen - dubbele punten</button>
+    <button class="am-btn danger" id="am-catch" onclick="doCatch()"><i class="fas fa-handcuffs" style="color:var(--danger)"></i> Markeer als gepakt!</button>
+    <button class="am-btn" id="am-guess" onclick="doGuessName()" style="display:none"><i class="fas fa-user-secret"></i> Naam raden</button>
+    <button class="am-btn" onclick="closeActionModal()"><i class="fas fa-xmark"></i> Annuleren</button>
+  </div>
+</div>
+
+<!-- Pause dialog -->
+{% if game.pause_allowed %}
+<div id="pauseDlg">
+  <div class="pd-box">
+    <div class="pd-title"><i class="fas fa-pause"></i> Pauze</div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:14px">Pauze stopt de tijd. Het spel hervat automatisch zodra iedereen weer binnen 10 meter van de pauze-positie staat.</p>
+    <input id="pauseReason" class="form-control" placeholder="Reden (bijv. WC)" maxlength="100" style="margin-bottom:12px">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost btn-full" id="pauseCancelBtn" onclick="cancelPause()"><i class="fas fa-xmark"></i> Annuleren</button>
+      <button class="btn btn-warn btn-full" id="pauseConfirmBtn" onclick="startPauseCountdown()"><i class="fas fa-pause"></i> Pauze aan</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+const CODE    = '{{ game.code }}';
+const MY_ID   = {{ current_user.id }};
+const MY_ROLE = '{{ me.role }}';
+const IS_MAKER= {{ 'true' if me.user_id == game.creator_id else 'false' }};
+const PLAYFIELD = {% if playfield %}{{ playfield|tojson }}{% else %}null{% endif %};
+const MY_CLASS = {% if my_class %}{{ my_class|tojson }}{% else %}null{% endif %};
+
+let map, myMarker, myCircle, mapManuallyMoved = false;
+let runnerMarkers = {}, hunterMarkers = {}, lootboxMarkers = {};
+let lastLat = null, lastLon = null, gpsWatcher = null;
+let lastGpsAt = 0, playfieldWarnAt = 0;
+let elapsed = {{ [0, (game.effective_elapsed or 0)]|max }};
+let hsLeft  = {{ [0, game.headstart_minutes * 60 - (game.effective_elapsed or 0)]|max }};
+let timeLeft= {{ [0, game.duration_minutes * 60 - (game.effective_elapsed or 0)]|max }};
+let headstartOver = {{ 'true' if game.is_headstart_over else 'false' }};
+let isOffline = false, offUsesLeft = {{ me.offline_uses_left }};
+let isPaused  = {{ 'true' if me.is_paused else 'false' }};
+let pauseActive = false;
+let targetCooldown = 0, targetExpiry = 0;
+let photoFile = null;
+let activePanel = null;
+let pauseCdIv = null;
+let unreadFeed = 0, unreadChat = 0;
+let unreadChatByMode = {team:0, all:0, proxy:0};
+let actionRunnerId = null, actionRunnerName = '';
+let notifTimer = null;
+let endScreenShown = false;
+let nearestNextAt = 0, nearestLast = null;
+let offlineRemaining = 0;
+let hunterTargetUntil = 0, hunterTargetName = '';
+let hunterTargetDuration = 0;
+let classCooldown = 0;
+let countdownTimer = null;
+let timerSyncAt = Date.now();
+let elapsedSynced = elapsed;
+let gameEndsAt = 0;
+let headstartEndsAt = 0;
+let targetEndsAt = 0;
+let hunterTargetEndsAt = 0;
+let offlineEndsAt = 0;
+let lastTargetAlertKey = '';
+let lastStatePlayers = [];
+let lastState = null;
+
+function fmtMM(sec) {
+  sec = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+function fmtDist(m) {
+  m = Math.max(0, Number(m) || 0);
+  return m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : `${Math.round(m)} m`;
+}
+function fmtPts(v) {
+  return (Number(v) || 0).toFixed(2).replace('.', ',');
+}
+function escHtml(v) {
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+function parseServerTime(v) {
+  if (!v) return 0;
+  const s = String(v);
+  const normalized = /(?:z|[+-]\d{2}:?\d{2})$/i.test(s) ? s : s + 'Z';
+  const ms = Date.parse(normalized);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function hideCountdownOverlay() {
+  const ov = document.getElementById('cdOverlay');
+  if (ov) ov.classList.remove('show');
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+  }
+}
+
+function syncDeadlinesFromState(d) {
+  timerSyncAt = Date.now();
+  if (typeof d.elapsed === 'number') {
+    elapsed = d.elapsed;
+    elapsedSynced = d.elapsed;
+  }
+  if (typeof d.time_left === 'number') {
+    timeLeft = d.time_left;
+    gameEndsAt = timeLeft > 0 ? timerSyncAt + (timeLeft * 1000) : 0;
+  }
+  if (typeof d.hs_left === 'number') {
+    hsLeft = d.hs_left;
+    headstartEndsAt = d.headstart_over ? 0 : (timerSyncAt + (hsLeft * 1000));
+  }
+  if (d.active_target && d.active_target.expires_at) {
+    targetEndsAt = parseServerTime(d.active_target.expires_at);
+    targetExpiry = Math.max(0, Math.ceil((targetEndsAt - timerSyncAt) / 1000));
+  } else if (d.active_target && d.active_target.expires_in) {
+    targetEndsAt = timerSyncAt + (Number(d.active_target.expires_in) * 1000);
+    targetExpiry = Math.max(0, Math.ceil((targetEndsAt - timerSyncAt) / 1000));
+  }
+  if (d.hunter_active_target && d.hunter_active_target.expires_at) {
+    hunterTargetEndsAt = parseServerTime(d.hunter_active_target.expires_at);
+    hunterTargetUntil = Math.max(0, Math.ceil((hunterTargetEndsAt - timerSyncAt) / 1000));
+  } else if (d.hunter_active_target && d.hunter_active_target.expires_in) {
+    hunterTargetEndsAt = timerSyncAt + (Number(d.hunter_active_target.expires_in) * 1000);
+    hunterTargetUntil = Math.max(0, Math.ceil((hunterTargetEndsAt - timerSyncAt) / 1000));
+  }
+  const meState = (d.players || []).find(p => p.id === MY_ID);
+  if (d.offline_until) {
+    offlineEndsAt = parseServerTime(d.offline_until);
+  } else if (meState && meState.offline_until) {
+    offlineEndsAt = parseServerTime(meState.offline_until);
+  } else if (d.is_offline && d.offline_remaining) {
+    offlineEndsAt = timerSyncAt + (Number(d.offline_remaining) * 1000);
+  } else {
+    offlineEndsAt = 0;
+  }
+  offlineRemaining = offlineEndsAt > 0 ? Math.max(0, Math.ceil((offlineEndsAt - timerSyncAt) / 1000)) : 0;
+  pauseActive = !!d.pause_active;
+  isPaused = !!d.is_paused;
+  headstartOver = !!d.headstart_over;
+}
+
+// â”€â”€ Map init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function initMap() {
+  map = L.map('map', {zoomControl: false, attributionControl: false}).setView([52.15, 5.38], 15);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19}).addTo(map);
+  L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 19, opacity: 0.6}).addTo(map);
+  drawPlayfieldOnMap();
+  // Click on map = close panels
+  map.on('click', () => { if (activePanel) closeAllPanels(); });
+  map.on('dragstart', () => { mapManuallyMoved = true; });
+  map.on('movestart', e => { if (e.originalEvent) mapManuallyMoved = true; });
+  map.on('zoomstart', e => {
+    // Only block re-autozoom if user initiated the zoom
+    if (e.originalEvent) mapManuallyMoved = true;
+  });
+  // Long-press to re-center
+  map.on('contextmenu', () => { mapManuallyMoved = false; showToast('Kaart wordt opnieuw ingezoomd', 'info', 2000); });
+  startGPS();
+}
+
+function playfieldStyle(colorName){
+  const styles={
+    radiation:{stroke:'#22c55e',fill:'#22c55e',cloud:'rgba(34,197,94,.32)'},
+    storm:{stroke:'#38bdf8',fill:'#0ea5e9',cloud:'rgba(14,165,233,.32)'},
+    nuclear:{stroke:'#facc15',fill:'#eab308',cloud:'rgba(234,179,8,.34)'},
+    heat:{stroke:'#ef4444',fill:'#dc2626',cloud:'rgba(220,38,38,.34)'}
+  };
+  return styles[colorName] || styles.storm;
+}
+function drawPlayfieldOnMap(){
+  if(!PLAYFIELD || !PLAYFIELD.points || PLAYFIELD.points.length < 3 || typeof L === 'undefined') return;
+  const pts=PLAYFIELD.points.map(p=>[p.lat,p.lng]);
+  const st=playfieldStyle(PLAYFIELD.color);
+  const inner=L.polygon(pts,{color:st.stroke,fillColor:st.fill,fillOpacity:.12,weight:3,dashArray:'8 5'}).addTo(map);
+  const world=[[[-90,-360],[-90,360],[90,360],[90,-360]]];
+  L.polygon(world.concat([pts]),{stroke:false,fillColor:st.fill,fillOpacity:.88,interactive:false}).addTo(map);
+  const bounds=inner.getBounds();
+  const padded=bounds.pad(.20);
+  map.setMaxBounds(padded);
+  map.on('drag',()=>map.panInsideBounds(padded,{animate:false}));
+}
+
+function mkIcon(col, label, pulse) {
+  return L.divIcon({
+    className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+    html: `<div style="width:22px;height:22px;background:${col};border-radius:50%;border:3px solid #fff;box-shadow:0 0 10px ${col}99;${pulse?'animation:gPulse 1.5s infinite':''}">
+    </div>${label ? `<div style="position:absolute;top:25px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;text-shadow:0 0 4px #000;background:rgba(0,0,0,.6);padding:1px 4px;border-radius:4px">${label}</div>` : ''}`,
+  });
+}
+
+// â”€â”€ GPS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function mkLootboxIcon(team) {
+  const col = team === 'hunter' ? '#3b82f6' : team === 'runner' ? '#10b981' : '#f59e0b';
+  return L.divIcon({
+    className: '', iconSize: [30, 30], iconAnchor: [15, 15],
+    html: `<div style="width:30px;height:30px;border-radius:8px;background:${col};border:2px solid #fff;box-shadow:0 0 14px ${col}99;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px"><i class="fas fa-box-open"></i></div>`
+  });
+}
+
+function updateLootboxes(boxes) {
+  const seen = new Set();
+  boxes.forEach(b => {
+    if (!b.lat || !b.lng) return;
+    seen.add(String(b.id));
+    const label = b.label || (b.team === 'all' ? 'Algemeen' : b.team);
+        if (!lootboxMarkers[b.id]) {
+          lootboxMarkers[b.id] = L.marker([b.lat, b.lng], {icon: mkLootboxIcon(b.team)})
+            .addTo(map)
+            .bindTooltip(`Dropbox: ${label}`, {direction:'top'})
+            .on('click', () => claimLootbox(b.id));
+        } else {
+          lootboxMarkers[b.id].setLatLng([b.lat, b.lng]);
+        }
+  });
+  Object.keys(lootboxMarkers).forEach(id => {
+    if (!seen.has(String(id))) {
+      map.removeLayer(lootboxMarkers[id]);
+      delete lootboxMarkers[id];
+    }
+  });
+}
+
+function claimLootbox(id) {
+  fetch('/api/game/' + CODE + '/lootbox/' + id + '/claim', {method:'POST'})
+    .then(r => r.json()).then(d => {
+      if (d.error) { showToast(d.error, 'error'); return; }
+      if (d.points !== undefined) document.getElementById('ip-pts').textContent = fmtPts(d.points || 0);
+      if (d.lootboxes) updateLootboxes(d.lootboxes);
+      showToast(d.message || 'Dropbox geopend', 'success', 8000);
+    }).catch(() => showToast('Dropbox openen mislukt', 'error'));
+}
+
+function startGPS() {
+  if (!navigator.geolocation) { document.getElementById('gpsBadge').textContent = 'GPS niet ondersteund'; return; }
+  gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {
+    enableHighAccuracy: true, timeout: 30000, maximumAge: 5000
+  });
+  setInterval(() => {
+    if (!navigator.geolocation) return;
+    if (Date.now() - lastGpsAt < 9000) return;
+    navigator.geolocation.getCurrentPosition(onGPS, () => {}, {
+      enableHighAccuracy: true, timeout: 12000, maximumAge: 0
+    });
+  }, 10000);
+}
+
+function onGPS(pos) {
+  const {latitude: lat, longitude: lon, accuracy: acc, speed} = pos.coords;
+  lastGpsAt = Date.now();
+  lastLat = lat; lastLon = lon;
+  document.getElementById('gpsBadge').innerHTML = `<i class="fas fa-satellite-dish" style="color:var(--runner)"></i> +/-${Math.round(acc)}m`;
+
+  const col = MY_ROLE === 'hunter' ? '#3b82f6' : '#10b981';
+  if (!myMarker) {
+    myMarker = L.marker([lat,lon], {icon: mkIcon(col, 'Jij', true)}).addTo(map);
+    myCircle = L.circle([lat,lon], {radius: acc, color: col, fillOpacity: .05, weight: 1}).addTo(map);
+    // First GPS fix: zoom in on own position (runner only, hunter zoom handled by fitBounds)
+    if (MY_ROLE === 'runner') map.setView([lat,lon], 17);
+  } else {
+    myMarker.setLatLng([lat,lon]);
+    myCircle.setLatLng([lat,lon]).setRadius(acc);
+    // Runner: re-center only if map hasn't been manually moved
+    if (MY_ROLE === 'runner' && !mapManuallyMoved) {
+      map.setView([lat,lon], map.getZoom(), {animate: true});
+    }
+  }
+
+  // Check speed for warning/sound. Accuracy is included to filter GPS drift.
+  checkSpeed(speed, acc);
+  fetch('/api/game/' + CODE + '/location', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({lat, lon, accuracy: acc, speed: speed || null})
+  }).then(r => r.json()).then(d => {
+    if (d.status === 'finished') { showEndScreen(d); return; }
+    if (d.points !== undefined) {
+      document.getElementById('ip-pts').textContent  = fmtPts(d.points||0);
+      document.getElementById('ip-dist').textContent = Math.round(d.distance) + 'm';
+    }
+    updateZoneBar(d.zone_pressure);
+    (d.hazard_messages || []).forEach(m => showToast(m, 'warn', 8000));
+  }).catch(() => {});
+}
+function onGPSErr() {
+  document.getElementById('gpsBadge').innerHTML = '<i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> GPS fout';
+}
+
+function updateZoneBar(z) {
+  const bar = document.getElementById('zoneBar');
+  if (!bar) return;
+  const pct = z ? Math.max(0, Math.min(100, Number(z.pct || 0))) : 0;
+  if (pct <= 0) {
+    bar.style.display = 'none';
+    return;
+  }
+  bar.style.display = 'block';
+  const lifePct = Math.max(0, 100 - pct);
+  document.getElementById('zoneBarFill').style.width = lifePct + '%';
+  document.getElementById('zoneBarPct').textContent = Math.round(lifePct) + '%';
+  const remaining = Math.max(0, Math.ceil((z.limit_sec || 30) - (z.seconds || 0)));
+  document.getElementById('zoneBarText').textContent =
+    `Je bent ${Math.round(z.outside_m || 0)}m buiten de grens. Nog ${remaining}s tot af.`;
+}
+
+// â”€â”€ State polling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function pollState() {
+  fetch('/api/game/' + CODE + '/state')
+    .then(r => r.json())
+    .then(d => {
+      if (!d || d.error) return;
+
+      if ((d.is_finished || d.status === 'finished') && d.status !== 'lobby') {
+        if (!document.getElementById('endScreen').classList.contains('show')) {
+          showEndScreen(d);
+        }
+        return;
+      }
+      if (d.status === 'active') hideCountdownOverlay();
+      lastState = d;
+      lastStatePlayers = d.players || [];
+      syncDeadlinesFromState(d);
+      isOffline = !!d.is_offline && (!offlineEndsAt || offlineEndsAt > Date.now());
+      offUsesLeft = d.offline_uses_left;
+      targetCooldown = d.hunter_target_cooldown || 0;
+      classCooldown = Number(d.class_cooldown || 0);
+      if (MY_ROLE === 'hunter' && d.hunter_active_target) {
+        hunterTargetUntil = hunterTargetEndsAt > 0
+          ? Math.max(0, Math.ceil((hunterTargetEndsAt - Date.now()) / 1000))
+          : (d.hunter_active_target.expires_in || d.hunter_active_target.duration || hunterTargetUntil || 0);
+        hunterTargetDuration = d.hunter_active_target.duration || hunterTargetUntil || hunterTargetDuration || 0;
+        hunterTargetName = d.hunter_active_target.runner_codename || hunterTargetName || 'runner';
+        const hti = document.getElementById('hunterTargetInfo');
+        if (hti && hunterTargetUntil > 0) {
+          hti.style.display = 'block';
+          hti.innerHTML = `<i class="fas fa-bullseye"></i> Target<br>${escHtml(hunterTargetName)} nog ${fmtMM(hunterTargetUntil)}`;
+        }
+      }
+      updatePowerButton();
+      updateZoneBar(d.zone_pressure);
+      headstartOver = d.headstart_over;
+
+      // Headstart overlay
+      const hso = document.getElementById('hsOverlay');
+      if (hso) { if (headstartOver) hso.classList.add('gone'); }
+
+      // Update markers
+      updateMarkers(d.players);
+      updateLootboxes(d.lootboxes || []);
+
+      // Runner UI
+      if (MY_ROLE === 'runner') {
+        updateTargetAlert(d.active_target);
+        if (d.playfield_status === 'outside' && Date.now() - playfieldWarnAt > 12000) {
+          playfieldWarnAt = Date.now();
+          showToast('Je bent buiten het speelveld. Ga direct terug!', 'error', 10000);
+          showNotif('Buiten speelveld. Ga direct terug!', 8000);
+          if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
+        }
+      // Live distance update while targeted
+      if (d.active_target && d.active_target.distance !== null) {
+        const distEl = document.getElementById('taDist');
+        if (distEl && document.getElementById('targetAlert').classList.contains('show'))
+          distEl.textContent = 'Jager op ' + fmtDist(d.active_target.distance) + ' afstand';
+      }
+        updateNearBadge(d);
+        updateOfflineBtn(d);
+        const ip = document.getElementById('ip-off');
+        if (ip) ip.textContent = d.is_offline ? `Offline nog ${fmtMM(offlineRemaining)}` : `${d.offline_uses_left} van {{ game.offline_uses }}`;
+        const pp = document.getElementById('ip-pause');
+        if (pp) pp.textContent = d.pause_active ? 'Actief' : 'Uit';
+      }
+
+      // Hunter: runner panel + cooldown
+      if (MY_ROLE === 'hunter') buildRunnerPanel(d.players);
+
+      renderHunterTargetInfo();
+
+      updateInfoPlayers(d.players);
+    }).catch(() => {});
+}
+
+// â”€â”€ Markers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function updateMarkers(players) {
+  const visibleRunners = [];
+  players.forEach(p => {
+    if (p.id === MY_ID) return;
+    if (MY_ROLE === 'hunter' && p.role === 'runner') {
+      if (p.lat && headstartOver && !p.is_caught && !p.is_offline && !p.is_paused) {
+        if (!runnerMarkers[p.id]) {
+          runnerMarkers[p.id] = L.marker([p.lat, p.lon], {icon: mkIcon('#10b981', p.codename, false)})
+            .addTo(map).on('click', () => { runnerStore[p.id] = p; openActionModal(p.id); });
+        } else {
+          runnerMarkers[p.id].setLatLng([p.lat, p.lon]);
+        }
+        visibleRunners.push([p.lat, p.lon]);
+      } else if (runnerMarkers[p.id]) {
+        if (p.is_caught) {
+          runnerMarkers[p.id].setIcon(mkIcon('#6b7280', p.codename + ' x', false));
+        } else if (!p.lat || p.is_offline || !headstartOver) {
+          map.removeLayer(runnerMarkers[p.id]); delete runnerMarkers[p.id];
+        }
+      }
+    }
+  });
+  // Auto-zoom: only on first runner appearance, or if not manually moved
+  if (MY_ROLE === 'hunter' && visibleRunners.length > 0 && !mapManuallyMoved) {
+    const bounds = L.latLngBounds(visibleRunners);
+    if (myMarker) bounds.extend(myMarker.getLatLng());
+    map.fitBounds(bounds, {padding: [35, 35], maxZoom: 18});
+    mapManuallyMoved = true;  // only auto-fit once, then let user control
+  }
+}
+
+// â”€â”€ Runner panel (hunter) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Store runner objects by id for safe onclick access
+const runnerStore = {};
+// Track offline since times per runner
+const offlineSince = {};
+function buildRunnerPanel(players) {
+  const panel = document.getElementById('runnerPanel');
+  if (!panel) return;
+  const runners = players.filter(p => p.role === 'runner');
+  panel.innerHTML = runners.map(r => {
+    const cls = r.is_caught ? 'caught' : (r.id === actionRunnerId ? 'targeted' : '');
+    const statusIcon = r.is_caught
+      ? '<i class="fas fa-circle-xmark" style="color:var(--danger)"></i>'
+      : r.is_offline
+        ? '<i class="fas fa-eye-slash" style="color:var(--warn)"></i>'
+        : r.is_paused
+          ? '<i class="fas fa-pause" style="color:var(--hunter)"></i>'
+          : '<i class="fas fa-person-running" style="color:var(--runner)"></i>';
+    // Track offline time
+    if (r.is_offline && !offlineSince[r.id]) offlineSince[r.id] = Date.now();
+    if (!r.is_offline) delete offlineSince[r.id];
+    const offlineSec = r.offline_remaining || 0;
+    const offlineUntil = r.offline_until ? parseServerTime(r.offline_until) : (offlineSec ? Date.now() + offlineSec * 1000 : 0);
+    const offlineStr = r.is_offline ? `<span style="color:var(--warn)">Offline nog <span class="offline-countdown" data-until="${offlineUntil}">${fmtMM(offlineSec)}</span></span><br>` : '';
+    runnerStore[r.id] = r;  // store by id for safe onclick
+    return `<div class="rcard ${cls}" onclick="openActionModal(${r.id})"> 
+      <div class="rc-name">${statusIcon} ${r.codename || r.username}</div>
+      <div class="rc-info">
+        ${r.real_revealed ? `<span style="color:var(--text2)">(${r.username})</span><br>` : ''}
+        ${r.is_caught ? '<span style="color:var(--danger)">Gepakt</span><br>' : ''}
+        ${offlineStr}
+        ${r.is_paused ? '<span style="color:var(--hunter)">Gepauzeerd</span><br>' : ''}
+        <span style="color:var(--warn)">${fmtPts(r.points||0)}pt</span>
+        ${r.last_seen ? ` · ${new Date(r.last_seen).toLocaleTimeString('nl',{hour:'2-digit',minute:'2-digit'})}` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// â”€â”€ Action modal (hunter taps runner) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function openActionModal(r) {
+  // Accept id (number) or object
+  if (typeof r === 'number' || typeof r === 'string') r = runnerStore[parseInt(r)];
+  if (!r) { showToast('Speler niet gevonden', 'error'); return; }
+  actionRunnerId   = r.id;
+  actionRunnerName = r.codename || r.username;
+  document.getElementById('am-name').textContent = actionRunnerName;
+  document.getElementById('am-sub').textContent  = r.real_revealed ? `Echte naam: ${r.username}` : 'Echte naam onbekend';
+  document.getElementById('am-target').style.display = r.is_caught ? 'none' : '';
+  document.getElementById('am-catch').style.display  = r.is_caught ? 'none' : '';
+  // Show naam raden only when it can actually work
+  const guessBtn = document.getElementById('am-guess');
+  const oppositePlayers = lastStatePlayers.filter(p => p.role !== MY_ROLE && !p.is_caught);
+  if (guessBtn) guessBtn.style.display = (!r.real_revealed && !r.is_caught && oppositePlayers.length >= 2) ? '' : 'none';
+  document.getElementById('actionModal').classList.add('open');
+}
+function closeActionModal() { document.getElementById('actionModal').classList.remove('open'); actionRunnerId = null; }
+
+function showNameGuessPicker(targetId, codename, names) {
+  // Build picker overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.7);display:flex;align-items:flex-end;justify-content:center;padding:0';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:var(--bg2);border-radius:16px 16px 0 0;width:100%;max-width:500px;padding:20px;border-top:1px solid var(--border)';
+  box.innerHTML = `
+    <div style="font-family:var(--hfont);font-size:17px;font-weight:700;margin-bottom:6px">Naam raden</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Wie is <strong>${codename}</strong>? Goed = +3pt, fout = -10pt.</div>
+    ${names.map(n => `
+      <button onclick="submitNameGuess(${targetId},'${n}',this.parentElement.parentElement)"
+        style="display:block;width:100%;padding:13px;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;text-align:left;transition:background .2s"
+        onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background='var(--bg3)'">
+        ${n}
+      </button>`).join('')}
+    <button onclick="this.parentElement.parentElement.remove()" style="display:block;width:100%;padding:11px;background:none;border:1px solid var(--border);border-radius:var(--r2);color:var(--text2);font-size:14px;font-family:inherit;cursor:pointer;margin-top:4px">Annuleren</button>`;
+  overlay.appendChild(box);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+function submitNameGuess(targetId, guessedName, overlay) {
+  overlay.remove();
+  fetch('/api/game/' + CODE + '/guess_name', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({target_player_id: targetId, guessed_username: guessedName})
+  }).then(r => r.json()).then(res => {
+    if (res.error) { showToast(res.error, 'error'); return; }
+    if (res.correct) {
+      showToast(`Goed! ${guessedName} was correct. +3 pt`, 'success', 7000);
+      playSuccess();
+    } else {
+      showToast('Fout. -10 pt', 'error', 5000);
+    }
+  });
+}
+
+function doTarget() {
+  const runnerId = actionRunnerId;
+  const runnerName = actionRunnerName;
+  closeActionModal();
+  if (!runnerId) return;
+  if (targetCooldown > 0) { showToast(`Cooldown actief: nog ${fmtMM(targetCooldown)}`, 'warn'); return; }
+  fetch('/api/game/' + CODE + '/target', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({runner_id: runnerId})
+  }).then(r => r.json()).then(d => {
+    if (d.error) showToast(d.error, 'error');
+    else {
+      showToast(`${runnerName} is nu jouw target! Dubbele punten.`, 'success');
+      if (d.target) {
+        hunterTargetEndsAt = d.target.expires_at
+          ? parseServerTime(d.target.expires_at)
+          : Date.now() + ((d.target.duration || d.target.expires_in || 300) * 1000);
+        hunterTargetUntil = Math.max(0, Math.ceil((hunterTargetEndsAt - Date.now()) / 1000));
+        hunterTargetDuration = d.target.duration || hunterTargetUntil || 300;
+        hunterTargetName = d.target.runner_codename || runnerName || 'runner';
+        targetCooldown = Number(d.target_cooldown || 0);
+        renderHunterTargetInfo();
+      }
+      setTimeout(pollState, 300);
+    }
+  });
+}
+// â”€â”€ Naam raden â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let guessRunnerId = null;
+function doGuessName() {
+  const targetId = actionRunnerId;
+  const targetName = actionRunnerName;
+  closeActionModal();
+  if (!targetId) return;
+  // Build picker: show all real usernames of opposite role
+  fetch('/api/game/' + CODE + '/state')
+    .then(r => r.json())
+    .then(d => {
+      const opponents = d.players.filter(p =>
+        p.role !== MY_ROLE && !p.is_caught && !p.real_revealed
+      );
+      if (opponents.length < 2) { showToast('Naam raden is pas beschikbaar met 2 of meer tegenstanders', 'info'); return; }
+      // Show a simple picker
+      const names = opponents.map(p => p.username);
+      // Show dropdown modal instead of prompt
+      showNameGuessPicker(targetId, targetName, names);
+    });
+}
+
+// â”€â”€ Catch runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function doCatch() {
+  const runnerId = actionRunnerId;
+  const name = actionRunnerName;
+  closeActionModal();
+  if (!runnerId) return;
+  fetch('/api/game/' + CODE + '/catch', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({runner_id: runnerId})
+  }).then(r => r.json()).then(d => {
+    if (d.error) showToast(d.error, 'error');
+    else showToast(`${name} gepakt! ${d.remaining} runners over.`, 'success', 6000);
+  });
+}
+
+// Close modal on backdrop click
+document.getElementById('actionModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('actionModal')) closeActionModal();
+});
+
+// â”€â”€ Target alert â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function updateTargetAlert(t) {
+  const el = document.getElementById('targetAlert');
+  if (!el) return;
+  const now = Date.now();
+  const nextEndsAt = t && t.expires_at
+    ? parseServerTime(t.expires_at)
+    : t && t.expires_in
+      ? now + (Math.max(0, Number(t.expires_in) || 0) * 1000)
+      : 0;
+  if (t && nextEndsAt > now) {
+    const isNewTarget = String(nextEndsAt) !== lastTargetAlertKey;
+    targetEndsAt = nextEndsAt;
+    targetExpiry = Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000));
+    lastTargetAlertKey = String(nextEndsAt);
+    el.classList.add('show');
+    document.getElementById('taTimer').textContent = fmtMM(targetExpiry);
+    const distEl = document.getElementById('taDist');
+    if (t.distance !== null && t.distance !== undefined)
+      distEl.textContent = 'Jager op ' + fmtDist(t.distance) + ' afstand';
+    else
+      distEl.textContent = 'Afstand wordt berekend...';
+    if (isNewTarget) {
+      playAlert();
+      navigator.vibrate && navigator.vibrate([300, 100, 300]);
+    }
+    // Block offline button
+    const btn = document.getElementById('btnOffline');
+    if (btn) { btn.classList.add('empty'); btn.onclick = () => showToast('Je bent getarget. Offline niet mogelijk.', 'warn'); }
+  } else {
+    el.classList.remove('show');
+    targetExpiry = 0;
+    targetEndsAt = 0;
+    lastTargetAlertKey = '';
+    const timerEl = document.getElementById('taTimer');
+    if (timerEl) timerEl.textContent = '--:--';
+    const btn = document.getElementById('btnOffline');
+    if (btn) { btn.classList.remove('empty'); btn.onclick = toggleOffline; }
+  }
+}
+function renderHunterTargetInfo() {
+  const el = document.getElementById('hunterTargetInfo');
+  if (!el) return;
+  if (hunterTargetUntil > 0) {
+    el.style.display = 'block';
+    el.innerHTML = `<i class="fas fa-bullseye"></i> Target<br>${escHtml(hunterTargetName)} nog ${fmtMM(hunterTargetUntil)}`;
+  } else {
+    el.style.display = 'none';
+    el.innerHTML = '';
+  }
+}
+function updateNearBadge(d) {
+  const el = document.getElementById('nearBadge');
+  if (!el) return;
+  if (!d.show_distance) { el.style.display = 'none'; return; }
+  const interval = parseInt(d.runner_interval || 0, 10) || 0;
+  const now = Date.now();
+  if (d.live_tracking || interval <= 0 || !nearestNextAt || now >= nearestNextAt) {
+    nearestLast = d.nearest_hunter;
+    nearestNextAt = interval > 0 ? now + interval * 1000 : 0;
+  }
+  if (nearestLast === null || nearestLast === undefined) return;
+  el.style.display = 'block';
+  document.getElementById('nearVal').textContent = fmtDist(nearestLast);
+  const left = nearestNextAt ? Math.max(0, Math.ceil((nearestNextAt - now) / 1000)) : 0;
+  document.getElementById('nearTs').textContent = d.live_tracking ? 'Live' : `Volgende update over ${fmtMM(left)}`;
+}
+
+// â”€â”€ Offline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function updateOfflineBtn(d) {
+  const btn = document.getElementById('btnOffline');
+  if (!btn) return;
+  const numEl = document.getElementById('offUsesNum');
+  if (numEl) numEl.textContent = d.offline_uses_left;
+  const label = document.getElementById('offlineBtnLabel');
+  const activeOffline = !!d.is_offline && (!offlineEndsAt || offlineEndsAt > Date.now()) && offlineRemaining > 0;
+  if (activeOffline) {
+    btn.style.background = 'var(--danger)';
+    btn.style.color = '#fff';
+    btn.querySelector('i').className = 'fas fa-hourglass-half';
+    btn.title = 'Offline actief. Dit gaat vanzelf uit.';
+    btn.onclick = () => showToast(`Offline actief. Nog ${fmtMM(offlineRemaining)}.`, 'warn');
+    if (label) { label.textContent = fmtMM(offlineRemaining); label.style.display = 'block'; }
+  } else if (!d.offline_allowed_now || d.offline_uses_left <= 0) {
+    btn.style.background = '#444'; btn.style.color = '#666';
+    btn.querySelector('i').className = 'fas fa-eye-slash';
+    btn.title = d.offline_uses_left <= 0 ? 'Geen offline knoppen meer' : 'Offline niet beschikbaar';
+    btn.onclick = toggleOffline;
+    if (label) { label.textContent = d.offline_uses_left > 1 ? `x${d.offline_uses_left}` : ''; label.style.display = d.offline_uses_left > 1 ? 'block' : 'none'; }
+  } else {
+    btn.style.background = 'var(--runner)'; btn.style.color = '#fff';
+    btn.querySelector('i').className = 'fas fa-eye-slash';
+    btn.title = 'Verberg locatie';
+    btn.onclick = toggleOffline;
+    if (label) { label.textContent = d.offline_uses_left > 1 ? `x${d.offline_uses_left}` : ''; label.style.display = d.offline_uses_left > 1 ? 'block' : 'none'; }
+  }
+}
+
+function toggleOffline() {
+  if (isOffline) { showToast(`Offline actief. Nog ${fmtMM(offlineRemaining)}.`, 'warn'); return; }
+  if ((targetEndsAt && Date.now() < targetEndsAt) || targetExpiry > 0) { showToast('Je bent getarget. Offline niet mogelijk.', 'warn'); return; }
+  fetch('/api/game/' + CODE + '/offline', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({offline: true})
+  }).then(r => r.json()).then(d => {
+    if (d.error) { showToast(d.error, 'error'); return; }
+    isOffline = d.is_offline;
+    offUsesLeft = d.offline_uses_left ?? offUsesLeft;
+    offlineRemaining = d.offline_remaining || offlineRemaining;
+    offlineEndsAt = d.offline_until ? parseServerTime(d.offline_until) : Date.now() + (Number(offlineRemaining || 0) * 1000);
+    updateOfflineBtn(Object.assign({}, lastState || {}, {
+      is_offline: true,
+      offline_allowed_now: false,
+      offline_uses_left: d.offline_uses_left ?? offUsesLeft,
+    }));
+    showToast(`Locatie verborgen. Nog ${fmtMM(offlineRemaining)}.`, 'warn');
+  });
+}
+
+// â”€â”€ Pause â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function openPauseDlg() {
+  if (pauseActive || isPaused) {
+    togglePause(false);
+    return;
+  }
+  document.getElementById('pauseDlg').classList.add('open');
+}
+function startPauseCountdown() {
+  const reason = document.getElementById('pauseReason').value.trim() || 'Geen reden';
+  togglePause(true, reason);
+}
+function cancelPause() {
+  clearInterval(pauseCdIv);
+  const cdEl = document.getElementById('pauseCd');
+  cdEl.style.display = 'none'; cdEl.textContent = '10';
+  document.getElementById('pauseConfirmBtn').disabled = false;
+  document.getElementById('pauseDlg').classList.remove('open');
+}
+function togglePause(shouldPause, reason='') {
+  fetch('/api/game/' + CODE + '/pause', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pause:shouldPause,reason})
+  }).then(r=>r.json()).then(d=>{
+    if (d.error) { showToast(d.error, 'error'); return; }
+    isPaused = !!d.is_paused;
+    pauseActive = !!d.pause_active;
+    if (shouldPause) {
+      document.getElementById('pauseDlg').classList.remove('open');
+      showToast('Pauze aan', 'warn');
+    } else {
+      showToast('Spel hervat!', 'success');
+    }
+  });
+}
+
+// â”€â”€ Emergency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function emergency() {
+  if (!confirm('NOODKNOP: Jouw locatie gaat naar iedereen. Doorgaan?')) return;
+  fetch('/api/game/' + CODE + '/emergency', {method:'POST'})
+    .then(r=>r.json()).then(()=>showToast('Noodlocatie verstuurd!','error',8000));
+}
+
+function updatePowerButton() {
+  const b = document.getElementById('btnPowerMap');
+  const cd = document.getElementById('powerMapLabel');
+  if (!b || !cd) return;
+  b.classList.remove('ready', 'wait');
+  if (pauseActive) {
+    cd.textContent = 'Pauze';
+    cd.style.display = '';
+    b.classList.add('wait');
+    b.title = 'Power niet beschikbaar tijdens pauze';
+    return;
+  }
+  if (!headstartOver) {
+    cd.textContent = 'Wacht';
+    cd.style.display = '';
+    b.classList.add('wait');
+    b.title = 'Power kan na de voorsprong';
+    return;
+  }
+  if (classCooldown > 0) {
+    cd.textContent = fmtMM(classCooldown);
+    cd.style.display = '';
+    b.classList.add('wait');
+    b.title = `Power cooldown: nog ${fmtMM(classCooldown)}`;
+  } else {
+    cd.style.display = 'none';
+    b.classList.add('ready');
+    b.title = MY_CLASS ? `Gebruik power: ${MY_CLASS.power}` : 'Gebruik power';
+  }
+}
+
+function useClassPower() {
+  if (!MY_CLASS) { showToast('Geen class actief', 'error'); return; }
+  if (pauseActive) { showToast('Tijdens pauze zijn powers uitgeschakeld.', 'warn'); return; }
+  if (!headstartOver) { showToast('Power kan pas na de voorsprong gebruikt worden', 'warn'); return; }
+  if (classCooldown > 0) { showToast(`Power cooldown: nog ${fmtMM(classCooldown)}`, 'warn'); return; }
+  fetch('/api/game/' + CODE + '/class_power', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})})
+    .then(r => r.json()).then(d => {
+      if (d.error) {
+        if (d.cooldown_remaining) { classCooldown = d.cooldown_remaining; updatePowerButton(); }
+        showToast(d.error, 'error');
+        return;
+      }
+      classCooldown = d.cooldown || 0;
+      updatePowerButton();
+      showToast(d.message || 'Power gebruikt', 'success', 9000);
+      showNotif(d.message || 'Power gebruikt', 7000);
+    }).catch(() => showToast('Power mislukt', 'error'));
+}
+
+function leaveGame() {
+  if (!confirm('Spel verlaten? Als er te weinig spelers over zijn, stopt het spel voor iedereen.')) return;
+  fetch('/api/game/' + CODE + '/leave', {method: 'POST'})
+    .then(r => r.json())
+    .then(d => {
+      window.location.href = d.redirect || '/dashboard';
+    })
+    .catch(() => { window.location.href = '/dashboard'; });
+}
+
+function confirmEnd() {
+  closeAllPanels();
+  if (!confirm('Spel stoppen? Dit eindigt voor iedereen.')) return;
+  fetch('/api/game/' + CODE + '/end', {method:'POST'})
+    .then(r=>r.json()).then(()=>window.location.href='/dashboard');
+}
+
+// â”€â”€ Info panel players â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function updateInfoPlayers(players) {
+  const el = document.getElementById('ip-players');
+  if (!el) return;
+  el.innerHTML = players.map(p => {
+    const isMine = p.id === MY_ID;
+    const showReal = p.role === MY_ROLE || p.real_revealed || isMine;
+    const name = showReal ? (isMine ? p.username + ' (jij)' : p.username) : p.codename || '?';
+    const col  = p.role === 'hunter' ? 'var(--hunter)' : 'var(--runner)';
+    const status = p.is_caught ? 'OUT' : p.is_offline ? 'OFF' : p.is_paused ? 'PAUSE' : '';
+    return `<div class="player-row">
+      <div class="pr-av" style="background:${col}">${(p.username||'?')[0].toUpperCase()}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600">${status} ${name}</div>
+        <div style="font-size:11px;color:var(--text2)">${p.is_caught?'Gepakt':p.is_offline?'Offline':p.is_paused?'Gepauzeerd':''}</div>
+      </div>
+      <span class="badge badge-${p.role}" style="font-size:10px">${fmtPts(p.points||0)}pt</span>
+    </div>`;
+  }).join('');
+}
+
+// â”€â”€ Notification popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function showNotif(msg, dur=5000) {
+  const el = document.getElementById('notifPop');
+  const tx = document.getElementById('notifTxt');
+  if (!el || !tx) return;
+  tx.innerHTML = msg;
+  el.classList.add('show');
+  clearTimeout(notifTimer);
+  notifTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let chatMode = 'team';
+function chatModeForMessage(d){
+  if(d.team === 'all') return 'all';
+  if(d.team === 'proxy') return 'proxy';
+  return 'team';
+}
+function updateChatBadges(){
+  unreadChat = unreadChatByMode.team + unreadChatByMode.all + unreadChatByMode.proxy;
+  const total = document.getElementById('chatBadge');
+  if(total){ total.textContent = unreadChat; total.style.display = unreadChat ? '' : 'none'; }
+  ['team','all','proxy'].forEach(mode=>{
+    const b=document.getElementById('chatModeBadge-'+mode);
+    if(b){ b.textContent=unreadChatByMode[mode]; b.style.display=unreadChatByMode[mode] ? 'inline-flex' : 'none'; }
+  });
+}
+function setChatMode(mode, btn) {
+  chatMode = mode;
+  unreadChatByMode[mode] = 0;
+  updateChatBadges();
+  document.querySelectorAll('#cm-team,#cm-all,#cm-proxy').forEach(b => {
+    b.className = b.id === 'cm-' + mode ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
+    b.style.cssText = 'padding:3px 10px;font-size:11px';
+  });
+  const desc = {team: 'Stuur naar: je eigen team', all: 'Stuur naar: alle spelers', proxy: 'Stuur naar: iedereen binnen 500m'};
+  document.getElementById('chatModeDesc').textContent = desc[mode] || '';
+  const el = document.getElementById('chatMsgs');
+  if (el) el.innerHTML = '<div id="chatEmpty" style="padding:24px;text-align:center;color:var(--text2);font-size:13px">Nog geen berichten in dit kanaal</div>';
+  loadChatHistory();
+}
+function sendChat() {
+  const inp = document.getElementById('chatIn');
+  const msg = (inp.value || '').trim();
+  if (!msg) return;
+  inp.value = '';
+  fetch('/api/game/' + CODE + '/chat', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: msg, team: chatMode})
+  }).then(r => r.json()).then(d => {
+    if (d.error) { showToast(d.error, 'error'); return; }
+    if (d.msg) addChatMsg(d.msg);  // Show own message immediately
+  });
+}
+function addChatMsg(d) {
+  const mode = chatModeForMessage(d);
+  if (mode !== chatMode) {
+    if (d.user_id !== MY_ID) unreadChatByMode[mode]++;
+    updateChatBadges();
+    return;
+  }
+  const el = document.getElementById('chatMsgs');
+  if (!el) return;
+  // Remove placeholder
+  const empty = document.getElementById('chatEmpty');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  const label = mode === 'all' ? 'Global' : mode === 'proxy' ? 'Proxy' : 'Team';
+  const name = d.display_name || (mode === 'team' ? d.username : (d.codename || d.username));
+  div.innerHTML = `<div class="cm-author">(${label}) ${escHtml(name)} · ${escHtml(d.time || '')}</div><div class="cm-text">${escHtml(d.message)}</div>`;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+  if (activePanel !== 'chatPanel' && d.user_id !== MY_ID) {
+    unreadChatByMode[mode]++;
+    updateChatBadges();
+  } else {
+    unreadChatByMode[mode] = 0;
+    updateChatBadges();
+  }
+}
+
+// â”€â”€ Photo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function previewPhoto(inp) {
+  const f = inp.files[0]; if (!f) return;
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { showToast('Alleen jpg, png of webp fotos zijn toegestaan', 'error'); inp.value=''; return; }
+  if (f.size > 6 * 1024 * 1024) { showToast('Foto is te groot. Maximaal 6 MB.', 'error'); inp.value=''; return; }
+  // Update photoIn reference for FormData
+  const dt = new DataTransfer(); dt.items.add(f);
+  // Store in unified photoFile
+  photoFile = f;
+  const r = new FileReader();
+  r.onload = e => { document.getElementById('photoPreviewImg').src = e.target.result; document.getElementById('photoPreviewWrap').style.display=''; };
+  r.readAsDataURL(f);
+}
+function handleDrop(e) {
+  e.preventDefault(); e.currentTarget.style.borderColor='var(--border)';
+  const f=e.dataTransfer.files[0];
+  if(f){
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size > 6 * 1024 * 1024) { showToast('Alleen jpg/png/webp tot 6 MB', 'error'); return; }
+    photoFile=f;const r=new FileReader();r.onload=ev=>{document.getElementById('photoPreviewImg').src=ev.target.result;document.getElementById('photoPreviewWrap').style.display='';};r.readAsDataURL(f);
+  }
+}
+function clearPhoto() {
+  photoFile=null;
+  ['photoCamIn','photoGalIn'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+  document.getElementById('photoPreviewWrap').style.display='none';
+}
+
+function submitPost() {
+  const cap = (document.getElementById('captionIn').value||'').trim();
+  if (!photoFile && !cap) { showToast('Voeg foto of tekst toe','error'); return; }
+  const btn = document.getElementById('postBtn');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  const fd=new FormData();
+  if(photoFile) fd.append('image',photoFile);
+  if(cap)       fd.append('caption',cap);
+  if(lastLat)   {fd.append('lat',lastLat);fd.append('lon',lastLon);}
+  fd.append('share_location', document.getElementById('shareLocCb').checked?'1':'0');
+  fetch('/game/'+CODE+'/post',{method:'POST',body:fd})
+    .then(r=>r.json()).then(d=>{
+      btn.disabled=false; btn.innerHTML='<i class="fas fa-paper-plane"></i> Posten';
+      if(d.success){clearPhoto();document.getElementById('captionIn').value='';loadFeed();showToast('Gepost!','success');}
+      else showToast(d.error||'Fout bij posten','error');
+    }).catch(()=>{btn.disabled=false;btn.innerHTML='<i class="fas fa-paper-plane"></i> Posten';showToast('Fout bij uploaden','error');});
+}
+
+function loadFeed() {
+  fetch('/api/game/'+CODE+'/posts').then(r=>r.json()).then(posts=>{
+    const el=document.getElementById('feedItems');
+    if(!posts.length){el.innerHTML='<div style="text-align:center;color:var(--text2);padding:28px;font-size:13px"><i class="fas fa-camera" style="display:block;font-size:24px;opacity:.3;margin-bottom:8px"></i>Nog geen foto\'s</div>';return;}
+    el.innerHTML=posts.map(p=>`
+      <div style="border-top:1px solid var(--border);padding:11px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <div style="width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0">${p.avatar}</div>
+          <div style="font-weight:600;font-size:13px">${p.username}</div>
+          <div style="font-size:11px;color:var(--text2);margin-left:auto">${p.created_at}</div>
+          ${p.can_delete?`<button onclick="delPost(${p.id})" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px"><i class="fas fa-trash"></i></button>`:''}
+        </div>
+        ${p.image?`<img src="/uploads/${p.image}" style="width:100%;border-radius:8px;max-height:200px;object-fit:cover;margin-bottom:7px;cursor:pointer" onclick="openLB('/uploads/${p.image}')">`: ''}
+        ${p.caption?`<div style="font-size:13px;margin-bottom:7px">${p.caption}</div>`:''}
+        ${p.approved===null?`<div style="font-size:11px;color:var(--warn);margin-bottom:7px"><i class="fas fa-hourglass-half"></i> Wacht op goedkeuring</div>`:''}
+        ${p.approved===false?`<div style="font-size:11px;color:var(--danger);margin-bottom:7px"><i class="fas fa-xmark"></i> Afgewezen</div>`:''}
+        <button onclick="toggleLike(${p.id},this)" style="background:none;border:none;color:${p.liked?'var(--danger)':'var(--text2)'};cursor:pointer;font-size:13px;display:flex;align-items:center;gap:5px;padding:0">
+          <i class="fas fa-heart"></i><span id="lc-${p.id}">${p.likes}</span>
+        </button>
+      </div>`).join('');
+  });
+}
+function toggleLike(pid,btn){fetch('/post/'+pid+'/like',{method:'POST'}).then(r=>r.json()).then(d=>{document.getElementById('lc-'+pid).textContent=d.likes;btn.style.color=d.liked?'var(--danger)':'var(--text2)';})}
+function delPost(pid){if(!confirm('Verwijderen?'))return;fetch('/post/'+pid+'/delete',{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success)loadFeed()})}
+function openLB(src){const lb=document.createElement('div');lb.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;cursor:zoom-out';lb.innerHTML=`<img src="${src}" style="max-width:94vw;max-height:94vh;border-radius:10px;object-fit:contain">`;lb.onclick=()=>lb.remove();document.body.appendChild(lb);}
+
+// â”€â”€ Panels â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function openPanel(id) {
+  closeAllPanels();
+  document.getElementById(id).classList.add('open');
+  activePanel = id;
+  if (id === 'feedPanel') { unreadFeed=0; const b=document.getElementById('feedBadge');b.style.display='none'; ['feedDotR','feedDotH'].forEach(x=>{const e=document.getElementById(x);if(e)e.style.display='none'}); loadFeed(); }
+  if (id === 'chatPanel') { unreadChatByMode[chatMode]=0; updateChatBadges(); loadChatHistory(); }
+}
+function closePanel(id, bbId) {
+  document.getElementById(id).classList.remove('open');
+  if (activePanel === id) activePanel = null;
+  if (bbId) document.getElementById(bbId).classList.remove('active-btn');
+}
+function closeAllPanels() {
+  ['infoPanel','feedPanel','chatPanel','menuPanel'].forEach(id => {
+    const el=document.getElementById(id); if(el) el.classList.remove('open');
+  });
+  document.querySelectorAll('.bb').forEach(b=>b.classList.remove('active-btn'));
+  activePanel = null;
+}
+function togglePanel(id, bbId) {
+  if (activePanel === id) { closePanel(id, bbId); return; }
+  closeAllPanels();
+  openPanel(id);
+  if (bbId) document.getElementById(bbId).classList.add('active-btn');
+}
+
+// â”€â”€ Chat history loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function loadChatHistory() {
+  fetch('/api/game/' + CODE + '/chat_history?mode=' + encodeURIComponent(chatMode))
+    .then(r => r.json())
+    .then(msgs => {
+      const el = document.getElementById('chatMsgs');
+      if (!el) return;
+      el.innerHTML = '';
+      if (!msgs || !msgs.length) {
+        el.innerHTML = '<div id="chatEmpty" style="padding:24px;text-align:center;color:var(--text2);font-size:13px">Nog geen berichten in dit kanaal</div>';
+        return;
+      }
+      msgs.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'chat-msg';
+        const mode = chatModeForMessage(m);
+        const label = mode === 'all' ? 'Global' : mode === 'proxy' ? 'Proxy' : 'Team';
+        const name = m.display_name || (mode === 'team' ? m.username : (m.codename || m.username));
+        div.innerHTML = `<div class="cm-author">(${label}) ${escHtml(name)} · ${escHtml(m.time || '')}</div><div class="cm-text">${escHtml(m.message)}</div>`;
+        el.appendChild(div);
+      });
+      if (el) el.scrollTop = el.scrollHeight;
+    }).catch(() => {});
+}
+
+// â”€â”€ Sound system â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const SoundCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (SoundCtx)();
+  return audioCtx;
+}
+function playBeep(freq=440, dur=0.2, type='sine', vol=0.3) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = type; osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(); osc.stop(ctx.currentTime + dur);
+  } catch(e) {}
+}
+function playAlert()   { playBeep(880, .15); setTimeout(()=>playBeep(880,.15), 200); }
+function playSuccess() { playBeep(523,.1); setTimeout(()=>playBeep(659,.1),120); setTimeout(()=>playBeep(784,.25),240); }
+function playWarning() { playBeep(330, .4, 'sawtooth', 0.2); }
+function playBadge()   { playBeep(523,.08); setTimeout(()=>playBeep(659,.08),100); setTimeout(()=>playBeep(784,.08),200); setTimeout(()=>playBeep(1047,.3),300); }
+
+// Speed warning
+let lastSpeedWarn = 0;
+let speedSamples = [];  // rolling average to avoid GPS noise
+function checkSpeed(speedMs, accuracyM) {
+  // GPS speed is often null, 0, or noisy â€” use rolling 3-sample average
+  if (speedMs === null || speedMs === undefined || speedMs < 0) return;
+  if (accuracyM && accuracyM > 45) return;
+  speedSamples.push(speedMs);
+  if (speedSamples.length > 5) speedSamples.shift();
+  const avgMs = speedSamples.reduce((a,b) => a+b, 0) / speedSamples.length;
+  const kmh = avgMs * 3.6;
+  const el = document.getElementById('speedWarn');
+  if (!el) return;
+  // Only warn after a stable rolling average; this avoids false positives while standing still.
+  if (speedSamples.length >= 5 && kmh >= 12) {
+    el.classList.add('show');
+    el.textContent = `Niet rennen (${kmh.toFixed(1)} km/u)`;
+    const now = Date.now();
+    if (now - lastSpeedWarn > 20000) {
+      lastSpeedWarn = now;
+      playWarning();
+    }
+  } else {
+    el.classList.remove('show');
+  }
+}
+
+// â”€â”€ Badge popup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function showBadgePopup(badges) {
+  if (!badges || !badges.length) return;
+  const wrap = document.getElementById('badgePopup');
+  wrap.classList.add('show');
+  badges.forEach((b, i) => {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'badge-toast';
+      el.innerHTML = `
+        <div class="badge-icon-sm"><i class="fas ${b.icon || 'fa-medal'}"></i></div>
+        <div>
+          <div class="badge-info-name">Badge behaald: ${b.name}</div>
+          <div class="badge-info-desc">${b.desc}</div>
+        </div>`;
+      wrap.appendChild(el);
+      playBadge();
+      setTimeout(() => el.remove(), 5000);
+    }, i * 600);
+  });
+  setTimeout(() => wrap.classList.remove('show'), badges.length * 600 + 5500);
+}
+// â”€â”€ End game screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function burstConfetti() {
+  const colors = ['#10b981', '#f59e0b', '#3b82f6', '#ef4444', '#ffffff'];
+  for (let i = 0; i < 70; i++) {
+    const c = document.createElement('div');
+    c.style.cssText = `position:fixed;left:${Math.random()*100}vw;top:-14px;width:8px;height:14px;background:${colors[i%colors.length]};z-index:9999;pointer-events:none;border-radius:2px;transform:rotate(${Math.random()*180}deg);transition:transform 2.8s linear,top 2.8s ease-in,opacity 2.8s`;
+    document.body.appendChild(c);
+    requestAnimationFrame(() => {
+      c.style.top = '105vh';
+      c.style.opacity = '0';
+      c.style.transform = `translateX(${(Math.random()*160)-80}px) rotate(${360+Math.random()*360}deg)`;
+    });
+    setTimeout(() => c.remove(), 3000);
+  }
+}
+function showEndScreen(data) {
+  if (endScreenShown) return;
+  endScreenShown = true;
+  // Fetch badges earned
+  fetch('/api/game/' + CODE + '/end_summary')
+    .then(r => r.json())
+    .then(summary => {
+      const el = document.getElementById('endScreen');
+      const winnerRole = summary.winner_role || data.winner_role || null;
+      const noPoints = !!(summary.no_points || data.no_points);
+      const won = !noPoints && (winnerRole ? winnerRole === MY_ROLE : (MY_ROLE === 'hunter' || !summary.is_caught));
+      el.classList.remove('win','lose','neutral');
+      el.classList.add(noPoints ? 'neutral' : (won ? 'win' : 'lose'));
+      document.getElementById('endEmoji').innerHTML = noPoints ? '<i class="fas fa-circle-info"></i>' : (won ? '<i class="fas fa-trophy"></i>' : '<i class="fas fa-face-frown"></i>');
+      document.getElementById('endTitle').textContent = noPoints ? 'Spel afgesloten' : (won ? 'Gewonnen!' : 'Helaas verloren');
+      document.getElementById('endSubtitle').textContent = summary.end_message || data.message || (won
+        ? 'Jullie missie is gelukt. Goed gespeeld!'
+        : 'Helaas verloren. Volgende ronde pak je ze terug.');
+      document.getElementById('es-pts').textContent   = fmtPts(summary.points||0);
+      document.getElementById('es-dist').textContent  = fmtDist(summary.distance||0);
+      document.getElementById('es-badges').textContent= (summary.new_badges||[]).length;
+      const resultTxt = noPoints ? 'Geen punten' : (won ? 'Gewonnen' : 'Verloren');
+      const roleTxt = summary.role === 'hunter' ? 'Hunter' : 'Runner';
+      const statusEl = document.getElementById('endStatusDetails');
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div><strong>Resultaat:</strong> ${escHtml(resultTxt)}</div>
+          <div><strong>Rol:</strong> ${escHtml(roleTxt)}</div>
+          <div><strong>Gelopen afstand:</strong> ${escHtml(fmtDist(summary.distance || 0))}</div>
+          <div><strong>Offline gebruikt:</strong> ${escHtml(summary.offline_used || 0)}x</div>
+          <div><strong>Targets gebruikt:</strong> ${escHtml(summary.targets_used || 0)}x</div>
+          <div><strong>Zelf getarget:</strong> ${escHtml(summary.targeted_count || 0)}x</div>`;
+      }
+      // Show new badges
+      const badgeWrap = document.getElementById('endBadges');
+      if (badgeWrap) badgeWrap.innerHTML = '';
+      (summary.new_badges||[]).forEach(b => {
+        const span = document.createElement('div');
+        span.style.cssText = 'background:var(--bg3);border-radius:8px;padding:8px 12px;text-align:center;font-size:13px';
+        span.innerHTML = `<div style="font-size:24px;color:var(--accent)"><i class="fas ${b.icon || 'fa-medal'}"></i></div><div style="font-weight:700;font-size:12px">${b.name}</div>`;
+        badgeWrap.appendChild(span);
+      });
+      el.classList.add('show');
+      if (won) burstConfetti();
+      setTimeout(() => { window.location.href = '/dashboard'; }, 10 * 60 * 1000);
+      if (won) playSuccess(); else playAlert();
+      if (summary.new_badges && summary.new_badges.length) {
+        setTimeout(() => showBadgePopup(summary.new_badges), 1500);
+      }
+    }).catch(() => {
+      document.getElementById('endScreen').classList.add('show');
+    });
+}
+
+// â”€â”€ WebSocket â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+let ws;
+function connectWS() {
+  const proto = location.protocol==='https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/${CODE}`);
+  ws.onmessage = e => {
+    let msg; try{msg=JSON.parse(e.data);}catch{return;}
+    const d=msg.data;
+      switch(msg.event) {
+      case 'countdown_start':
+        startCountdown(d); break;
+      case 'game_started':
+        hideCountdownOverlay();
+        setTimeout(pollState, 1200);
+        break;
+      case 'new_post':
+        if (activePanel !== 'feedPanel') {
+          unreadFeed++;
+          ['feedBadge','feedDotR','feedDotH'].forEach(x => {
+            const el = document.getElementById(x);
+            if (el) { el.textContent = unreadFeed; el.style.display = ''; }
+          });
+          const bb = document.getElementById('bb-feed');
+          if (bb) bb.style.color = 'var(--accent)';
+        } else { loadFeed(); }
+        showNotif('Nieuwe foto geplaatst!', 3000);
+        break;
+      case 'chat':
+        if (d.user_id === MY_ID) break;
+        // Show if: from same team, or global/proxy, or from self (own msg shown via API)
+        const myTeam = MY_ROLE;
+        const showMsg = d.user_id !== MY_ID && (
+          d.team === 'all' || d.team === 'proxy' || d.team === myTeam
+        );
+        if (showMsg) {
+          addChatMsg(d);
+          if (activePanel !== 'chatPanel') showNotif(`${d.codename||d.username}: ${d.message}`, 4000);
+        }
+        break;
+      case 'runner_caught':
+        showToast(`${d.runner_codename} is gepakt door ${d.caught_by_codename}!`, d.runner_id===MY_ID?'error':'success', 7000);
+        showNotif(`${d.runner_codename} gevangen genomen door ${d.caught_by_codename}!`, 7000);
+        break;
+      case 'runner_offline':
+        if (d.user_id === MY_ID) {
+          isOffline = true;
+          offUsesLeft = d.uses_left ?? offUsesLeft;
+          offlineRemaining = d.duration || offlineRemaining;
+          offlineEndsAt = d.offline_until ? parseServerTime(d.offline_until) : Date.now() + (Number(d.duration || 0) * 1000);
+          updateOfflineBtn(Object.assign({}, lastState || {}, {
+            is_offline: true,
+            offline_allowed_now: false,
+            offline_uses_left: offUsesLeft,
+            offline_remaining: offlineRemaining,
+            offline_until: d.offline_until || null,
+          }));
+          showToast(`Offline actief. Nog ${fmtMM(offlineRemaining)}.`, 'warn', 7000);
+        }
+        if(MY_ROLE==='hunter') {
+          const txt = `${d.codename || 'Runner'} heeft de Offline knop gebruikt (${fmtMM(d.duration || 0)})`;
+          showToast(txt, 'warn', 8000);
+          showNotif(txt, 8000);
+          setTimeout(pollState, 150);
+        }
+        break;
+      case 'runner_online':
+        if (d.user_id === MY_ID) { isOffline = false; offlineRemaining = 0; offlineEndsAt = 0; }
+        if(MY_ROLE==='hunter') showToast(`${d.codename || 'Runner'} is weer zichtbaar`, 'info');
+        setTimeout(pollState, 500);
+        break;
+      case 'runner_location':
+      case 'hunter_location':
+        setTimeout(pollState, 500);
+        break;
+      case 'lootbox_claimed':
+        showToast(d.message || `${d.codename || 'Speler'} opende een dropbox`, d.user_id===MY_ID?'success':'info', 7000);
+        break;
+      case 'class_power':
+        if (d.user_id !== MY_ID) showNotif(`${d.codename || 'Speler'} gebruikt ${d.class_name || 'power'}: ${d.message || ''}`, 7000);
+        break;
+      case 'hazard_triggered':
+        if (d.target_id === MY_ID || d.owner_id === MY_ID) {
+          showToast(d.message || 'Val geactiveerd', d.target_id===MY_ID?'error':'warn', 9000);
+          showNotif(d.message || 'Val geactiveerd', 9000);
+        }
+        break;
+      case 'runner_paused':
+        pauseActive = true;
+        isPaused = true;
+        showNotif(`${d.codename||d.username} heeft gepauzeerd${d.reason?': '+d.reason:''}`, 5000);
+        updatePowerButton();
+        showToast(`${d.codename||d.username} heeft gepauzeerd`, 'info'); break;
+      case 'runner_unpaused':
+        pauseActive = false;
+        isPaused = false;
+        updatePowerButton();
+        setTimeout(pollState, 300);
+        showToast('Spel hervat!', 'success');
+        break;
+      case 'target_set':
+        if (d.runner_id === MY_ID) {
+          updateTargetAlert({
+            expires_in: d.expires_in || d.duration || 300,
+            expires_at: d.expires_at || null,
+            distance: d.distance || null,
+          });
+          showToast('JIJ BENT GETARGET! Offline geblokkeerd.', 'error', 8000);
+          setTimeout(pollState, 300);
+        } else if (MY_ROLE === 'hunter') {
+          hunterTargetEndsAt = d.expires_at ? parseServerTime(d.expires_at) : Date.now() + ((d.duration || d.expires_in || 300) * 1000);
+          hunterTargetUntil = Math.max(0, Math.ceil((hunterTargetEndsAt - Date.now()) / 1000));
+          hunterTargetDuration = d.duration || hunterTargetUntil || 300;
+          hunterTargetName = d.runner_codename || 'runner';
+          renderHunterTargetInfo();
+          showToast(`${d.hunter_codename} heeft target gezet op ${d.runner_codename}`, 'warn', 6000);
+          showNotif(`${d.hunter_codename} heeft target gezet op ${d.runner_codename}!`, 5000);
+        }
+        break;
+      case 'player_left':
+        if (d.promoted_user_id) {
+          showToast(`${d.username} heeft het spel verlaten. ${d.promoted_codename || 'Een runner'} is nu Hunter.`, 'warn', 8000);
+          showNotif(`Nieuwe Hunter: ${d.promoted_codename || 'runner'}`, 7000);
+        } else {
+          showToast(`${d.username} heeft het spel verlaten.`, 'warn', 6000);
+          showNotif(`${d.username} heeft het spel verlaten.`, 5000);
+        }
+        break;
+      case 'runner_promoted':
+        if (d.promoted_user_id === MY_ID) {
+          showToast('Jij bent gekozen als nieuwe Hunter. Kaart wordt bijgewerkt...', 'warn', 9000);
+          showNotif('Jij bent nu Hunter!', 9000);
+          setTimeout(() => location.reload(), 2200);
+        } else {
+          showToast(`${d.old_codename || d.promoted_username || 'Een runner'} is gekozen als nieuwe Hunter.`, 'warn', 8000);
+          showNotif(`Nieuwe Hunter: ${d.new_codename || d.promoted_username}`, 7000);
+        }
+        break;
+      case 'emergency':
+        showToast(`NOOD: ${d.codename} heeft noodknop!`,'error',10000);
+        showNotif(`NOODKNOP: ${d.codename} heeft hulp nodig!`, 10000);
+        if(d.lat && map) L.marker([d.lat,d.lon],{icon:mkIcon('#ff4500','NOOD',true)}).addTo(map);
+        break;
+      case 'game_ended':
+        showEndScreen(d);
+        break;
+      case 'player_zone_out':
+        showToast(`${d.codename || 'Speler'} was te lang buiten het speelveld en is af.`, 'warn', 8000);
+        showNotif(`${d.codename || 'Speler'} is af buiten het speelveld.`, 7000);
+        break;
+    }
+  };
+  ws.onclose = () => setTimeout(connectWS, 3000);
+  setInterval(()=>ws&&ws.readyState===1&&ws.send(JSON.stringify({event:'ping'})),25000);
+}
+connectWS();
+
+// â”€â”€ Countdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function startCountdown(d) {
+  const ov = document.getElementById('cdOverlay');
+  if (!ov) return;
+  hideCountdownOverlay();
+  const sub = document.getElementById('cdSub');
+  if (sub && d.headstart_minutes) sub.textContent = MY_ROLE==='hunter'
+    ? `Runners hebben ${d.headstart_minutes} min voorsprong. Wacht!`
+    : 'Gebruik je voorsprong - vlucht!';
+  ov.classList.add('show');
+  const numEl = document.getElementById('cdNum');
+  const fallbackSec = Math.max(1, Number(d.seconds || 5));
+  const deadline = d.countdown_until ? parseServerTime(d.countdown_until) : Date.now() + fallbackSec * 1000;
+  const render = () => {
+    const s = Math.ceil((deadline - Date.now()) / 1000);
+    if (s <= 0) {
+      numEl.textContent = 'GO!';
+      hideCountdownOverlay();
+      setTimeout(() => pollState(), 450);
+      return;
+    }
+    numEl.textContent = s;
+  };
+  render();
+  countdownTimer = setInterval(render, 250);
+}
+
+// â”€â”€ Random tips for headstart â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const TIPS = ["Blijf goed bij je team.", "Kijk goed uit bij wegen.", "Rustig lopen is slim.", "Spreek een plek af.", "Blijf binnen het speelgebied.", "Vraag hulp als je twijfelt."];
+(function rotateTip() {
+  const el = document.getElementById('hsTipText');
+  if (el) el.textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
+  setTimeout(rotateTip, 10000);
+})();
+
+// â”€â”€ Timer ticks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+setInterval(()=>{
+  const now = Date.now();
+  if (!pauseActive) {
+    if (gameEndsAt > 0) timeLeft = Math.max(0, Math.ceil((gameEndsAt - now) / 1000));
+    if (headstartEndsAt > 0) hsLeft = Math.max(0, Math.ceil((headstartEndsAt - now) / 1000));
+    if (targetEndsAt > 0) targetExpiry = Math.max(0, Math.ceil((targetEndsAt - now) / 1000));
+    if (offlineEndsAt > 0) offlineRemaining = Math.max(0, Math.ceil((offlineEndsAt - now) / 1000));
+    if (hunterTargetEndsAt > 0) hunterTargetUntil = Math.max(0, Math.ceil((hunterTargetEndsAt - now) / 1000));
+    elapsed = elapsedSynced + Math.max(0, Math.floor((now - timerSyncAt) / 1000));
+  }
+  document.getElementById('tv-el').textContent  = fmtMM(elapsed);
+  document.getElementById('tv-left').textContent = fmtMM(timeLeft);
+  // Headstart
+  if(hsLeft<=0 && !headstartOver){
+    headstartOver=true;
+    const hso=document.getElementById('hsOverlay');if(hso)hso.classList.add('gone');
+    showToast(MY_ROLE==='hunter'?'Voorsprong voorbij! Runners zichtbaar.':'Hunters kunnen je nu zien!','warn',5000);
+  } else if(!headstartOver){
+    const el=document.getElementById('hsNum');if(el)el.textContent=fmtMM(hsLeft);
+  }
+  // Target countdown (live per second)
+  if (targetExpiry > 0) {
+    const el = document.getElementById('taTimer');
+    if (el) el.textContent = fmtMM(targetExpiry);
+  } else if (targetEndsAt > 0 || document.getElementById('targetAlert')?.classList.contains('show')) {
+    updateTargetAlert(null);
+    setTimeout(() => pollState(), 350);
+  }
+  if (offlineRemaining > 0) {
+    const ip = document.getElementById('ip-off');
+    if (ip && isOffline) ip.textContent = `Offline nog ${fmtMM(offlineRemaining)}`;
+    const label = document.getElementById('offlineBtnLabel');
+    if (label && isOffline) {
+      label.textContent = fmtMM(offlineRemaining);
+      label.style.display = 'block';
+    }
+  } else if (offlineEndsAt > 0 && isOffline) {
+    isOffline = false;
+    offlineEndsAt = 0;
+    updateOfflineBtn(Object.assign({}, lastState || {}, {
+      is_offline: false,
+      offline_allowed_now: true,
+      offline_uses_left: offUsesLeft,
+    }));
+    const ip = document.getElementById('ip-off');
+    if (ip) ip.textContent = `${offUsesLeft} van {{ game.offline_uses }}`;
+    setTimeout(pollState, 400);
+  }
+  document.querySelectorAll('.offline-countdown').forEach(el=>{
+    const until = parseInt(el.dataset.until || '0', 10) || 0;
+    const left = until > 0 ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
+    el.textContent = fmtMM(left);
+  });
+  if (hunterTargetUntil > 0) {
+    renderHunterTargetInfo();
+  } else if (hunterTargetEndsAt > 0) {
+    hunterTargetEndsAt = 0;
+    renderHunterTargetInfo();
+  }
+  if (classCooldown > 0) {
+    classCooldown--;
+    updatePowerButton();
+  }
+  if (targetCooldown > 0) targetCooldown--;
+},1000);
+
+// â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+initMap();
+loadFeed();
+setInterval(pollState, 10000);
+pollState();
+</script>
+{% endblock %}

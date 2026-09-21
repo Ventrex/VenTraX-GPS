@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Eerste Setup – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-sm" style="padding-top:60px">
+  <div style="text-align:center;margin-bottom:36px">
+    <div style="font-size:56px;margin-bottom:16px">🎯</div>
+    <h1 style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;margin-bottom:8px">
+      Welkom bij <span style="color:var(--accent)">{{ site_name }}</span>
+    </h1>
+    <p style="color:var(--text2)">Maak het eerste admin account aan om te starten</p>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-user-shield"></i> Admin Account Aanmaken</div>
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Gebruikersnaam</label>
+        <input name="username" class="form-control" placeholder="Jouw naam" required autofocus minlength="3">
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-mail <span style="color:var(--text2);text-transform:none;font-weight:400">(optioneel)</span></label>
+        <input name="email" type="email" class="form-control" placeholder="jouw@email.nl">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wachtwoord</label>
+        <input name="password" id="pw" type="password" class="form-control" placeholder="Minimaal 6 tekens" required minlength="6">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Bevestig Wachtwoord</label>
+        <input name="confirm_password" id="pw2" type="password" class="form-control" placeholder="Herhaal wachtwoord" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full btn-lg">
+        <i class="fas fa-rocket"></i> Account aanmaken & starten
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

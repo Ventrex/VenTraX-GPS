@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Foto's goedkeuren - {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container">
+  <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800;margin-bottom:8px">
+    <i class="fas fa-images" style="color:var(--accent)"></i> Foto's goedkeuren
+  </h1>
+  <p style="color:var(--text2);margin-bottom:20px">Alleen admins zien wie een foto heeft geplaatst.</p>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px">
+    <a class="btn btn-sm {{ 'btn-primary' if status=='pending' else 'btn-ghost' }}" href="{{ url_for('admin_photos', status='pending') }}">Wachtend</a>
+    <a class="btn btn-sm {{ 'btn-primary' if status=='approved' else 'btn-ghost' }}" href="{{ url_for('admin_photos', status='approved') }}">Goedgekeurd</a>
+    <a class="btn btn-sm {{ 'btn-primary' if status=='rejected' else 'btn-ghost' }}" href="{{ url_for('admin_photos', status='rejected') }}">Afgewezen</a>
+    <a class="btn btn-sm {{ 'btn-primary' if status=='all' else 'btn-ghost' }}" href="{{ url_for('admin_photos', status='all') }}">Alles</a>
+  </div>
+
+  {% if not photos %}
+  <div class="card" style="text-align:center;color:var(--text2);padding:32px">Geen foto's gevonden.</div>
+  {% else %}
+  <div class="grid g3" style="gap:16px">
+    {% for p in photos %}
+    <div class="card" id="photo-{{ p.id }}" style="overflow:hidden">
+      <img src="/uploads/{{ p.image_filename }}" style="width:100%;height:190px;object-fit:cover;border-radius:8px;margin-bottom:10px" alt="">
+      <div style="font-size:13px;line-height:1.5;color:var(--text2)">
+        <div><strong style="color:var(--text)">Uploader:</strong> {{ p.author.username }}{% if p.author.email %} · {{ p.author.email }}{% endif %}</div>
+        <div><strong style="color:var(--text)">Spel:</strong> {{ p.game.name if p.game else 'Onbekend' }}</div>
+        <div><strong style="color:var(--text)">Datum:</strong> {{ p.created_at.strftime('%d-%m-%Y %H:%M') }}</div>
+        {% if p.caption %}<div style="margin-top:8px">{{ p.caption }}</div>{% endif %}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn btn-runner btn-sm" onclick="moderatePhoto({{ p.id }}, true)"><i class="fas fa-check"></i> Goedkeuren</button>
+        <button class="btn btn-warn btn-sm" onclick="moderatePhoto({{ p.id }}, false)"><i class="fas fa-xmark"></i> Afwijzen</button>
+        <button class="btn btn-danger btn-sm" onclick="deletePhoto({{ p.id }})"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+<script>
+function moderatePhoto(id, approved){
+  fetch('/post/'+id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved})})
+    .then(r=>r.json()).then(d=>{if(d.success){showToast(approved?'Goedgekeurd':'Afgewezen','success');const el=document.getElementById('photo-'+id);if(el)el.remove();}});
+}
+function deletePhoto(id){
+  if(!confirm('Foto verwijderen?')) return;
+  fetch('/post/'+id+'/delete',{method:'POST'})
+    .then(r=>r.json()).then(d=>{if(d.success){showToast('Verwijderd','success');const el=document.getElementById('photo-'+id);if(el)el.remove();}});
+}
+</script>
+{% endblock %}

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Melding Sturen – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-md" style="padding-top:40px">
+  <h1 style="font-family:var(--hfont);font-size:28px;font-weight:800;margin-bottom:6px">
+    <i class="fas fa-flag" style="color:var(--accent)"></i> Melding Sturen
+  </h1>
+  <p style="color:var(--text2);margin-bottom:24px">Meld een bug, stuur een tip of rapporteer een valsspeler.</p>
+
+  <!-- Disclaimer -->
+  <div class="alert alert-warning" style="margin-bottom:24px">
+    <i class="fas fa-shield-halved"></i>
+    <div>
+      <strong>Let op:</strong> Beheerders kunnen bij bewijs van valsspelen punten in mindering brengen of spelers bannen.
+      Valse meldingen worden ook bijgehouden. Speel eerlijk en geniet van het spel!
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Type melding</label>
+        <div class="grid g2" style="gap:8px;margin-top:4px">
+          {% for val, label, icon, col in [
+            ('bug','Bug / Fout','fa-bug','var(--danger)'),
+            ('tip','Tip / Idee','fa-lightbulb','var(--warn)'),
+            ('cheat','Valsspeler melden','fa-user-slash','var(--accent)'),
+            ('other','Overig','fa-comment','var(--text2)'),
+          ] %}
+          <label style="cursor:pointer">
+            <input type="radio" name="type" value="{{ val }}" style="display:none" onchange="selType(this)">
+            <div class="role-pick" id="rt-{{ val }}" style="{{ 'border-color:'+col+';background:rgba(0,0,0,.05)' if val=='bug' else '' }}">
+              <div style="font-size:28px;margin-bottom:6px;color:{{ col }}"><i class="fas {{ icon }}"></i></div>
+              <div style="font-weight:700;font-size:14px">{{ label }}</div>
+            </div>
+          </label>
+          {% endfor %}
+        </div>
+        <input type="hidden" name="type" id="typeInput" value="bug">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Korte titel</label>
+        <input name="title" class="form-control" placeholder="Beschrijf het probleem of idee in één zin" required maxlength="200">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Uitleg</label>
+        <textarea name="description" class="form-control" rows="5" placeholder="Geef zoveel mogelijk details. Wat deed je, wat ging er mis, wie speelde er mee?" required maxlength="2000" style="resize:vertical"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Spelcode <span style="text-transform:none;font-weight:400;font-size:12px">(optioneel — als het over een specifiek spel gaat)</span></label>
+        <input name="game_code" class="form-control" placeholder="ABC123" maxlength="6" style="text-transform:uppercase;letter-spacing:3px">
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full btn-lg">
+        <i class="fas fa-paper-plane"></i> Melding Versturen
+      </button>
+    </form>
+  </div>
+</div>
+<script>
+const types = ['bug','tip','cheat','other'];
+function selType(inp) {
+  document.getElementById('typeInput').value = inp.value;
+  types.forEach(t => {
+    const el = document.getElementById('rt-' + t);
+    el.className = 'role-pick' + (t === inp.value ? ' sel-' + (t === 'bug' ? 'runner' : 'hunter') : '');
+  });
+}
+// Default select bug
+document.querySelector('[name=type][value=bug]') && (document.querySelector('[name=type][value=bug]').checked = true);
+</script>
+{% endblock %}

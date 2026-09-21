@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="nl" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0a0f">
+<title>{% block title %}{{ site_name }}{% endblock %}</title>
+
+<!-- Fonts: load async to never block rendering -->
+{% set hfont = site_font or 'Syne' %}
+{% set bfont = site_font_body or 'DM Sans' %}
+<link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family={{ hfont|replace(' ','+') }}:wght@700;800&family={{ bfont|replace(' ','+') }}:wght@400;500;600&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family={{ hfont|replace(' ','+') }}:wght@700;800&family={{ bfont|replace(' ','+') }}:wght@400;500;600&display=swap"></noscript>
+
+<!-- Icons: local fallback first, then CDN async -->
+<link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+      onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
+
+{% block extra_head %}{% endblock %}
+<style>
+:root {
+  --accent:  {{ site_accent or '#e11d48' }};
+  --accent-glow: {{ site_accent or '#e11d48' }}44;
+  --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--bg4:#22222e;
+  --border:#2a2a38;
+  --text:#f0f0f8;--text2:#8888aa;
+  --hunter:#3b82f6;--runner:#10b981;--warn:#f59e0b;--danger:#ef4444;
+  --r:{{ site_border_radius or '12' }}px;
+  --r2:calc({{ site_border_radius or '12' }}px * .66);
+  --sh:0 8px 32px rgba(0,0,0,.5);
+  --sh2:0 2px 10px rgba(0,0,0,.3);
+  --tr:.2s cubic-bezier(.4,0,.2,1);
+  --hfont:'{{ hfont }}',sans-serif;
+  --bfont:'{{ bfont }}',sans-serif;
+}
+[data-theme="light"]{
+  --bg:#f0f0f8;--bg2:#fff;--bg3:#eeeef5;--bg4:#e0e0ec;
+  --border:#d4d4e4;--text:#111118;--text2:#55557a;
+  --sh:0 4px 20px rgba(0,0,0,.08);--sh2:0 2px 8px rgba(0,0,0,.05);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--bfont);min-height:100vh;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none;transition:opacity var(--tr)}
+a:hover{opacity:.8}
+img{max-width:100%;display:block}
+button{font-family:inherit}
+
+/* BG */
+.site-bg{position:fixed;inset:0;z-index:-1;
+  {% if site_bg %}background:url('/backgrounds/{{ site_bg }}') center/cover no-repeat;
+  {% else %}background:radial-gradient(ellipse 120% 60% at 70% -10%,{{ site_accent or '#e11d48' }}1a,transparent 60%),var(--bg);{% endif %}}
+{% if site_bg %}.site-bg::after{content:'';position:absolute;inset:0;background:rgba(10,10,15,{{ site_bg_overlay or '0.82' }})}{% endif %}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:800;background:rgba(10,10,15,.88);backdrop-filter:blur(18px) saturate(180%);border-bottom:1px solid var(--border);height:60px;display:flex;align-items:center;padding:0 20px;gap:6px}
+[data-theme="light"] .nav{background:rgba(240,240,248,.92)}
+.nav-brand{display:flex;align-items:center;gap:8px;font-family:var(--hfont);font-size:20px;font-weight:800;color:var(--text);margin-right:6px;flex-shrink:0}
+.nav-brand .v{color:var(--text)}
+.nav-brand .faye{color:var(--accent)}
+.nav-brand img{height:34px;width:auto;object-fit:contain}
+.nav-links{display:flex;align-items:center;gap:1px;flex:1;overflow:visible}
+.nl{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:var(--r2);font-size:13px;font-weight:500;color:var(--text2);transition:all var(--tr);white-space:nowrap;cursor:pointer;border:none;background:none;text-decoration:none!important}
+.nl:hover,.nl.active{background:var(--bg3);color:var(--text);opacity:1}
+.nl i{font-size:12px}
+/* Dropdown */
+.dd{position:relative}
+.dd-menu{position:absolute;top:calc(100% + 2px);left:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:5px;min-width:190px;box-shadow:var(--sh);opacity:0;visibility:hidden;transform:translateY(-4px);transition:all var(--tr);z-index:1000;margin-top:4px}
+.dd::before{content:'';position:absolute;top:100%;left:0;right:0;height:8px}
+.dd:hover .dd-menu,.dd:focus-within .dd-menu{opacity:1;visibility:visible;transform:none}
+.dd-item{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:var(--r2);color:var(--text);font-size:13px;transition:background var(--tr)}
+.dd-item:hover{background:var(--bg3);opacity:1}
+.dd-item i{width:14px;color:var(--text2);font-size:12px}
+/* User menu */
+.user-menu{position:relative}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--hfont);font-weight:800;font-size:14px;cursor:pointer;border:none;transition:all var(--tr);flex-shrink:0}
+.avatar:hover{transform:scale(1.08);box-shadow:0 0 0 3px var(--accent-glow)}
+.user-dd{position:absolute;top:calc(100% + 2px);right:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:5px;min-width:210px;box-shadow:var(--sh);opacity:0;visibility:hidden;transform:translateY(-6px);transition:all var(--tr);z-index:1001}
+.user-menu:hover .user-dd,.user-dd:hover{opacity:1;visibility:visible;transform:none}
+.user-dd-header{padding:11px 13px 9px;border-bottom:1px solid var(--border);margin-bottom:5px}
+.user-dd-name{font-weight:700;font-size:14px}
+.user-dd-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.nav-right{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0}
+.icon-btn{width:34px;height:34px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all var(--tr);flex-shrink:0}
+.icon-btn:hover{background:var(--bg4);transform:scale(1.08)}
+.hamburger{display:none;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:4px;margin-left:2px}
+.mobile-menu{display:none;flex-direction:column;gap:2px;position:fixed;top:60px;left:0;right:0;background:rgba(10,10,15,.98);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:10px;z-index:799;animation:fdDown .18s ease}
+.mobile-menu.open{display:flex}
+@keyframes fdDown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+
+/* Back-to-game banner */
+.back-game-banner{background:var(--accent);color:#fff;text-align:center;padding:8px 16px;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:10px}
+
+/* LAYOUT */
+.container{max-width:1100px;margin:0 auto;padding:24px 18px}
+.container-sm{max-width:440px;margin:0 auto;padding:24px 18px}
+.container-md{max-width:700px;margin:0 auto;padding:24px 18px}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:var(--sh2)}
+.card-title{font-family:var(--hfont);font-weight:700;font-size:16px;margin-bottom:16px;display:flex;align-items:center;gap:9px}
+.card-title i{color:var(--accent)}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 18px;border-radius:var(--r2);font-size:14px;font-weight:600;font-family:inherit;border:none;cursor:pointer;transition:all var(--tr);text-decoration:none!important;line-height:1;white-space:nowrap}
+.btn:active{transform:scale(.95)}
+.btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{filter:brightness(1.1);color:#fff}
+.btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border)}.btn-ghost:hover{background:var(--bg4)}
+.btn-hunter{background:var(--hunter);color:#fff}.btn-hunter:hover{filter:brightness(1.1)}
+.btn-runner{background:var(--runner);color:#fff}.btn-runner:hover{filter:brightness(1.1)}
+.btn-warn{background:var(--warn);color:#111}.btn-warn:hover{filter:brightness(1.08)}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{filter:brightness(1.1)}
+.btn-lg{padding:12px 24px;font-size:15px}
+.btn-sm{padding:5px 11px;font-size:12px;border-radius:6px}
+.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
+.btn-full{width:100%}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-hunter{background:rgba(59,130,246,.12);color:var(--hunter);border:1px solid rgba(59,130,246,.25)}
+.badge-runner{background:rgba(16,185,129,.12);color:var(--runner);border:1px solid rgba(16,185,129,.25)}
+.badge-admin{background:rgba(225,29,72,.12);color:var(--accent);border:1px solid rgba(225,29,72,.25)}
+
+/* FORMS */
+.form-group{margin-bottom:16px}
+.form-label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px;letter-spacing:.3px;text-transform:uppercase}
+.form-control{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);padding:10px 13px;font-size:14px;font-family:inherit;outline:none;transition:border-color var(--tr),box-shadow var(--tr);-webkit-appearance:none}
+.form-control:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.form-control::placeholder{color:var(--text2)}
+.form-hint{font-size:12px;color:var(--text2);margin-top:4px}
+select.form-control{cursor:pointer}
+
+/* TOOLTIP POPUP */
+.info-btn{background:none;border:none;color:var(--text2);cursor:pointer;font-size:13px;padding:0;line-height:1;transition:color var(--tr)}
+.info-btn:hover{color:var(--accent)}
+.tip-overlay{display:none;position:fixed;inset:0;z-index:9800;background:rgba(0,0,0,.65);align-items:center;justify-content:center;padding:20px}
+.tip-overlay.open{display:flex}
+.tip-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:26px;max-width:440px;width:100%;box-shadow:var(--sh);animation:fadeUp .2s var(--tr)}
+.tip-box h3{font-family:var(--hfont);font-size:17px;font-weight:700;margin-bottom:10px}
+.tip-box p{font-size:14px;color:var(--text2);line-height:1.7}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ALERTS */
+.alert{padding:12px 15px;border-radius:var(--r2);margin-bottom:14px;font-size:14px;display:flex;align-items:flex-start;gap:9px;line-height:1.5}
+.alert-success{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);color:var(--runner)}
+.alert-danger{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:var(--danger)}
+.alert-warning{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:var(--warn)}
+.alert-info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);color:var(--hunter)}
+
+/* GRID */
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+
+/* MISC */
+.sec-title{font-family:var(--hfont);font-size:18px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:9px}
+.sec-title i{color:var(--accent)}
+hr,.divider{border:none;border-top:1px solid var(--border);margin:18px 0}
+.code{background:var(--bg3);padding:2px 6px;border-radius:5px;font-family:monospace;letter-spacing:1px;font-size:.93em}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .65s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.stat-num{font-family:var(--hfont);font-size:36px;font-weight:800;color:var(--accent);line-height:1}
+.stat-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-top:5px}
+
+/* TOGGLE SWITCH */
+.switch{position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:var(--bg4);border-radius:12px;cursor:pointer;transition:.28s}
+.slider::before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.28s}
+input:checked+.slider{background:var(--accent)}
+input:checked+.slider::before{transform:translateX(20px)}
+
+/* TOAST */
+.toast-wrap{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:7px;z-index:9999;pointer-events:none}
+.toast{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px 16px;font-size:13px;box-shadow:var(--sh);display:flex;align-items:center;gap:9px;max-width:320px;pointer-events:all;animation:tIn .25s var(--tr)}
+.toast.success{border-left:3px solid var(--runner)}.toast.error{border-left:3px solid var(--danger)}.toast.info{border-left:3px solid var(--hunter)}.toast.warn{border-left:3px solid var(--warn)}
+@keyframes tIn{from{transform:translateX(108%);opacity:0}to{opacity:1;transform:none}}
+@keyframes tOut{from{opacity:1}to{opacity:0;transform:translateX(108%)}}
+
+/* TABLE */
+.table{width:100%;border-collapse:collapse;font-size:13px}
+.table th{padding:9px 11px;text-align:left;color:var(--text2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.table td{padding:11px;border-bottom:1px solid var(--border)}
+.table tr:last-child td{border:none}
+.table tr:hover td{background:var(--bg3)}
+
+/* ROLE PICK */
+.role-pick{border:2px solid var(--border);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:all var(--tr)}
+.role-pick:hover{border-color:var(--accent);transform:translateY(-2px)}
+.role-pick.sel-hunter,.role-pick.selected-hunter{border-color:var(--danger);background:rgba(239,68,68,.07)}
+.role-pick.sel-runner,.role-pick.selected-runner{border-color:var(--danger);background:rgba(239,68,68,.07)}
+.role-icon{font-size:38px;margin-bottom:10px}
+.role-name{font-family:var(--hfont);font-size:18px;font-weight:700;margin-bottom:5px}
+
+/* FOOTER */
+footer{border-top:1px solid var(--border);padding:20px;text-align:center;color:var(--text2);font-size:12px;margin-top:50px;background:var(--bg2)}
+footer a{color:var(--text2)}
+
+/* PAGE ANIMATION */
+.page-enter{animation:pageIn .3s var(--tr)}
+@keyframes pageIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* PARTICLES */
+.particles{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.particle{position:absolute;border-radius:50%;background:var(--accent);opacity:.035;animation:pfloat linear infinite}
+@keyframes pfloat{0%{transform:translateY(100vh) scale(0)}100%{transform:translateY(-80px) scale(1)}}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .nav-links{display:none}.hamburger{display:block}
+  .g2,.g3,.g4{grid-template-columns:1fr}
+  .container{padding:18px 12px}
+}
+</style>
+</head>
+<body>
+<div class="site-bg"></div>
+<div class="particles" aria-hidden="true">
+  <div class="particle" style="width:5px;height:5px;left:12%;animation-duration:18s;animation-delay:0s"></div>
+  <div class="particle" style="width:3px;height:3px;left:32%;animation-duration:23s;animation-delay:5s"></div>
+  <div class="particle" style="width:7px;height:7px;left:62%;animation-duration:15s;animation-delay:2s"></div>
+  <div class="particle" style="width:4px;height:4px;left:80%;animation-duration:20s;animation-delay:8s"></div>
+</div>
+
+<!-- Back-to-game banner -->
+{% if active_game and active_game.status == 'active' and request.endpoint != 'dashboard' %}
+<div class="back-game-banner">
+  <i class="fas fa-circle-play fa-beat"></i>
+  Je spel loopt nog: <strong>{{ active_game.name }}</strong>
+  <a href="{{ url_for('game_dashboard', code=active_game.code) }}" style="color:#fff;text-decoration:underline">Verder spelen</a>
+</div>
+{% endif %}
+
+<nav class="nav">
+  <a href="{{ url_for('index') }}" class="nav-brand">
+    {% if site_logo %}<img src="/backgrounds/{{ site_logo }}" alt="{{ site_name }}">
+    {% else %}<i class="fas fa-crosshairs" style="color:var(--accent);font-size:18px"></i>
+    <span><span class="v">Ven</span><span class="faye">Trax</span></span>{% endif %}
+  </a>
+
+  <div class="nav-links">
+    <a href="{{ url_for('index') }}" class="nl {% if request.endpoint=='index' %}active{% endif %}"><i class="fas fa-home"></i> Home</a>
+    <a href="{{ url_for('handleiding') }}" class="nl {% if request.endpoint=='handleiding' %}active{% endif %}"><i class="fas fa-book"></i> Handleiding</a>
+    {% if current_user.is_authenticated %}
+    <a href="{{ url_for('dashboard') }}" class="nl {% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-grip"></i> Dashboard</a>
+    <a href="{{ url_for('news') }}" class="nl {% if request.endpoint in ('news','news_submit') %}active{% endif %}"><i class="fas fa-newspaper"></i> Nieuws</a>
+    {% if current_user.is_admin %}
+    <div class="dd">
+      <a href="{{ url_for('admin') }}" class="nl {% if request.endpoint in ('admin','admin_todo','admin_log','admin_reports','admin_photos','admin_changelog') %}active{% endif %}">
+      <i class="fas fa-shield-halved"></i> Admin
+      {% if pending_news %}<span style="background:var(--accent);color:#fff;border-radius:8px;font-size:10px;padding:1px 5px">{{ pending_news }}</span>{% endif %}
+      </a>
+      <div class="dd-menu">
+        <a href="{{ url_for('admin') }}" class="dd-item"><i class="fas fa-shield-halved"></i> Admin Panel</a>
+        <a href="{{ url_for('admin_todo') }}" class="dd-item"><i class="fas fa-list-check"></i> Admin TODO</a>
+        <a href="{{ url_for('admin_log') }}" class="dd-item"><i class="fas fa-list"></i> Activiteitenlog</a>
+        <a href="{{ url_for('admin_reports') }}" class="dd-item"><i class="fas fa-flag"></i> Meldingen</a>
+        <a href="{{ url_for('admin_photos') }}" class="dd-item"><i class="fas fa-images"></i> Foto goedkeuren</a>
+        <a href="{{ url_for('admin_changelog') }}" class="dd-item"><i class="fas fa-code-branch"></i> Changelog beheren</a>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <div class="nav-right">
+    <button class="icon-btn" onclick="toggleTheme()" title="Thema"><i id="themeIcon" class="fas fa-moon"></i></button>
+    {% if current_user.is_authenticated %}
+    <div class="user-menu">
+      <button class="avatar" aria-haspopup="true">{{ current_user.avatar_letter }}</button>
+      <div class="user-dd">
+        <div class="user-dd-header">
+          <div class="user-dd-name">{{ current_user.username }}</div>
+          <div class="user-dd-sub">{{ current_user.email or 'Geen e-mail' }}</div>
+        </div>
+        <a href="{{ url_for('account') }}" class="dd-item"><i class="fas fa-user"></i> Profiel</a>
+        <a href="{{ url_for('report') }}" class="dd-item"><i class="fas fa-flag"></i> Bug / Tip melden</a>
+        <a href="{{ url_for('changelog') }}" class="dd-item"><i class="fas fa-code-branch"></i> Changelog</a>
+        <div style="border-top:1px solid var(--border);margin:5px 0"></div>
+        <a href="{{ url_for('logout') }}" class="dd-item" style="color:var(--danger)"><i class="fas fa-arrow-right-from-bracket"></i> Uitloggen</a>
+      </div>
+    </div>
+    {% else %}
+    <a href="{{ url_for('login') }}" class="btn btn-primary btn-sm">Inloggen</a>
+    {% endif %}
+    <button class="hamburger" onclick="toggleMobile()"><i class="fas fa-bars"></i></button>
+  </div>
+</nav>
+
+<div class="mobile-menu" id="mobileMenu">
+  <a href="{{ url_for('index') }}" class="nl"><i class="fas fa-home"></i> Home</a>
+  <a href="{{ url_for('handleiding') }}" class="nl"><i class="fas fa-book"></i> Handleiding</a>
+  {% if current_user.is_authenticated %}
+  <a href="{{ url_for('dashboard') }}" class="nl"><i class="fas fa-grip"></i> Dashboard</a>
+  <a href="{{ url_for('new_game') }}" class="nl"><i class="fas fa-plus-circle"></i> Nieuw Spel</a>
+  <a href="{{ url_for('join') }}" class="nl"><i class="fas fa-door-open"></i> Join Spel</a>
+  <a href="{{ url_for('join') }}?scan=1" class="nl"><i class="fas fa-qrcode"></i> QR Scannen</a>
+  <a href="{{ url_for('news') }}" class="nl"><i class="fas fa-newspaper"></i> Nieuws</a>
+  <a href="{{ url_for('account') }}" class="nl"><i class="fas fa-user"></i> Profiel</a>
+  {% if current_user.is_admin %}<a href="{{ url_for('admin') }}" class="nl"><i class="fas fa-shield-halved"></i> Admin</a>{% endif %}
+  <div style="border-top:1px solid var(--border);margin:6px 0"></div>
+  <a href="{{ url_for('logout') }}" class="nl" style="color:var(--danger)"><i class="fas fa-arrow-right-from-bracket"></i> Uitloggen</a>
+  {% else %}
+  <a href="{{ url_for('login') }}" class="nl"><i class="fas fa-sign-in-alt"></i> Inloggen</a>
+  <a href="{{ url_for('register') }}" class="nl"><i class="fas fa-user-plus"></i> Registreren</a>
+  {% endif %}
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div style="max-width:660px;margin:14px auto;padding:0 14px">
+{% for cat, msg in messages %}
+<div class="alert alert-{{ cat if cat != 'message' else 'info' }}">
+  <i class="fas fa-{% if cat=='success' %}check-circle{% elif cat=='danger' %}exclamation-circle{% elif cat=='warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
+  <span>{{ msg }}</span>
+</div>
+{% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<main class="page-enter">{% block content %}{% endblock %}</main>
+
+<footer>
+  <p>&copy; {{ current_year }} <strong style="color:var(--accent)">Ven</strong><strong>Faye</strong>
+  &nbsp;·&nbsp;<a href="{{ url_for('news') }}">Nieuws</a>
+  &nbsp;·&nbsp;<a href="{{ url_for('gps_help') }}">GPS Help</a>
+  &nbsp;·&nbsp;<a href="{{ url_for('gps_test') }}">GPS Test</a></p>
+</footer>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- Tooltip overlay -->
+<div class="tip-overlay" id="tipOverlay" onclick="if(event.target===this)closeTip()">
+  <div class="tip-box">
+    <h3 id="tipTitle"></h3>
+    <p id="tipBody"></p>
+    <button class="btn btn-ghost btn-sm" onclick="closeTip()" style="margin-top:14px"><i class="fas fa-xmark"></i> Sluiten</button>
+  </div>
+</div>
+
+<script>
+// Theme
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('themeIcon').className=t==='dark'?'fas fa-moon':'fas fa-sun'}
+function toggleTheme(){const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';localStorage.setItem('vf_theme',t);applyTheme(t)}
+applyTheme(localStorage.getItem('vf_theme')||'dark');
+
+// Mobile nav
+function toggleMobile(){document.getElementById('mobileMenu').classList.toggle('open')}
+document.addEventListener('click',e=>{const m=document.getElementById('mobileMenu');if(m.classList.contains('open')&&!m.contains(e.target)&&!e.target.closest('.hamburger'))m.classList.remove('open')});
+
+// Toast
+function showToast(msg,type='info',dur=4500){
+  const icons={success:'check-circle',error:'exclamation-circle',info:'info-circle',warn:'exclamation-triangle'};
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  el.innerHTML=`<i class="fas fa-${icons[type]||'info-circle'}" style="flex-shrink:0"></i><span>${msg}</span>`;
+  document.getElementById('toastWrap').appendChild(el);
+  const rm=()=>{el.style.animation='tOut .25s forwards';setTimeout(()=>el.remove(),260)};
+  setTimeout(rm,dur); el.addEventListener('click',rm);
+}
+
+// Tooltip
+function showTip(title,body){document.getElementById('tipTitle').innerHTML=title;document.getElementById('tipBody').innerHTML=body;document.getElementById('tipOverlay').classList.add('open')}
+function showTooltip(title,body){showTip(title,body)}
+function closeTip(){document.getElementById('tipOverlay').classList.remove('open')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeTip()});
+
+// Helpers
+function fmtTime(s){s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return[h,m,sec].map(v=>String(v).padStart(2,'0')).join(':')}
+function fmtMM(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m`}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

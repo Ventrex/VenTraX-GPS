@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Nieuws – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.news-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:20px;transition:border-color var(--tr)}
+.news-card:hover{border-color:var(--accent)}
+.news-img{width:100%;height:240px;object-fit:cover;display:block;cursor:zoom-in}
+.news-body{padding:20px}
+.news-title{font-family:var(--hfont);font-size:22px;font-weight:800;margin-bottom:10px;line-height:1.3}
+.news-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.news-content{font-size:15px;color:var(--text2);line-height:1.7;white-space:pre-wrap}
+.status-pending{background:rgba(245,158,11,.1);color:var(--warn);border:1px solid rgba(245,158,11,.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.status-rejected{background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.3);padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.consent-tag{background:rgba(16,185,129,.08);color:var(--runner);border:1px solid rgba(16,185,129,.2);padding:3px 10px;border-radius:20px;font-size:11px}
+.disclaimer{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:var(--r);padding:14px 18px;margin-bottom:24px;font-size:13px;line-height:1.6;color:var(--text2)}
+.disclaimer strong{color:var(--danger)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container" style="max-width:820px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+    <div>
+      <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800"><i class="fas fa-newspaper" style="color:var(--accent)"></i> Nieuws Feed</h1>
+      <p style="color:var(--text2);margin-top:4px">Successen en verhalen van de VenTrax community</p>
+    </div>
+    {% if current_user.is_authenticated %}
+    <a href="{{ url_for('news_submit') }}" class="btn btn-primary"><i class="fas fa-pen-to-square"></i> Nieuws indienen</a>
+    {% endif %}
+  </div>
+
+
+
+  {% if not articles %}
+  <div style="text-align:center;padding:60px;color:var(--text2)">
+    <i class="fas fa-newspaper" style="font-size:48px;opacity:.2;display:block;margin-bottom:16px"></i>
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Nog geen artikelen</div>
+    <div style="font-size:14px">Wees de eerste! Deel jouw VenTrax avontuur.</div>
+    {% if current_user.is_authenticated %}
+    <a href="{{ url_for('news_submit') }}" class="btn btn-primary" style="margin-top:20px"><i class="fas fa-pen-to-square"></i> Artikel indienen</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% for a in articles %}
+  <div class="news-card" id="art-{{ a.id }}">
+    {% if a.status == 'pending' %}
+    <div style="padding:10px 20px;background:rgba(245,158,11,.06);border-bottom:1px solid rgba(245,158,11,.2);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span class="status-pending"><i class="fas fa-hourglass-half"></i> Wacht op goedkeuring</span>
+      {% if current_user.is_authenticated and current_user.is_admin %}
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-runner btn-sm" onclick="approveArt({{ a.id }})"><i class="fas fa-check"></i> Goedkeuren</button>
+        <button class="btn btn-danger btn-sm" onclick="rejectArt({{ a.id }})"><i class="fas fa-xmark"></i> Afwijzen</button>
+      </div>
+      {% endif %}
+    </div>
+    {% elif a.status == 'rejected' %}
+    <div style="padding:10px 20px;background:rgba(239,68,68,.06);border-bottom:1px solid rgba(239,68,68,.2)">
+      <span class="status-rejected"><i class="fas fa-xmark-circle"></i> Afgewezen</span>
+    </div>
+    {% endif %}
+
+    {% if a.image_filename %}
+    <img src="/uploads/{{ a.image_filename }}" class="news-img" alt="{{ a.title }}" onclick="openLB('/uploads/{{ a.image_filename }}')">
+    {% if a.photo_consent %}
+    <div style="padding:6px 14px;background:rgba(16,185,129,.05);border-bottom:1px solid var(--border)">
+      <span class="consent-tag"><i class="fas fa-shield-check"></i> Toestemming gegeven voor publicatie van afbeelding</span>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div class="news-body">
+      <h2 class="news-title">{{ a.title }}</h2>
+      <div class="news-meta">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">{{ a.author.avatar_letter }}</div>
+          <span style="font-weight:600;font-size:14px">{{ a.author.username }}</span>
+        </div>
+        <span style="color:var(--text2);font-size:13px">{{ a.created_at.strftime('%d %b %Y') }}</span>
+        {% if a.approved_at %}<span style="color:var(--text2);font-size:12px"><i class="fas fa-check-circle" style="color:var(--runner)"></i> Goedgekeurd {{ a.approved_at.strftime('%d %b') }}</span>{% endif %}
+      </div>
+      <div class="news-content">{{ a.content }}</div>
+
+      <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;align-items:center">
+        {% if current_user.is_authenticated %}
+        <button class="btn btn-ghost btn-sm" id="like-{{ a.id }}" onclick="likeArt({{ a.id }})">
+          <i class="fas fa-heart" style="color:var(--danger)"></i> <span id="lc-{{ a.id }}">{{ a.likes }}</span>
+        </button>
+        {% endif %}
+        {% if current_user.is_authenticated and (current_user.id == a.user_id or current_user.is_admin) %}
+        <button class="btn btn-danger btn-xs" onclick="delArt({{ a.id }})"><i class="fas fa-trash"></i> Verwijderen</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Lightbox -->
+<div id="lb" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out" onclick="this.style.display='none'">
+  <img id="lbImg" src="" style="max-width:94vw;max-height:94vh;border-radius:10px;object-fit:contain">
+</div>
+
+<!-- Sticky disclaimer onderin -->
+<div style="position:sticky;bottom:0;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-top:1px solid rgba(239,68,68,.3);padding:12px 18px;font-size:12px;color:var(--text2);z-index:50;margin-top:20px">
+  <strong style="color:var(--danger)"><i class="fas fa-shield-halved"></i> Privacy</strong> — Geen foto's van personen zonder toestemming. Geen kentekens of privégegevens. Beheerders kunnen foto's verwijderen.
+</div>
+
+<script>
+function openLB(s){document.getElementById('lbImg').src=s;document.getElementById('lb').style.display='flex'}
+function likeArt(id){fetch(`/news/${id}/like`,{method:'POST'}).then(r=>r.json()).then(d=>{document.getElementById('lc-'+id).textContent=d.likes})}
+function delArt(id){if(!confirm('Verwijderen?'))return;fetch(`/news/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success)document.getElementById('art-'+id).remove()})}
+function approveArt(id){fetch(`/news/${id}/approve`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast('Goedgekeurd!','success');setTimeout(()=>location.reload(),800)}})}
+function rejectArt(id){if(!confirm('Afwijzen?'))return;fetch(`/news/${id}/reject`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast('Afgewezen','info');setTimeout(()=>location.reload(),600)}})}
+</script>
+{% endblock %}

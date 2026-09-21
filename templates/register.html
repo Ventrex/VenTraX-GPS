@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Registreren – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-sm" style="padding-top:56px">
+  <div style="text-align:center;margin-bottom:36px">
+    <div style="font-family:'Syne',sans-serif;font-size:48px;font-weight:800;color:var(--accent);letter-spacing:-1px">{{ site_name }}</div>
+    <p style="color:var(--text2);margin-top:8px">Maak gratis een account aan</p>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fas fa-user-plus"></i> Registreren</div>
+    <form method="POST">
+      <div class="form-group">
+        <label class="form-label">Gebruikersnaam</label>
+        <input name="username" id="un" class="form-control" placeholder="Min. 3 tekens" autocomplete="username" required minlength="3" autofocus>
+        <div id="unH" class="form-hint"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">E-mail <span style="text-transform:none;font-weight:400">(optioneel)</span></label>
+        <input name="email" type="email" class="form-control" placeholder="jouw@email.nl">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Wachtwoord</label>
+        <div style="position:relative">
+          <input name="password" id="pw1" type="password" class="form-control" placeholder="Min. 6 tekens" required minlength="6" style="padding-right:44px">
+          <button type="button" onclick="tPw('pw1','ei1')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px"><i id="ei1" class="fas fa-eye"></i></button>
+        </div>
+        <div style="height:4px;border-radius:2px;margin-top:8px;background:var(--border);overflow:hidden"><div id="pwBar" style="height:100%;width:0;transition:all .3s;border-radius:2px"></div></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Bevestig Wachtwoord</label>
+        <input name="confirm_password" id="pw2" type="password" class="form-control" placeholder="Herhaal wachtwoord" required>
+        <div id="pwM" class="form-hint"></div>
+      </div>
+      <button type="submit" class="btn btn-runner btn-full btn-lg">
+        <i class="fas fa-user-plus"></i> Account Aanmaken
+      </button>
+    </form>
+    <hr>
+    <div style="text-align:center;font-size:14px;color:var(--text2)">Al een account? <a href="{{ url_for('login') }}">Inloggen</a></div>
+  </div>
+</div>
+<script>
+function tPw(i,ic){const f=document.getElementById(i),e=document.getElementById(ic);f.type=f.type==='password'?'text':'password';e.className=f.type==='password'?'fas fa-eye':'fas fa-eye-slash'}
+document.getElementById('pw1').addEventListener('input',function(){
+  const n=this.value.length,b=document.getElementById('pwBar');
+  if(n<6){b.style.width='25%';b.style.background='var(--danger)'}
+  else if(n<10){b.style.width='60%';b.style.background='var(--warn)'}
+  else{b.style.width='100%';b.style.background='var(--runner)'}
+});
+document.getElementById('pw2').addEventListener('input',function(){
+  const m=document.getElementById('pwM');
+  if(this.value===document.getElementById('pw1').value){m.textContent='✓ Wachtwoorden komen overeen';m.style.color='var(--runner)'}
+  else{m.textContent='✗ Niet gelijk';m.style.color='var(--danger)'}
+});
+document.getElementById('un').addEventListener('input',function(){
+  document.getElementById('unH').textContent=this.value.length<3?'Minimaal 3 tekens':'';
+});
+</script>
+{% endblock %}

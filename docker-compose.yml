@@ -1,0 +1,14 @@
+services:
+  ventrax:
+    build: .
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./instance:/app/instance
+      - ./static/uploads:/app/static/uploads
+      - ./static/backgrounds:/app/static/backgrounds
+      - ./static/qr:/app/static/qr
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    restart: unless-stopped

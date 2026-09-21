@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Changelog Beheer – Admin{% endblock %}
+{% block content %}
+<div class="container">
+  <h1 style="font-family:var(--hfont);font-size:28px;font-weight:800;margin-bottom:24px">
+    <i class="fas fa-code-branch" style="color:var(--accent)"></i> Changelog Beheer
+  </h1>
+
+  <!-- Add entry -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><i class="fas fa-plus-circle"></i> Nieuwe Entry</div>
+    <form method="POST">
+      <div class="grid g2" style="gap:12px">
+        <div class="form-group">
+          <label class="form-label">Versienummer</label>
+          <input name="version" class="form-control" placeholder="bijv. 1.5.0" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select name="type" class="form-control">
+            <option value="feature">🆕 Nieuw feature</option>
+            <option value="fix">🐛 Bugfix</option>
+            <option value="update">🔄 Update</option>
+            <option value="security">🔒 Beveiliging</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Titel</label>
+        <input name="title" class="form-control" placeholder="Korte samenvatting" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Inhoud <span style="text-transform:none;font-weight:400;font-size:12px">— één punt per regel, begin met • of -</span></label>
+        <textarea name="body" class="form-control" rows="6" placeholder="• Nieuwe feature toegevoegd&#10;• Bug X opgelost&#10;• Prestaties verbeterd" required style="resize:vertical;font-family:monospace"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+          <input type="checkbox" name="published" checked style="accent-color:var(--accent)"> Direct publiceren
+        </label>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Opslaan</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Existing entries -->
+  {% if entries %}
+  <div class="card">
+    <div class="card-title"><i class="fas fa-list"></i> Bestaande Entries</div>
+    {% for e in entries %}
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);gap:12px" id="cl-{{ e.id }}">
+      <div style="flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
+          <span style="font-family:var(--hfont);font-size:13px;font-weight:700;color:var(--accent)">v{{ e.version }}</span>
+          <span class="badge" style="font-size:10px;background:var(--bg3);color:var(--text2)">{{ e.type }}</span>
+          {% if not e.published %}<span class="badge" style="font-size:10px;background:rgba(245,158,11,.1);color:var(--warn);border:1px solid rgba(245,158,11,.25)">Concept</span>{% endif %}
+        </div>
+        <div style="font-weight:600;font-size:14px;margin-bottom:2px">{{ e.title }}</div>
+        <div style="font-size:12px;color:var(--text2)">{{ e.created_at.strftime('%d %b %Y') }}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <a href="{{ url_for('changelog') }}" class="btn btn-ghost btn-xs" target="_blank"><i class="fas fa-eye"></i></a>
+        <button class="btn btn-danger btn-xs" onclick="delEntry({{ e.id }})"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+<script>
+function delEntry(id) {
+  if(!confirm('Entry verwijderen?')) return;
+  fetch(`/admin/changelog/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{
+    if(d.success){document.getElementById('cl-'+id).remove();showToast('Verwijderd','success');}
+  });
+}
+</script>
+{% endblock %}

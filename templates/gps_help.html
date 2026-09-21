@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}GPS Help – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-md">
+  <h1 style="font-family:'Syne',sans-serif;font-size:30px;font-weight:800;margin-bottom:6px">
+    <i class="fas fa-circle-question" style="color:var(--accent)"></i> GPS Help
+  </h1>
+  <p style="color:var(--text2);margin-bottom:28px">Stappen om GPS problemen op te lossen</p>
+
+  {% set items = [
+    ('Zijn je browserrechten ingesteld?', 'fa-shield-halved', 'Ga naar de adresbalk van je browser en klik op het slotje (🔒). Zet Locatie op "Toestaan". Herlaad dan de pagina.'),
+    ('Zit je buiten of bij een raam?', 'fa-location-dot', 'GPS werkt het best buiten. Binnenshuis kan het signaal zwak zijn. Ga naar buiten of zit dicht bij een raam voor een goed signaal.'),
+    ('iOS (iPhone/iPad)', 'fa-apple', 'Ga naar Instellingen → Privacy & Beveiliging → Locatievoorzieningen. Zet dit aan. Scroll naar Safari en kies "Bij gebruik van app". Herlaad de pagina.'),
+    ('Android (Chrome)', 'fa-android', 'Tik op de drie puntjes → Instellingen → Site-instellingen → Locatie. Zet toestemming aan voor deze site. Of: Instellingen → Apps → Chrome → Rechten → Locatie → Toestaan.'),
+    ('Privé/Incognito modus', 'fa-user-secret', 'In privévensters blokkeert de browser GPS soms standaard. Open VenTrax in een normaal venster.'),
+    ('HTTPS vereist', 'fa-lock', 'GPS werkt alleen via een beveiligde verbinding (https://). Controleer dat de URL begint met https.'),
+    ('Probeer de GPS Test', 'fa-satellite-dish', 'Gebruik de GPS Testpagina om te controleren of je GPS actief is en hoe nauwkeurig het signaal is.'),
+  ] %}
+
+  {% for title, icon, desc in items %}
+  <div class="card" style="margin-bottom:14px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:44px;height:44px;border-radius:10px;background:rgba(225,29,72,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <i class="fab {{ icon }} fa-fw" style="color:var(--accent);font-size:18px"></i>
+    </div>
+    <div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:5px">{{ loop.index }}. {{ title }}</div>
+      <div style="font-size:14px;color:var(--text2);line-height:1.6">{{ desc }}</div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div style="text-align:center;margin-top:32px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <a href="{{ url_for('gps_test') }}" class="btn btn-primary btn-lg">
+      <i class="fas fa-satellite-dish"></i> GPS Testen
+    </a>
+    {% if current_user.is_authenticated %}
+    <a href="{{ url_for('dashboard') }}" class="btn btn-ghost btn-lg">
+      <i class="fas fa-home"></i> Dashboard
+    </a>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

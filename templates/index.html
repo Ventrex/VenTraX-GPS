@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title %}{{ site_name }} - Het echte jachtspel{% endblock %}
+{% block extra_head %}
+<style>
+.hero{text-align:center;padding:60px 20px 40px;position:relative;z-index:1}
+.hero-logo{width:90px;height:90px;border-radius:50%;object-fit:cover;margin:0 auto 20px;display:block;border:3px solid var(--accent);box-shadow:0 0 30px var(--accent-glow)}
+.hero-title{font-family:var(--hfont);font-size:clamp(36px,8vw,64px);font-weight:800;line-height:1.1;margin-bottom:12px}
+.hero-sub{font-size:clamp(14px,3vw,18px);color:var(--text2);max-width:560px;margin:0 auto 30px;line-height:1.6}
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.lb-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:32px}
+.lb-tabs{display:flex;border-bottom:1px solid var(--border)}
+.lb-tab{flex:1;padding:12px 8px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);border:none;background:none;font-family:inherit;transition:all .2s;border-bottom:3px solid transparent}
+.lb-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--bg3)}
+.lb-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border)}
+.lb-row:last-child{border:none}
+.lb-rank{font-family:var(--hfont);font-size:18px;font-weight:800;width:28px;text-align:center;color:var(--text2);flex-shrink:0}
+.lb-rank.gold{color:#f59e0b}.lb-rank.silver{color:#94a3b8}.lb-rank.bronze{color:#b45309}
+.lb-av{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
+.lb-name{flex:1;font-weight:600;font-size:14px}.lb-val{font-family:var(--hfont);font-size:16px;font-weight:700;color:var(--accent)}
+.games-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:40px}
+.game-tile{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .25s;text-decoration:none;display:block}
+.game-tile:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
+.game-tile-img{height:165px;background:#111827;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.game-tile-img img{width:100%;height:100%;object-fit:cover}
+.game-tile-icon{font-size:58px;color:#fff;line-height:1}
+.game-tile-badge{position:absolute;top:12px;right:12px;background:var(--accent);color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px}
+.game-tile-body{padding:18px}
+.game-tile-name{font-family:var(--hfont);font-size:22px;font-weight:800;margin-bottom:5px}
+.game-tile-tag{font-size:12px;color:var(--accent);font-weight:800;margin-bottom:8px}
+.game-tile-desc{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:14px}
+.game-tile-stats{display:flex;gap:14px;font-size:12px;color:var(--text2);flex-wrap:wrap}
+.game-tile-stat{display:flex;align-items:center;gap:5px}
+.game-tile.soon{opacity:.58;cursor:not-allowed}
+.game-tile.soon:hover{transform:none;border-color:var(--border);box-shadow:none}
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="hero">
+  {% if site_logo %}
+  <img src="/backgrounds/{{ site_logo }}" alt="{{ site_name }}" class="hero-logo">
+  {% else %}
+  <div class="hero-logo" style="background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff"><i class="fas fa-crosshairs"></i></div>
+  {% endif %}
+  <h1 class="hero-title">
+    <span style="color:var(--text)">Ven</span><span style="color:var(--accent)">Trax</span>
+  </h1>
+  <p class="hero-sub">Het echte GPS-jachtspel. Speel buiten met vrienden, kies je missie en maak van de buurt een avontuur.</p>
+  {% if current_user.is_authenticated %}
+  <div class="hero-btns">
+    <a href="{{ url_for('new_game') }}" class="btn btn-primary btn-lg"><i class="fas fa-plus-circle"></i> Nieuw Spel</a>
+    <a href="{{ url_for('join') }}" class="btn btn-ghost btn-lg"><i class="fas fa-door-open"></i> Join Spel</a>
+    <a href="{{ url_for('join') }}?scan=1" class="btn btn-ghost btn-lg"><i class="fas fa-qrcode"></i> QR Scannen</a>
+  </div>
+  {% else %}
+  <div class="hero-btns">
+    <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg"><i class="fas fa-user-plus"></i> Registreren</a>
+    <a href="{{ url_for('login') }}" class="btn btn-ghost btn-lg"><i class="fas fa-sign-in-alt"></i> Inloggen</a>
+  </div>
+  {% endif %}
+</div>
+
+<div class="container">
+  <div class="sec-title" style="margin-bottom:16px">
+    <i class="fas fa-trophy" style="color:#f59e0b"></i> Leaderboard
+  </div>
+  <div class="lb-wrap">
+    <div class="lb-tabs">
+      <button class="lb-tab active" onclick="showLb('hunters',this)">Top Hunters</button>
+      <button class="lb-tab" onclick="showLb('runners',this)">Top Runners</button>
+      <button class="lb-tab" onclick="showLb('points',this)">Meeste Punten</button>
+    </div>
+    <div id="lb-hunters" class="lb-body">
+      {% set ranks = ['gold','silver','bronze','',''] %}
+      {% for u in top_hunters %}
+      <div class="lb-row">
+        <div class="lb-rank {{ ranks[loop.index0] if loop.index0 < 3 else '' }}">{{ loop.index }}</div>
+        <div class="lb-av">{{ u.avatar_letter }}</div>
+        <div class="lb-name">{{ u.username }}</div>
+        <div class="lb-val">{{ u.hunter_wins }} <span style="font-size:11px;font-weight:400;color:var(--text2)">wins</span></div>
+      </div>
+      {% else %}
+      <div style="padding:30px;text-align:center;color:var(--text2);font-size:14px">Nog geen data</div>
+      {% endfor %}
+    </div>
+    <div id="lb-runners" class="lb-body" style="display:none">
+      {% for u in top_runners %}
+      <div class="lb-row">
+        <div class="lb-rank {{ ranks[loop.index0] if loop.index0 < 3 else '' }}">{{ loop.index }}</div>
+        <div class="lb-av" style="background:var(--runner)">{{ u.avatar_letter }}</div>
+        <div class="lb-name">{{ u.username }}</div>
+        <div class="lb-val">{{ u.runner_wins }} <span style="font-size:11px;font-weight:400;color:var(--text2)">wins</span></div>
+      </div>
+      {% else %}
+      <div style="padding:30px;text-align:center;color:var(--text2);font-size:14px">Nog geen data</div>
+      {% endfor %}
+    </div>
+    <div id="lb-points" class="lb-body" style="display:none">
+      {% for u in top_points %}
+      <div class="lb-row">
+        <div class="lb-rank {{ ranks[loop.index0] if loop.index0 < 3 else '' }}">{{ loop.index }}</div>
+        <div class="lb-av" style="background:var(--warn);color:#111">{{ u.avatar_letter }}</div>
+        <div class="lb-name">{{ u.username }}</div>
+        <div class="lb-val">{{ '%.0f'|format(u.total_points) }} <span style="font-size:11px;font-weight:400;color:var(--text2)">pt</span></div>
+      </div>
+      {% else %}
+      <div style="padding:30px;text-align:center;color:var(--text2);font-size:14px">Nog geen data</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="sec-title" style="margin-bottom:16px"><i class="fas fa-gamepad"></i> Kies je spel</div>
+  <div class="games-grid">
+    {% for game in games_catalog %}
+    {% set playable = game.is_active and not game.coming_soon %}
+    {% if playable %}
+    <a href="{{ url_for('new_game', mode=game.slug) if current_user.is_authenticated else url_for('login') }}" class="game-tile">
+    {% else %}
+    <div class="game-tile soon" title="Binnenkort beschikbaar">
+    {% endif %}
+      <div class="game-tile-img" style="background:linear-gradient(135deg,{{ game.color or '#e11d48' }},#111827)">
+        {% if game.logo_file %}
+          {% if game.logo_file == 'logo_round.png' %}
+          <img src="/static/img/{{ game.logo_file }}" alt="{{ game.name }}">
+          {% else %}
+          <img src="/backgrounds/{{ game.logo_file }}" alt="{{ game.name }}">
+          {% endif %}
+        {% else %}
+        <i class="fas {{ game.icon or 'fa-gamepad' }} game-tile-icon"></i>
+        {% endif %}
+        {% if playable %}
+        <span class="game-tile-badge"><i class="fas fa-circle" style="font-size:8px;margin-right:4px;color:#10b981"></i> Actief</span>
+        {% else %}
+        <span class="game-tile-badge" style="background:#475569">Binnenkort</span>
+        {% endif %}
+      </div>
+      <div class="game-tile-body">
+        <div class="game-tile-name" style="{{ '' if playable else 'color:var(--text2)' }}">{{ game.name }}</div>
+        {% if game.tagline %}<div class="game-tile-tag">{{ game.tagline }}</div>{% endif %}
+        <div class="game-tile-desc">{{ game.description or 'Binnenkort beschikbaar.' }}</div>
+        <div class="game-tile-stats">
+          {% if playable %}
+          <div class="game-tile-stat"><i class="fas fa-map-location-dot"></i> GPS</div>
+          <div class="game-tile-stat"><i class="fas fa-person-running"></i> Buiten spelen</div>
+          <div class="game-tile-stat"><i class="fas fa-play"></i> Startbaar</div>
+          {% else %}
+          <div class="game-tile-stat"><i class="fas fa-lock"></i> In ontwikkeling</div>
+          {% endif %}
+        </div>
+      </div>
+    {% if playable %}</a>{% else %}</div>{% endif %}
+    {% else %}
+    <div class="card" style="color:var(--text2)">Nog geen spellen ingesteld.</div>
+    {% endfor %}
+  </div>
+
+  {% if recent_news %}
+  <div class="sec-title" style="margin-bottom:14px"><i class="fas fa-newspaper"></i> Recent Nieuws</div>
+  <div class="grid g3" style="margin-bottom:40px">
+    {% for a in recent_news %}
+    <div class="card" style="padding:0;overflow:hidden">
+      {% if a.image_filename %}
+      <img src="/uploads/{{ a.image_filename }}" style="width:100%;height:130px;object-fit:cover">
+      {% endif %}
+      <div style="padding:14px">
+        <div style="font-family:var(--hfont);font-size:15px;font-weight:700;margin-bottom:6px;line-height:1.3">{{ a.title }}</div>
+        <div style="font-size:12px;color:var(--text2)">{{ a.author.username }} - {{ a.created_at.strftime('%d %b') }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div style="text-align:center;margin-bottom:40px">
+    <a href="{{ url_for('news') }}" class="btn btn-ghost"><i class="fas fa-newspaper"></i> Alle nieuws</a>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function showLb(tab, btn) {
+  ['hunters','runners','points'].forEach(t => {
+    document.getElementById('lb-'+t).style.display = t === tab ? '' : 'none';
+  });
+  document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+</script>
+{% endblock %}

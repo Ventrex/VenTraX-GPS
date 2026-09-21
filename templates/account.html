@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Mijn Profiel – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container" style="max-width:820px">
+  <h1 style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;margin-bottom:24px">
+    <i class="fas fa-user" style="color:var(--accent)"></i> Mijn Profiel
+  </h1>
+
+  <div class="grid g2" style="gap:20px;align-items:start">
+    <!-- Left: Info -->
+    <div>
+      <div class="card" style="margin-bottom:20px;text-align:center;padding:32px">
+        <div style="width:80px;height:80px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:36px;margin:0 auto 16px">
+          {{ current_user.avatar_letter }}
+        </div>
+        <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800">{{ current_user.username }}</div>
+        {% if current_user.email %}<div style="color:var(--text2);font-size:14px;margin-top:4px">{{ current_user.email }}</div>{% endif %}
+        {% if current_user.is_admin %}<div style="margin-top:10px"><span class="badge badge-admin"><i class="fas fa-shield-halved"></i> Admin</span></div>{% endif %}
+        <div style="color:var(--text2);font-size:13px;margin-top:10px">Lid sinds {{ current_user.created_at.strftime('%d %b %Y') }}</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><i class="fas fa-pen"></i> Profiel Bewerken</div>
+        <form id="profileForm">
+          <div class="form-group">
+            <label class="form-label">Gebruikersnaam</label>
+            <input id="pUN" class="form-control" value="{{ current_user.username }}" placeholder="Gebruikersnaam">
+          </div>
+          <div class="form-group">
+            <label class="form-label">E-mail</label>
+            <input id="pEM" type="email" class="form-control" value="{{ current_user.email or '' }}" placeholder="jouw@email.nl">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nieuw Wachtwoord <span style="font-weight:400;text-transform:none;font-size:12px">(leeg = ongewijzigd)</span></label>
+            <input id="pPW" type="password" class="form-control" placeholder="Nieuw wachtwoord">
+          </div>
+          <button type="button" class="btn btn-primary" onclick="saveProfile()">
+            <i class="fas fa-save"></i> Opslaan
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Right: Stats -->
+    <div>
+      <div class="grid g2" style="margin-bottom:20px">
+        <div class="card stat-card"><div class="stat-num">{{ current_user.total_games }}</div><div class="stat-label"><i class="fas fa-gamepad"></i> Spellen</div></div>
+        <div class="card stat-card"><div class="stat-num" style="color:var(--warn)">{{ '%.2f'|format(current_user.total_points or 0) }}</div><div class="stat-label"><i class="fas fa-star"></i> Punten</div></div>
+        <div class="card stat-card"><div class="stat-num" style="color:var(--hunter)">{{ current_user.hunter_wins }}</div><div class="stat-label"><i class="fas fa-crosshairs"></i> Hunter Wins</div></div>
+        <div class="card stat-card"><div class="stat-num" style="color:var(--runner)">{{ current_user.runner_wins }}</div><div class="stat-label"><i class="fas fa-person-running"></i> Runner Wins</div></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px"><span style="color:var(--text2)">Totale afstand</span><strong>{{ (current_user.total_distance/1000)|round(1) }} km</strong></div>
+        <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:14px"><span style="color:var(--text2)">Win percentage</span><strong>{% if current_user.total_games %}{{ ((current_user.hunter_wins+current_user.runner_wins)/current_user.total_games*100)|round|int }}%{% else %}–{% endif %}</strong></div>
+      </div>
+
+      {% if recent %}
+      <div class="card" style="margin-top:20px">
+        <div class="card-title"><i class="fas fa-history"></i> Recente Spellen</div>
+        {% for gp in recent %}
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <span class="badge badge-{{ gp.role }}"><i class="fas fa-{{ 'crosshairs' if gp.role=='hunter' else 'person-running' }}"></i> {{ gp.role|title }}</span>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:500">{{ gp.game.name }}</div>
+            <div style="font-size:12px;color:var(--text2)">{{ gp.joined_at.strftime('%d %b') }} · {{ '%.2f'|format(gp.points or 0) }} pts</div>
+          </div>
+          <span class="badge" style="font-size:11px;background:var(--bg3);color:var(--text2)">{{ gp.game.status|title }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+function saveProfile() {
+  const payload = { username: document.getElementById('pUN').value.trim(), email: document.getElementById('pEM').value.trim() };
+  const pw = document.getElementById('pPW').value;
+  if (pw) payload.password = pw;
+  fetch('/admin/user/{{ current_user.id }}/edit', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json()).then(d=>{ if(d.success) showToast('Profiel opgeslagen!','success'); else showToast(d.error||'Fout','error'); });
+}
+</script>
+{% endblock %}

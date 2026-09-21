@@ -1,0 +1,948 @@
+﻿{% extends "base.html" %}
+{% block title %}Nieuw Spel - {{ site_name }}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+.step{display:none}.step.active{display:block}
+.step-dots{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:36px}
+.step-item{display:flex;flex-direction:column;align-items:center;position:relative;flex:1}
+.step-item:not(:last-child)::after{content:'';position:absolute;top:14px;left:50%;width:100%;height:2px;background:var(--border);z-index:0;transition:background .4s}
+.step-item.done:not(:last-child)::after{background:var(--accent)}
+.step-circle{width:28px;height:28px;border-radius:50%;background:var(--border);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;position:relative;z-index:1;transition:all .3s;border:2px solid var(--border)}
+.step-item.done .step-circle{background:var(--accent);color:#fff;border-color:var(--accent)}
+.step-lbl{font-size:11px;color:var(--text2);margin-top:6px;text-align:center;font-weight:500}
+.step-item.done .step-lbl{color:var(--accent)}
+
+/* Difficulty cards */
+.diff-card{border:2px solid var(--border);border-radius:var(--r);padding:18px;cursor:pointer;transition:all var(--tr);position:relative;text-align:center}
+.diff-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+.diff-card.sel-easy{border-color:var(--runner);background:rgba(16,185,129,.06)}
+.diff-card.sel-medium{border-color:var(--warn);background:rgba(245,158,11,.06)}
+.diff-card.sel-hard{border-color:var(--danger);background:rgba(239,68,68,.06)}
+.diff-card.sel-custom{border-color:var(--hunter);background:rgba(59,130,246,.06)}
+.diff-icon{font-size:32px;margin-bottom:10px}
+.diff-img{width:100%;height:110px;object-fit:cover;border-radius:8px;margin-bottom:10px;border:1px solid var(--border)}
+.diff-name{font-family:var(--hfont);font-size:17px;font-weight:700;margin-bottom:4px}
+.diff-desc{font-size:12px;color:var(--text2);line-height:1.5}
+.diff-multi{position:absolute;top:10px;right:10px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px}
+
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border)}
+.toggle-row:last-child{border:none}
+.toggle-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.toggle-label{font-weight:500;font-size:15px}
+.toggle-sub{font-size:12px;color:var(--text2);margin-top:2px}
+#customSettings{opacity:1!important}
+
+/* Multiplier badge */
+.multi-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px 18px;
+  font-family:var(--hfont);font-size:24px;font-weight:800;
+}
+
+.summary-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+.summary-row:last-child{border:none}
+.summary-key{color:var(--text2)}
+.summary-val{font-weight:600}
+#summaryContent{color:var(--text)}
+
+/* custom interval row */
+.custom-input-row{display:none;margin-top:10px}
+#playfieldMap{height:320px;border-radius:var(--r2);overflow:hidden;border:1px solid var(--border);background:var(--bg3);margin:12px 0}
+.pf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pf-color{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:13px;cursor:pointer}
+.pf-color input{accent-color:var(--accent)}
+.pf-help{font-size:12px;color:var(--text2);line-height:1.5}
+.extra-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin:8px 0 14px}
+.extra-choice{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:9px 10px;font-size:13px;cursor:pointer;color:var(--text2)}
+.extra-choice input{accent-color:var(--accent)}
+.extra-choice:has(input:checked){border-color:var(--accent);background:rgba(225,29,72,.08);color:var(--text)}
+.style-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:10px 0 16px}
+.style-card{border:1px solid var(--border);background:var(--bg3);border-radius:var(--r);padding:14px;cursor:pointer;transition:all .2s}
+.style-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.style-card.active{border-color:var(--accent);background:rgba(225,29,72,.08)}
+.style-name{font-family:var(--hfont);font-size:16px;font-weight:800;margin-bottom:4px}
+.style-desc{font-size:12px;color:var(--text2);line-height:1.45}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-md" style="padding-top:36px">
+  <div style="margin-bottom:28px">
+    <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800"><i class="fas fa-plus-circle" style="color:var(--accent)"></i> Nieuw Spel</h1>
+    <p style="color:var(--text2);margin-top:6px">Configureer een nieuw VenTrax spel</p>
+  </div>
+
+  <form method="POST" id="gf">
+
+    <!-- Step indicator -->
+    <div class="step-dots">
+      <div class="step-item done" id="si1"><div class="step-circle" id="sc1">1</div><div class="step-lbl">Basis</div></div>
+      <div class="step-item" id="si2"><div class="step-circle" id="sc2">2</div><div class="step-lbl">Moeilijkheid</div></div>
+      <div class="step-item" id="si3"><div class="step-circle" id="sc3">3</div><div class="step-lbl">Instellingen</div></div>
+      <div class="step-item" id="si4"><div class="step-circle" id="sc4">4</div><div class="step-lbl">Extra</div></div>
+      <div class="step-item" id="si5"><div class="step-circle" id="sc5">5</div><div class="step-lbl">Samenvatting</div></div>
+    </div>
+
+    <!-- Step 1: Basis -->
+    <div class="step active" id="step1">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-gamepad"></i> Basisinstellingen</div>
+
+        <div class="form-group">
+          <label class="form-label">Spelnaam</label>
+          <input name="name" class="form-control" placeholder="Geef het spel een naam" value="{{ default_game_name }}" required>
+        </div>
+
+        {% if game_templates %}
+        <div class="form-group">
+          <label class="form-label">Vorig spel hergebruiken</label>
+          <select id="templateSelect" class="form-control" onchange="applyGameTemplate(this.value)">
+            <option value="">Nieuw instellen</option>
+            {% for t in game_templates %}
+            <option value="{{ loop.index0 }}">{{ t.name }} Â· {{ t.created_at[:10] }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-hint">Neemt instellingen en extra's over. Spelers en persoonlijke locaties worden niet opgeslagen in templates.</div>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label">Jouw Rol</label>
+          <div class="grid g2" style="margin-top:6px">
+            <label><input type="radio" name="role" value="hunter" style="display:none" onchange="selRole(this)" checked>
+              <div class="role-pick selected-hunter" id="rh" onclick="selectRole('hunter', event)">
+                <div class="role-icon"><i class="fas fa-crosshairs" style="color:var(--hunter)"></i></div>
+                <div class="role-name" style="color:var(--hunter)">Hunter</div>
+                <div style="font-size:13px;color:var(--text2)">Jij jaagt op de runners</div>
+              </div></label>
+            <label><input type="radio" name="role" value="runner" style="display:none" onchange="selRole(this)">
+              <div class="role-pick" id="rr" onclick="selectRole('runner', event)">
+                <div class="role-icon"><i class="fas fa-person-running" style="color:var(--runner)"></i></div>
+                <div class="role-name" style="color:var(--runner)">Runner</div>
+                <div style="font-size:13px;color:var(--text2)">Jij ontsnapt aan de hunters</div>
+              </div></label>
+          </div>
+        </div>
+
+        <div class="grid g2">
+          <div class="form-group">
+            <label class="form-label">Spelduur</label>
+            <select name="duration" id="durationSel" class="form-control" onchange="checkCustom('durationSel','durationCustom')">
+              <option value="30">30 min</option><option value="60">1 uur</option>
+              <option value="90">1,5 uur</option><option value="120" selected>2 uur</option>
+              <option value="180">3 uur</option><option value="240">4 uur</option>
+              <option value="300">5 uur</option>
+              <option value="custom">Aangepast...</option>
+            </select>
+            <div class="custom-input-row" id="durationCustom">
+              <input name="duration_custom" type="number" class="form-control" placeholder="Minuten" min="5" max="300" value="120">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Voorsprong Runners
+              <button type="button" class="info-btn" onclick="showTooltip('Voorsprong Runners','Hoe lang de runners een hoofd-start hebben <em>voordat</em> hunters hun locatie op de kaart zien. In die tijd zijn runners onzichtbaar.')"><i class="fas fa-circle-info"></i></button>
+            </label>
+            <select name="headstart" id="headstartSel" class="form-control" onchange="checkCustom('headstartSel','headstartCustom')">
+              <option value="0">Geen</option><option value="3">3 min</option>
+              <option value="5" selected>5 min</option><option value="10">10 min</option>
+              <option value="15">15 min</option><option value="20">20 min</option>
+              <option value="30">30 min</option>
+              <option value="custom">Aangepast...</option>
+            </select>
+            <div class="custom-input-row" id="headstartCustom">
+              <input name="headstart_custom" type="number" class="form-control" placeholder="Minuten" min="0" max="30" value="5">
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(2)">
+          Volgende <i class="fas fa-arrow-right"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 2: Difficulty -->
+    <div class="step" id="step2">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-sliders"></i> Moeilijkheidsgraad</div>
+        <p style="font-size:14px;color:var(--text2);margin-bottom:20px">Kies een preset vanuit Hunter-oogpunt. Moeilijker voor hunters geeft runners meer punten.</p>
+
+        <input type="hidden" name="difficulty" id="diffInput" value="medium">
+        <div class="grid g2" style="margin-bottom:24px;gap:12px">
+          <div class="diff-card" id="dc-easy" onclick="selDiff('easy')">
+            <span class="diff-multi" style="background:rgba(16,185,129,.1);color:var(--runner)">x1.0</span>
+            {% if diff_easy_img %}<img class="diff-img" src="/backgrounds/{{ diff_easy_img }}" alt="Makkelijk">{% else %}<div class="diff-icon"><i class="fas fa-seedling" style="color:var(--runner)"></i></div>{% endif %}
+            <div class="diff-name">Makkelijk</div>
+            <div class="diff-desc">Makkelijk voor hunters: geen offline knop, snellere runner updates.</div>
+          </div>
+          <div class="diff-card" id="dc-medium" onclick="selDiff('medium')">
+            <span class="diff-multi" style="background:rgba(245,158,11,.1);color:var(--warn)">x1.25</span>
+            {% if diff_medium_img %}<img class="diff-img" src="/backgrounds/{{ diff_medium_img }}" alt="Gemiddeld">{% else %}<div class="diff-icon"><i class="fas fa-scale-balanced" style="color:var(--warn)"></i></div>{% endif %}
+            <div class="diff-name">Gemiddeld</div>
+            <div class="diff-desc">Balans tussen hunters en runners. Aanbevolen preset.</div>
+          </div>
+          <div class="diff-card" id="dc-hard" onclick="selDiff('hard')">
+            <span class="diff-multi" style="background:rgba(239,68,68,.1);color:var(--danger)">x1.5</span>
+            {% if diff_hard_img %}<img class="diff-img" src="/backgrounds/{{ diff_hard_img }}" alt="Moeilijk">{% else %}<div class="diff-icon"><i class="fas fa-fire" style="color:var(--danger)"></i></div>{% endif %}
+            <div class="diff-name">Moeilijk</div>
+            <div class="diff-desc">Moeilijk voor hunters: geen target, runners krijgen meer hulp.</div>
+          </div>
+          <div class="diff-card" id="dc-custom" onclick="selDiff('custom')">
+            <span class="diff-multi" style="background:rgba(59,130,246,.1);color:var(--hunter)">x1.25</span>
+            {% if diff_custom_img %}<img class="diff-img" src="/backgrounds/{{ diff_custom_img }}" alt="Custom">{% else %}<div class="diff-icon"><i class="fas fa-wand-magic-sparkles" style="color:var(--hunter)"></i></div>{% endif %}
+            <div class="diff-name">Custom</div>
+            <div class="diff-desc">Stel alles zelf in. Multiplier wordt automatisch berekend.</div>
+          </div>
+        </div>
+
+        <!-- Multiplier preview -->
+        <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--bg3);border-radius:var(--r);margin-bottom:20px">
+          <div class="multi-badge" id="multiDisp" style="color:var(--accent)">x1.0</div>
+          <div>
+            <div style="font-weight:600;margin-bottom:3px">Puntenmultiplier</div>
+            <div id="multiDesc" style="font-size:13px;color:var(--text2)">Runners ontvangen x1.0 punten voor elke meter</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px">
+          <button type="button" class="btn btn-ghost" onclick="goStep(1)"><i class="fas fa-arrow-left"></i> Terug</button>
+          <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(3)">Volgende <i class="fas fa-arrow-right"></i></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3: Settings (Hunter + Runner) -->
+    <div class="step" id="step3">
+      <!-- Hunter settings -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="color:var(--hunter)"><i class="fas fa-crosshairs"></i> Hunter Instellingen</div>
+
+        <div class="form-group">
+          <label class="form-label">Locatie Update Interval
+            <button type="button" class="info-btn" onclick="showTooltip('Locatie Update Interval','Hoe vaak hunters een nieuwe locatie van runners op de kaart krijgen. De laatste locatie blijft zichtbaar totdat de volgende binnenkomt.<br><br>Voorbeeld: bij 20 minuten zie je de locatie van 20 minuten geleden totdat er een nieuwe update is. Dit maakt het spannender bij langere intervallen.')"><i class="fas fa-circle-info"></i></button>
+          </label>
+          <select name="hunter_interval" id="hunterIvSel" class="form-control" onchange="checkCustom('hunterIvSel','hunterIvCustom');calcMulti()">
+            <option value="180">3 minuten</option>
+            <option value="300">5 minuten</option>
+            <option value="420">7 minuten</option>
+            <option value="600" selected>10 minuten</option>
+            <option value="900">15 minuten</option>
+            <option value="1200">20 minuten</option>
+            <option value="custom">Zelf invullen...</option>
+          </select>
+          <div class="custom-input-row" id="hunterIvCustom">
+            <input name="hunter_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 1800 = 30 min)" min="60" max="7200" oninput="calcMulti()">
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;font-family:var(--hfont);font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">
+          <i class="fas fa-bullseye" style="color:var(--warn)"></i> Target Systeem
+          <button type="button" class="info-btn" onclick="showTooltip('Target Systeem','Een hunter kan een runner targeten. De runner ziet dit als waarschuwing op zijn scherm (hunter in de buurt!). Zowel de hunter als de runner krijgt dubbele punten zolang het target actief is.<br><br>Na de ingestelde duur vervalt het target en begint een cooldown voor de hunter.')"><i class="fas fa-circle-info"></i></button>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-left">
+            <div><div class="toggle-label">Target Systeem</div><div class="toggle-sub">Hunter kan runner aanwijzen voor dubbele punten</div></div>
+          </div>
+          <label class="switch"><input type="checkbox" name="target_enabled" id="tgEn" checked onchange="tog('targetOpts',this)"><span class="slider"></span></label>
+        </div>
+        <div id="targetOpts" style="margin-top:12px">
+          <div class="grid g2">
+            <div class="form-group">
+              <label class="form-label">Target Duur</label>
+              <select name="target_duration" class="form-control">
+                <option value="120">2 min</option><option value="300" selected>5 min</option>
+                <option value="600">10 min</option><option value="900">15 min</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cooldown na gebruik</label>
+              <select name="target_cooldown" class="form-control">
+                <option value="300">5 min</option><option value="600" selected>10 min</option>
+                <option value="900">15 min</option><option value="1800">30 min</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Runner settings -->
+      <div class="card" id="customSettings">
+        <div class="card-title" style="color:var(--runner)"><i class="fas fa-person-running"></i> Runner Instellingen</div>
+
+        <div class="form-group">
+          <label class="form-label">Afstand Update Interval
+            <button type="button" class="info-btn" onclick="showTooltip('Afstand Update Interval','Hoe vaak runners de afstand tot de dichtstbijzijnde hunter te zien krijgen op hun scherm.<br><br>Kies <em>Uitgeschakeld</em> om het moeilijker te maken: runners weten dan niet hoe ver de hunter is (tenzij Live Afstand aanstaat).')"><i class="fas fa-circle-info"></i></button>
+          </label>
+          <select name="runner_interval" id="runnerIvSel" class="form-control" onchange="checkCustom('runnerIvSel','runnerIvCustom');checkRunnerDist();calcMulti()">
+            <option value="off">Uitgeschakeld (+0.05 punten)</option>
+            <option value="180">3 minuten</option>
+            <option value="300">5 minuten</option>
+            <option value="420">7 minuten</option>
+            <option value="600" selected>10 minuten</option>
+            <option value="900">15 minuten</option>
+            <option value="1200">20 minuten</option>
+            <option value="custom">Zelf invullen...</option>
+          </select>
+          <div class="custom-input-row" id="runnerIvCustom">
+            <input name="runner_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 900 = 15 min)" min="60" max="7200">
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-left">
+            <div><div class="toggle-label">Afstand Tonen
+              <button type="button" class="info-btn" onclick="showTooltip('Afstand Tonen','Als dit uit staat zien runners de afstand NIET, ook al is het interval ingesteld. Handig om het moeilijker te maken.')"><i class="fas fa-circle-info"></i></button>
+            </div><div class="toggle-sub">Runners zien de afstand tot dichtstbijzijnde hunter (-0.05 punten)</div></div>
+          </div>
+          <label class="switch"><input type="checkbox" name="show_distance" id="showDist" onchange="calcMulti()"><span class="slider"></span></label>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-left">
+            <div><div class="toggle-label">Live Afstand
+              <button type="button" class="info-btn" onclick="showTooltip('Live Afstand','Als aan: runners zien de afstand <em>continu</em> bijwerken, ongeacht het interval. Dit maakt het aanzienlijk makkelijker voor runners.')"><i class="fas fa-circle-info"></i></button>
+            </div><div class="toggle-sub">Continue afstandsweergave i.p.v. op interval (-0.05 punten)</div></div>
+          </div>
+          <label class="switch"><input type="checkbox" name="live_tracking" id="liveTrk" onchange="calcMulti()"><span class="slider"></span></label>
+        </div>
+
+        <div style="margin-top:16px;margin-bottom:8px;font-family:var(--hfont);font-weight:700;display:flex;align-items:center;gap:8px">
+          <i class="fas fa-eye-slash" style="color:var(--runner)"></i> Offline Knop
+          <button type="button" class="info-btn" onclick="showTooltip('Offline Knop','Runners kunnen tijdelijk hun locatie verbergen van hunters. Na de maximale tijd worden ze automatisch weer zichtbaar. Team-modus: alle runners delen een offline-status.')"><i class="fas fa-circle-info"></i></button>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-left">
+            <div><div class="toggle-label">Offline Knop Inschakelen</div><div class="toggle-sub">Runners kunnen locatie verbergen (-0.05 punten)</div></div>
+          </div>
+          <label class="switch"><input type="checkbox" name="offline_button" id="offBtn" checked onchange="tog('offlineOpts',this);calcMulti()"><span class="slider"></span></label>
+        </div>
+        <div id="offlineOpts" style="margin-top:12px">
+          <div class="grid g2">
+            <div class="form-group">
+              <label class="form-label">Max. Offline Tijd</label>
+              <select name="max_offline" class="form-control">
+                <option value="60">1 min</option><option value="120">2 min</option>
+                <option value="180">3 min</option><option value="300" selected>5 min</option><option value="600">10 min</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Offline Modus</label>
+              <select name="team_mode" class="form-control">
+                <option value="">Ieder voor zich</option>
+                <option value="on">Team - gedeeld</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="toggle-row" style="margin-top:8px">
+          <div class="toggle-left">
+            <div><div class="toggle-label">Pauze Toestaan
+              <button type="button" class="info-btn" onclick="showTooltip('Pauze Toestaan','Runners kunnen pauzeren wanneer dat nodig is. De pauze is een aan/uit-stand en wordt hervat zodra iedereen weer op zijn plek staat.')"><i class="fas fa-circle-info"></i></button>
+            </div><div class="toggle-sub">Runners kunnen pauzeren en later weer doorgaan (-0.05 punten)</div></div>
+          </div>
+          <label class="switch"><input type="checkbox" name="pause_allowed" id="pauseAllw" onchange="tog('pauseOpts',this);calcMulti()"><span class="slider"></span></label>
+        </div>
+        <div class="form-hint" id="pauseOpts" style="margin-top:12px">Pauze staat aan of uit. Er is geen max pauzetijd meer in de interface.</div>
+
+        <!-- Live multiplier -->
+        <div style="margin-top:16px;padding:14px;background:var(--bg3);border-radius:var(--r);display:flex;align-items:center;gap:14px" id="multiRow">
+          <div class="multi-badge" id="multiDispSmall" style="color:var(--accent);font-size:20px">x1.0</div>
+          <div style="font-size:13px;color:var(--text2)" id="multiExplain">Puntenmultiplier op basis van instellingen</div>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button type="button" class="btn btn-ghost" onclick="goStep(2)"><i class="fas fa-arrow-left"></i> Terug</button>
+          <span class="btn btn-ghost btn-full" style="pointer-events:none;justify-content:center">Ga hieronder verder met speelveld en extra's</span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;border-color:rgba(245,158,11,.35)">
+        <div class="card-title" style="color:var(--warn)"><i class="fas fa-draw-polygon"></i> Speelveld Instellen</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px">Klik punten op de kaart om het speelveld te tekenen. Vanaf 3 punten sluit VenTrax de lijn vanzelf. Dit speelveld wordt bij het spel opgeslagen en tijdens het spel op de kaart getoond.</p>
+        <input type="hidden" name="playfield_json" id="playfieldJson">
+        <div class="form-group">
+          <label class="form-label">Naam speelveld</label>
+          <input name="playfield_name" id="playfieldNameInput" class="form-control" placeholder="Bijv. Parkroute Noord">
+          <div class="form-hint">Gebruik een veilige eigen naam. Met de knop hieronder bewaar je dit speelveld in je profiel.</div>
+        </div>
+        <div class="pf-row" style="margin-bottom:10px">
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="radiation"> Radiation groen</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="storm" checked> Storm blauw</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="nuclear"> Nuclear geel</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="heat"> Heat rood</label>
+        </div>
+        <div id="playfieldMap"></div>
+        <div class="pf-row">
+          {% if profile_playfields %}
+          <select class="form-control" id="profilePlayfieldSelect" style="max-width:260px" onchange="loadProfilePlayfield(this.value)">
+            <option value="">Mijn speelveld kiezen</option>
+            {% for pf in profile_playfields %}
+            <option value="{{ loop.index0 }}">{{ pf.name }}</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+          {% if saved_playfields %}
+          <select class="form-control" style="max-width:260px" onchange="loadGlobalPlayfield(this.value)">
+            <option value="">Algemeen speelveld kiezen</option>
+            {% for pf in saved_playfields %}
+            <option value="{{ loop.index0 }}">{{ pf.name }}</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+          {% if saved_playfield %}
+          <button type="button" class="btn btn-primary btn-sm" onclick="loadSavedPlayfield()"><i class="fas fa-map-location-dot"></i> Mijn laatste laden</button>
+          {% endif %}
+          <button type="button" class="btn btn-primary btn-sm" onclick="saveNamedProfilePlayfield()"><i class="fas fa-floppy-disk"></i> Opslaan in mijn profiel</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="centerPlayfieldOnMe()"><i class="fas fa-location-crosshairs"></i> Naar mijn locatie</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="undoPlayfieldPoint()"><i class="fas fa-rotate-left"></i> Laatste punt weg</button>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="clearPlayfield()"><i class="fas fa-trash"></i> Wissen</button>
+          <span class="pf-help" id="playfieldHelp">{% if saved_playfield %}Algemeen opgeslagen speelveld wordt automatisch geladen.{% else %}Nog geen speelveld. Klik minimaal 3 punten op de kaart.{% endif %}</span>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:16px;border-color:rgba(59,130,246,.25)">
+        <div class="card-title"><i class="fas fa-box-open"></i> Extra's</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px">Kies welke extra's in dit spel gebruikt mogen worden. De instellingen worden alvast bij het spel bewaard; de volledige in-game werking wordt per extra verder opgebouwd.</p>
+        <div class="extra-grid">
+          <label class="extra-choice"><input type="checkbox" name="extra_dropboxes" onchange="tog('dropboxOpts',this)"> Dropboxes</label>
+          <label class="extra-choice"><input type="checkbox" name="extra_landmine"> Landmijn</label>
+          <label class="extra-choice"><input type="checkbox" name="extra_laser"> Laser detectie</label>
+          <label class="extra-choice"><input type="checkbox" name="extra_tripwire"> Tripwire</label>
+          <label class="extra-choice"><input type="checkbox" name="feat_hacker"> Hacker</label>
+          <label class="extra-choice"><input type="checkbox" name="feat_glitch"> Glitch</label>
+          <label class="extra-choice"><input type="checkbox" name="extra_echo"> Echo</label>
+        </div>
+        <div id="dropboxOpts" style="display:none">
+        <div class="grid g2">
+          <div class="form-group">
+            <label class="form-label">Dropboxes tegelijk per team</label>
+            <select name="dropboxes_per_team" class="form-control"><option value="1">1</option><option value="2" selected>2 standaard</option><option value="3">3</option><option value="4">4</option><option value="5">5 max</option></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Dropboxes voor iedereen</label>
+            <select name="dropboxes_global" class="form-control"><option value="0">Geen</option><option value="1" selected>1 standaard</option><option value="2">2</option><option value="3">3 max</option></select>
+          </div>
+        </div>
+        <div class="grid g2">
+          <div class="form-group">
+            <label class="form-label">Wachten voor openen</label>
+            <select name="dropbox_wait_enabled" class="form-control" onchange="tog('dropboxWaitRow',this)"><option value="">Nee</option><option value="on">Ja</option></select>
+          </div>
+          <div class="form-group" id="dropboxWaitRow" style="display:none">
+            <label class="form-label">Wachttijd seconden</label>
+            <input name="dropbox_wait_sec" type="number" min="5" max="120" value="20" class="form-control">
+          </div>
+        </div>
+        <div class="grid g2">
+          <div class="form-group">
+            <label class="form-label">Min. afstand bij geen speelveld</label>
+            <input name="dropbox_min_m" type="number" min="50" max="5000" value="500" class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max. afstand bij geen speelveld</label>
+            <input name="dropbox_max_m" type="number" min="100" max="10000" value="1500" class="form-control">
+          </div>
+        </div>
+        <div class="form-hint">Met speelveld worden dropboxes binnen het speelveld geplaatst. Zonder speelveld gebruikt VenTrax deze afstand rond spelers of het gebied.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="button" class="btn btn-ghost" onclick="goStep(2)"><i class="fas fa-arrow-left"></i> Terug</button>
+        <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(4)">Extra scherm <i class="fas fa-arrow-right"></i></button>
+      </div>
+    </div>
+
+    <!-- Step 4: Extra -->
+    <div class="step" id="step4">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-layer-group"></i> Spelstijl</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Kies een stijl. Dit zet alvast extra's klaar; je kunt terug naar instellingen om zelf bij te sturen.</p>
+        <input type="hidden" name="game_style" id="gameStyleInput" value="classic">
+        <div class="style-grid">
+          <div class="style-card active" id="style-classic" onclick="selectGameStyle('classic')">
+            <div class="style-name"><i class="fas fa-eye-slash"></i> Classic</div>
+            <div class="style-desc">Rustige basis: alleen Offline knop. Goed voor jonge spelers of eerste test.</div>
+          </div>
+          <div class="style-card" id="style-adventure" onclick="selectGameStyle('adventure')">
+            <div class="style-name"><i class="fas fa-compass"></i> Adventure</div>
+            <div class="style-desc">Dropboxes, Echo en kleine verrassingen. Avontuur zonder chaos.</div>
+          </div>
+          <div class="style-card" id="style-battlefield" onclick="selectGameStyle('battlefield')">
+            <div class="style-name"><i class="fas fa-burst"></i> Battlefield</div>
+            <div class="style-desc">Alles aan: dropboxes, landmijnen, laser, tripwire, hacker, glitch en echo.</div>
+          </div>
+          <div class="style-card" id="style-stealth" onclick="selectGameStyle('stealth')">
+            <div class="style-name"><i class="fas fa-user-secret"></i> Shadow Ops</div>
+            <div class="style-desc">Sluipen, hacken, echo's en glitches. Minder vallen, meer slim spelen.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-id-badge"></i> Classes</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Als classes aan staan krijgt iedere speler straks random een rol met een speciale kracht en cooldown. De keuze wordt nu opgeslagen; de volledige in-game knoppen en acties worden daarna verder uitgewerkt.</p>
+        <label class="extra-choice" style="margin-bottom:12px"><input type="checkbox" name="classes_enabled" id="classesEnabled"> Random classes inschakelen</label>
+        <div class="grid g2">
+          <div class="form-group">
+            <label class="form-label">Thema</label>
+            <select name="class_theme" class="form-control">
+              <option value="street">Street Ops</option>
+              <option value="space">Space Scouts</option>
+              <option value="forest">Boswachters</option>
+              <option value="spy">Spy Kids</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Cooldown speciale kracht</label>
+            <select name="class_cooldown_sec" class="form-control">
+              <option value="120">2 min</option>
+              <option value="180" selected>3 min</option>
+              <option value="300">5 min</option>
+              <option value="600">10 min</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-hint">Ideeen: Signal Scout gebruikt Echo, Codekraker hackt info, Bomexpert plaatst landmijnen, Laserwachter zet detectie, Spoorzoeker ziet richting, Glitcher verstoort een locatie.</div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button type="button" class="btn btn-ghost" onclick="goStep(3)"><i class="fas fa-arrow-left"></i> Terug</button>
+        <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(5)">Samenvatting <i class="fas fa-arrow-right"></i></button>
+      </div>
+    </div>
+
+    <!-- Step 5: Summary -->
+    <div class="step" id="step5">
+      <div class="card">
+        <div class="card-title"><i class="fas fa-list-check"></i> Samenvatting - Controleer alles</div>
+        <div id="summaryContent" style="margin-bottom:24px"></div>
+        <div style="display:flex;gap:10px">
+          <button type="button" class="btn btn-ghost" onclick="goStep(4)"><i class="fas fa-arrow-left"></i> Aanpassen</button>
+          <button type="submit" class="btn btn-primary btn-full btn-lg" id="createBtn">
+            <i class="fas fa-play-circle"></i> Spel Aanmaken!
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+let currentStep=1, currentDiff='medium', currentMulti=1.25;
+const GAME_TEMPLATES = {% if game_templates %}{{ game_templates|tojson }}{% else %}[]{% endif %};
+const GLOBAL_PLAYFIELDS = {% if saved_playfields %}{{ saved_playfields|tojson }}{% else %}[]{% endif %};
+let PROFILE_PLAYFIELDS = {% if profile_playfields %}{{ profile_playfields|tojson }}{% else %}[]{% endif %};
+function escHtml(v){
+  return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+function goStep(n){
+  document.getElementById('step'+currentStep).classList.remove('active');
+  currentStep=n;
+  document.getElementById('step'+n).classList.add('active');
+  // Update step indicators
+  for(let i=1;i<=5;i++){
+    const si=document.getElementById('si'+i);
+    si.className='step-item'+(i<=n?' done':'');
+  }
+  if(n===5) buildSummary();
+  if(n===3) setTimeout(initPlayfieldMap, 80);
+  window.scrollTo({top:0,behavior:'smooth'});
+  const cs=document.getElementById('customSettings');
+  if(cs) cs.style.opacity='1';
+}
+
+function selRole(inp){
+  document.getElementById('rh').className='role-pick'+(inp.value==='hunter'?' selected-hunter':'');
+  document.getElementById('rr').className='role-pick'+(inp.value==='runner'?' selected-runner':'');
+}
+function selectRole(role, ev){
+  if(ev) ev.preventDefault();
+  const inp=document.querySelector(`[name=role][value="${role}"]`);
+  if(!inp) return;
+  inp.checked=true;
+  selRole(inp);
+}
+
+let _settingBySelDiff = false;
+const PRESETS = {
+  easy:   {hunter:'300', runner:'180', showDist:false, liveTrk:false, off:false, pause:false, target:true,  maxOff:'60',  maxPause:'300'},
+  medium: {hunter:'600', runner:'600', showDist:false, liveTrk:false, off:true,  pause:false, target:true,  maxOff:'300', maxPause:'300'},
+  hard:   {hunter:'900', runner:'900', showDist:false, liveTrk:false, off:true,  pause:false, target:false, maxOff:'300', maxPause:'300'},
+  custom: {hunter:'600', runner:'600', showDist:false, liveTrk:false, off:true,  pause:false, target:true,  maxOff:'300', maxPause:'300'}
+};
+function setSelectValue(nameOrId, value){
+  const el=document.getElementById(nameOrId)||document.querySelector(`[name=${nameOrId}]`);
+  if(el) el.value=value;
+}
+function setChecked(id, value){
+  const el=document.getElementById(id);
+  if(el) el.checked=!!value;
+}
+function applyPreset(d){
+  const p=PRESETS[d];
+  if(!p) return;
+  _settingBySelDiff = true;
+  setSelectValue('hunterIvSel', p.hunter);
+  setSelectValue('runnerIvSel', p.runner);
+  setSelectValue('max_offline', p.maxOff);
+  setChecked('showDist', p.showDist);
+  setChecked('liveTrk', p.liveTrk);
+  setChecked('offBtn', p.off);
+  setChecked('pauseAllw', p.pause);
+  setChecked('tgEn', p.target);
+  tog('targetOpts',document.getElementById('tgEn'));
+  checkCustom('hunterIvSel','hunterIvCustom');
+  checkCustom('runnerIvSel','runnerIvCustom');
+  tog('offlineOpts',document.getElementById('offBtn'));
+  tog('pauseOpts',document.getElementById('pauseAllw'));
+  _settingBySelDiff = false;
+}
+function selDiff(d){
+  currentDiff=d;
+  document.getElementById('diffInput').value=d;
+  ['easy','medium','hard','custom'].forEach(x=>{
+    document.getElementById('dc-'+x).className='diff-card'+(x===d?' sel-'+x:'');
+  });
+  const mults={easy:1.0,medium:1.25,hard:1.5,custom:1.25};
+  const descs={easy:'Makkelijkste modus - runners krijgen meer hulpmiddelen',medium:'Gebalanceerde modus - aanbevolen voor beginners',hard:'Uitdagende modus - hunters hebben groot voordeel',custom:'Multiplier automatisch berekend op basis van instellingen'};
+  const m=mults[d];
+  currentMulti=m||1.25;
+  applyPreset(d);
+  const disp=document.getElementById('multiDisp');
+  disp.textContent=m?`x${m.toFixed(2)}`:'xauto';
+  disp.style.color=d==='easy'?'var(--runner)':d==='hard'?'var(--danger)':d==='medium'?'var(--warn)':'var(--accent)';
+  document.getElementById('multiDesc').textContent=descs[d];
+  const small=document.getElementById('multiDispSmall');
+  if(small) small.textContent=m?`x${m.toFixed(2)}`:`x${currentMulti.toFixed(2)}`;
+  const explEl=document.getElementById('multiExplain');
+  if(explEl && m) explEl.textContent=`Runners ontvangen x${m.toFixed(2)} punten per meter`;
+  if(d==='custom') calcMulti();
+}
+
+function calcMulti(){
+  // If on a preset and user manually changes a setting, switch to custom
+  // But NOT when selDiff itself triggers this
+  if (currentDiff !== 'custom' && !_settingBySelDiff) {
+    _settingBySelDiff = false;  // ensure flag is reset
+    currentDiff = 'custom';
+    document.getElementById('diffInput').value = 'custom';
+    ['easy','medium','hard','custom'].forEach(x => {
+      document.getElementById('dc-'+x).className = 'diff-card' + (x==='custom' ? ' sel-custom' : '');
+    });
+    // Keep going so the multiplier is recalculated
+  }
+  let m=1.25;
+  if(!document.getElementById('tgEn')?.checked)      m+=0.05;
+  if(document.getElementById('offBtn')?.checked)   m-=0.05;
+  if(document.getElementById('liveTrk')?.checked)  m-=0.05;
+  if(document.getElementById('showDist')?.checked) m-=0.05;
+  if(document.getElementById('pauseAllw')?.checked)m-=0.05;
+  const sel=document.getElementById('hunterIvSel')?.value;
+  if(sel!=='custom'){const v=parseInt(sel||600);if(v>=900)m+=0.05;if(v>=1200)m+=0.05;}
+  const runnerOff=document.getElementById('runnerIvSel')?.value==='off';
+  if(runnerOff) m+=0.05;
+  m=Math.max(0.7,Math.min(2.0,Math.round(m*100)/100));
+  currentMulti=m;
+  [document.getElementById('multiDisp'),document.getElementById('multiDispSmall')].forEach(el=>{if(el)el.textContent=`x${m.toFixed(2)}`});
+  document.getElementById('multiDesc').textContent=`Custom - instellingen aangepast (x${m.toFixed(2)})`;document.getElementById('multiDisp').style.color='var(--accent)';
+  const explEl=document.getElementById('multiExplain');if(explEl)explEl.textContent=`Runners ontvangen x${m.toFixed(2)} punten per meter`;
+}
+
+function tog(id,cb){
+  const el=document.getElementById(id);
+  const on = !!(cb && (cb.checked || cb.value === 'on' || cb.value === 'true'));
+  if(el) el.style.display=on?'':'none';
+}
+
+function setNamedCheck(name, on){
+  const el=document.querySelector(`[name=${name}]`);
+  if(el) el.checked=!!on;
+}
+function selectGameStyle(style){
+  document.getElementById('gameStyleInput').value=style;
+  ['classic','adventure','battlefield','stealth'].forEach(s=>{
+    const el=document.getElementById('style-'+s);
+    if(el) el.classList.toggle('active', s===style);
+  });
+  const presets={
+    classic:{dropboxes:false,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:false,classes:false},
+    adventure:{dropboxes:true,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:true,classes:true},
+    battlefield:{dropboxes:true,landmine:true,laser:true,tripwire:true,hacker:true,glitch:true,echo:true,classes:true},
+    stealth:{dropboxes:true,landmine:false,laser:false,tripwire:true,hacker:true,glitch:true,echo:true,classes:true}
+  };
+  const p=presets[style]||presets.classic;
+  setNamedCheck('extra_dropboxes',p.dropboxes);
+  setNamedCheck('extra_landmine',p.landmine);
+  setNamedCheck('extra_laser',p.laser);
+  setNamedCheck('extra_tripwire',p.tripwire);
+  setNamedCheck('feat_hacker',p.hacker);
+  setNamedCheck('feat_glitch',p.glitch);
+  setNamedCheck('extra_echo',p.echo);
+  const cls=document.getElementById('classesEnabled');
+  if(cls) cls.checked=!!p.classes;
+  const drop=document.querySelector('[name=extra_dropboxes]');
+  if(drop) tog('dropboxOpts', drop);
+  showToast(`Spelstijl gekozen: ${style==='classic'?'Classic':style==='adventure'?'Adventure':style==='battlefield'?'Battlefield':'Shadow Ops'}`,'info');
+}
+
+function checkCustom(selId, rowId){
+  const sel=document.getElementById(selId);
+  const row=document.getElementById(rowId);
+  if(!sel||!row) return;
+  row.style.display=sel.value==='custom'?'block':'none';
+}
+
+function checkRunnerDist(){
+  // If runner interval is off, make sense to disable show_distance hint
+}
+
+// Initial state
+tog('targetOpts',document.getElementById('tgEn'));
+tog('offlineOpts',document.getElementById('offBtn'));
+tog('pauseOpts',document.getElementById('pauseAllw'));
+selDiff('medium');
+
+function selText(name){
+  const el=document.querySelector(`[name=${name}]`);
+  if(!el) return '-';
+  if(el.tagName==='SELECT') return el.options[el.selectedIndex]?.text||'-';
+  return el.value||'-';
+}
+function chkText(id){return document.getElementById(id)?.checked?'Aan':'Uit'}
+
+function setFormValue(name, value){
+  const el=document.querySelector(`[name=${name}]`);
+  if(!el || value === undefined || value === null) return;
+  if(el.type === 'checkbox') el.checked=!!value;
+  else el.value=String(value);
+}
+function applyGameTemplate(idx){
+  if(idx==='') return;
+  const t=GAME_TEMPLATES[Number(idx)];
+  if(!t) return;
+  setFormValue('duration', t.duration_minutes);
+  setFormValue('headstart', t.headstart_minutes);
+  setFormValue('hunter_interval', t.hunter_interval_sec);
+  setFormValue('runner_interval', t.runner_interval_sec || 'off');
+  setFormValue('show_distance', t.show_distance);
+  setFormValue('live_tracking', t.live_tracking);
+  setFormValue('target_enabled', t.target_enabled);
+  setFormValue('target_duration', t.target_duration_sec);
+  setFormValue('target_cooldown', t.target_cooldown_sec);
+  setFormValue('offline_button', t.offline_button);
+  setFormValue('offline_uses', t.offline_uses);
+  setFormValue('max_offline', t.max_offline_sec);
+  setFormValue('pause_allowed', t.pause_allowed);
+  setFormValue('team_mode', t.team_mode ? 'on' : '');
+  const e=t.extras||{};
+  setFormValue('extra_dropboxes', e.dropboxes);
+  setFormValue('extra_landmine', e.landmine);
+  setFormValue('extra_laser', e.laser);
+  setFormValue('extra_tripwire', e.tripwire);
+  setFormValue('feat_hacker', e.hacker);
+  setFormValue('feat_glitch', e.glitch);
+  setFormValue('extra_echo', e.echo);
+  setFormValue('classes_enabled', e.classes_enabled);
+  setFormValue('class_theme', e.class_theme);
+  setFormValue('class_cooldown_sec', e.class_cooldown_sec);
+  setFormValue('dropboxes_per_team', e.dropboxes_per_team);
+  setFormValue('dropboxes_global', e.dropboxes_global);
+  setFormValue('dropbox_min_m', e.dropbox_min_m);
+  setFormValue('dropbox_max_m', e.dropbox_max_m);
+  if(e.game_style) selectGameStyle(e.game_style);
+  if(t.playfield && t.playfield.points) loadPlayfieldData(t.playfield);
+  ['targetOpts','offlineOpts','pauseOpts','dropboxOpts'].forEach(id=>{
+    const map={targetOpts:'target_enabled',offlineOpts:'offline_button',pauseOpts:'pause_allowed',dropboxOpts:'extra_dropboxes'};
+    const cb=document.querySelector(`[name=${map[id]}]`); if(cb) tog(id,cb);
+  });
+  calcMulti();
+  showToast('Vorige spelinstellingen geladen','success');
+}
+
+let pfMap=null, pfLayer=null, pfMarkers=[], pfPoints=[];
+let pfSaveTimer=null, pfLoadedSaved=false;
+let pfCenteredOnGps=false;
+const SAVED_PLAYFIELD = {% if saved_playfield %}{{ saved_playfield|tojson }}{% else %}null{% endif %};
+const PF_COLORS={
+  radiation:{stroke:'#22c55e', fill:'#22c55e'},
+  storm:{stroke:'#38bdf8', fill:'#0ea5e9'},
+  nuclear:{stroke:'#facc15', fill:'#eab308'},
+  heat:{stroke:'#ef4444', fill:'#dc2626'}
+};
+function getPlayfieldColor(){
+  return document.querySelector('[name=playfieldColorUi]:checked')?.value || 'storm';
+}
+function initPlayfieldMap(){
+  if(typeof L === 'undefined') return;
+  if(!pfMap){
+    pfMap=L.map('playfieldMap',{zoomControl:true,attributionControl:false}).setView([52.15,5.38],14);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(pfMap);
+    L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,opacity:.65}).addTo(pfMap);
+    pfMap.on('click', e=>addPlayfieldPoint(e.latlng.lat,e.latlng.lng));
+    centerPlayfieldOnMe();
+  }
+  setTimeout(()=>pfMap.invalidateSize(),60);
+  drawPlayfield();
+}
+function centerPlayfieldOnMe(){
+  if(!pfMap || !navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(pos=>{
+    pfCenteredOnGps=true;
+    pfMap.setView([pos.coords.latitude,pos.coords.longitude],16);
+  },()=>{
+    if(!pfCenteredOnGps) showToast('Kon je locatie niet ophalen voor het speelveld', 'warn');
+  }, {enableHighAccuracy:true,timeout:7000,maximumAge:15000});
+}
+function addPlayfieldPoint(lat,lng){pfPoints.push({lat,lng});drawPlayfield();}
+function undoPlayfieldPoint(){pfPoints.pop();drawPlayfield();}
+function clearPlayfield(){pfPoints=[];drawPlayfield();}
+function loadSavedPlayfield(){
+  if(!SAVED_PLAYFIELD || !SAVED_PLAYFIELD.points) return;
+  loadPlayfieldData(SAVED_PLAYFIELD);
+}
+function loadGlobalPlayfield(idx){
+  if(idx==='') return;
+  const item=GLOBAL_PLAYFIELDS[Number(idx)];
+  if(item && item.data) loadPlayfieldData(item.data);
+}
+function loadProfilePlayfield(idx){
+  if(idx==='') return;
+  const item=PROFILE_PLAYFIELDS[Number(idx)];
+  if(item && item.data) {
+    loadPlayfieldData(item.data);
+    const nameEl=document.getElementById('playfieldNameInput');
+    if(nameEl) nameEl.value=item.name || '';
+  }
+}
+function loadPlayfieldData(data){
+  if(!data || !data.points) return;
+  pfLoadedSaved=true;
+  pfPoints=data.points.map(p=>({lat:Number(p.lat),lng:Number(p.lng)})).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
+  const radio=document.querySelector(`[name=playfieldColorUi][value="${data.color || 'storm'}"]`);
+  if(radio) radio.checked=true;
+  if(pfMap && pfPoints.length>=3 && typeof L !== 'undefined'){
+    pfMap.fitBounds(L.latLngBounds(pfPoints.map(p=>[p.lat,p.lng])),{padding:[30,30],maxZoom:16});
+  }
+  drawPlayfield(false);
+}
+function saveProfilePlayfield(){
+  if(pfPoints.length<3) return;
+  clearTimeout(pfSaveTimer);
+  pfSaveTimer=setTimeout(()=>{
+    fetch('/api/profile/playfield',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({color:getPlayfieldColor(),points:pfPoints})
+    }).catch(()=>{});
+  },700);
+}
+function refreshProfilePlayfieldSelect(items){
+  PROFILE_PLAYFIELDS = Array.isArray(items) ? items : PROFILE_PLAYFIELDS;
+  let sel=document.getElementById('profilePlayfieldSelect');
+  const row=document.querySelector('#playfieldMap + .pf-row');
+  if(!sel && row){
+    sel=document.createElement('select');
+    sel.id='profilePlayfieldSelect';
+    sel.className='form-control';
+    sel.style.maxWidth='260px';
+    sel.onchange=function(){loadProfilePlayfield(this.value)};
+    row.insertBefore(sel,row.firstChild);
+  }
+  if(!sel) return;
+  sel.innerHTML='<option value="">Mijn speelveld kiezen</option>' + PROFILE_PLAYFIELDS.map((pf,i)=>`<option value="${i}">${escHtml(pf.name || 'Speelveld')}</option>`).join('');
+}
+function saveNamedProfilePlayfield(){
+  if(pfPoints.length<3){ showToast('Zet eerst minimaal 3 punten op de kaart.', 'warn'); return; }
+  const name=(document.getElementById('playfieldNameInput')?.value || '').trim();
+  if(!name){ showToast('Geef je speelveld eerst een naam.', 'warn'); return; }
+  fetch('/api/profile/playfield',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({color:getPlayfieldColor(),points:pfPoints,name,save_named:true})
+  }).then(r=>r.json()).then(d=>{
+    if(d.error){ showToast(d.error,'error'); return; }
+    refreshProfilePlayfieldSelect(d.profile_playfields || []);
+    showToast('Speelveld opgeslagen in je profiel.', 'success');
+  }).catch(()=>showToast('Opslaan mislukt.', 'error'));
+}
+function drawPlayfield(saveProfile=true){
+  if(!pfMap) return;
+  pfMarkers.forEach(m=>pfMap.removeLayer(m)); pfMarkers=[];
+  if(pfLayer){pfMap.removeLayer(pfLayer);pfLayer=null;}
+  const color=PF_COLORS[getPlayfieldColor()];
+  pfPoints.forEach((p,i)=>{
+    const icon=L.divIcon({
+      className:'pf-point-icon',
+      html:`<div style="width:24px;height:24px;border-radius:50%;background:${color.stroke};color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.35)">${i+1}</div>`,
+      iconSize:[24,24],
+      iconAnchor:[12,12]
+    });
+    const marker=L.marker([p.lat,p.lng],{icon,draggable:true}).addTo(pfMap);
+    marker.on('dragend', ev=>{
+      const ll=ev.target.getLatLng();
+      pfPoints[i]={lat:ll.lat,lng:ll.lng};
+      drawPlayfield(true);
+    });
+    pfMarkers.push(marker);
+  });
+  if(pfPoints.length>=3) pfLayer=L.polygon(pfPoints.map(p=>[p.lat,p.lng]),{color:color.stroke,fillColor:color.fill,fillOpacity:.18,weight:3}).addTo(pfMap);
+  else if(pfPoints.length>=2) pfLayer=L.polyline(pfPoints.map(p=>[p.lat,p.lng]),{color:color.stroke,weight:3,dashArray:'6 6'}).addTo(pfMap);
+  const help=document.getElementById('playfieldHelp');
+  if(help) help.textContent=pfPoints.length>=3 ? `Speelveld klaar met ${pfPoints.length} punten.` : `${pfPoints.length}/3 punten gezet. Klik minimaal 3 punten.`;
+  const hidden=document.getElementById('playfieldJson');
+  if(hidden) hidden.value=pfPoints.length>=3 ? JSON.stringify({color:getPlayfieldColor(),points:pfPoints}) : '';
+  if(saveProfile && pfPoints.length>=3) saveProfilePlayfield();
+}
+document.querySelectorAll('[name=playfieldColorUi]').forEach(r=>r.addEventListener('change',drawPlayfield));
+
+function buildSummary(){
+  const role=document.querySelector('[name=role]:checked')?.value||'-';
+  const diff=currentDiff;
+  const diffNames={easy:'Makkelijk',medium:'Gemiddeld',hard:'Moeilijk',custom:'Custom'};
+  const hunterSel=document.getElementById('hunterIvSel');
+  const hunterTxt=hunterSel?.value==='custom'?document.querySelector('[name=hunter_interval_custom]')?.value+'s':hunterSel?.options[hunterSel.selectedIndex]?.text||'-';
+  const runnerSel=document.getElementById('runnerIvSel');
+  const styleNames={classic:'Classic',adventure:'Adventure',battlefield:'Battlefield',stealth:'Shadow Ops'};
+  const style=styleNames[document.getElementById('gameStyleInput')?.value]||'Classic';
+  const dropMin=document.querySelector('[name=dropbox_min_m]')?.value||'500';
+  const dropMax=document.querySelector('[name=dropbox_max_m]')?.value||'1500';
+  const runnerTxt=runnerSel?.value==='off'?'Uitgeschakeld':runnerSel?.value==='custom'?document.querySelector('[name=runner_interval_custom]')?.value+'s':runnerSel?.options[runnerSel.selectedIndex]?.text||'-';
+
+  const rows=[
+    ['Spelnaam', document.querySelector('[name=name]')?.value||'-'],
+    ['Rol', role==='hunter'?'Hunter':'Runner'],
+    ['Duur', selText('duration')],
+    ['Voorsprong', selText('headstart')],
+    ['Moeilijkheid', diffNames[diff]||diff],
+    ['Puntenmultiplier', `x${currentMulti.toFixed(2)}`],
+    ['---',''],
+    ['Hunter interval', hunterTxt],
+    ['Target systeem', chkText('tgEn')],
+    ['---',''],
+    ['Runner afstand interval', runnerTxt],
+    ['Afstand tonen', chkText('showDist')],
+    ['Live afstand', chkText('liveTrk')],
+    ['Offline knop', chkText('offBtn')],
+    ['Pauze', chkText('pauseAllw')],
+    ['Speelveld', pfPoints.length>=3 ? `${pfPoints.length} punten (${getPlayfieldColor()})` : 'Niet ingesteld'],
+    ['Spelstijl', style],
+    ['Classes', document.getElementById('classesEnabled')?.checked ? 'Aan' : 'Uit'],
+    ['Lootbox afstand', `${dropMin}-${dropMax}m zonder speelveld`],
+  ];
+  document.getElementById('summaryContent').innerHTML=rows.map(([k,v])=>
+    k==='---'?'<div style="border-top:1px solid var(--border);margin:6px 0"></div>':
+    `<div class="summary-row"><span class="summary-key">${k}</span><span class="summary-val">${v}</span></div>`
+  ).join('');
+}
+
+document.getElementById('gf').addEventListener('submit',function(){
+  const btn=document.getElementById('createBtn');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Aanmaken...';
+});
+</script>
+{% endblock %}

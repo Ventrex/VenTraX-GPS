@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Activiteitenlog – Admin{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px">
+    <h1 style="font-family:var(--hfont);font-size:28px;font-weight:800">
+      <i class="fas fa-list-check" style="color:var(--accent)"></i> Activiteitenlog
+    </h1>
+    <div style="display:flex;gap:8px">
+      <a href="{{ url_for('admin_log') }}" class="btn btn-ghost btn-sm {{ 'btn-primary' if not flagged }}">Alles</a>
+      <a href="{{ url_for('admin_log', flagged=1) }}" class="btn btn-sm {{ 'btn-danger' if flagged else 'btn-ghost' }}"><i class="fas fa-flag"></i> Verdacht</a>
+    </div>
+  </div>
+
+  {% if not logs %}
+  <div class="card" style="text-align:center;color:var(--text2);padding:40px">Nog geen log-regels.</div>
+  {% else %}
+  <div class="card">
+    <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th>Tijd</th><th>Gebruiker</th><th>Event</th><th>Detail</th><th>IP</th><th>🚩</th></tr></thead>
+        <tbody>
+          {% for l in logs %}
+          <tr id="lr-{{ l.id }}" style="{{ 'background:rgba(239,68,68,.04)' if l.flag }}">
+            <td style="font-size:11px;color:var(--text2);white-space:nowrap">{{ l.created_at.strftime('%d %b %H:%M:%S') }}</td>
+            <td style="font-size:13px">{{ l.user.username if l.user else '–' }}</td>
+            <td>
+              <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;background:{{ 'rgba(239,68,68,.1)' if 'high_speed' in l.event or 'ban' in l.event else 'var(--bg3)' }};color:{{ 'var(--danger)' if 'high_speed' in l.event or 'ban' in l.event else 'var(--text2)' }}">
+                {{ l.event }}
+              </span>
+            </td>
+            <td style="font-size:12px;color:var(--text2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ l.detail or '–' }}</td>
+            <td style="font-size:11px;color:var(--text2)">{{ l.ip_address or '–' }}</td>
+            <td>
+              <button onclick="toggleFlag({{ l.id }}, this)" style="background:none;border:none;cursor:pointer;font-size:16px" title="{{ 'Deflag' if l.flag else 'Flag als verdacht' }}">
+                {{ '🚩' if l.flag else '⬜' }}
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+<script>
+function toggleFlag(id, btn) {
+  fetch(`/admin/log/${id}/flag`,{method:'POST'}).then(r=>r.json()).then(d=>{
+    btn.textContent = d.flag ? '🚩' : '⬜';
+    document.getElementById('lr-'+id).style.background = d.flag ? 'rgba(239,68,68,.04)' : '';
+    showToast(d.flag?'Gemarkeerd als verdacht':'Markering verwijderd','info');
+  });
+}
+</script>
+{% endblock %}

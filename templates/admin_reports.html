@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Meldingen – Admin{% endblock %}
+{% block content %}
+<div class="container">
+  <h1 style="font-family:var(--hfont);font-size:28px;font-weight:800;margin-bottom:24px">
+    <i class="fas fa-flag" style="color:var(--accent)"></i> Meldingen
+    {% set open = reports|selectattr('status','eq','open')|list|length %}
+    {% if open %}<span style="background:var(--danger);color:#fff;border-radius:10px;font-size:14px;padding:2px 10px;margin-left:8px">{{ open }} open</span>{% endif %}
+  </h1>
+
+  {% if not reports %}
+  <div class="card" style="text-align:center;color:var(--text2);padding:40px">Geen meldingen.</div>
+  {% else %}
+  <div class="card">
+    <div style="overflow-x:auto">
+      <table class="table">
+        <thead><tr><th>Type</th><th>Titel</th><th>Van</th><th>Spel</th><th>Status</th><th>Datum</th><th>Actie</th></tr></thead>
+        <tbody>
+          {% for r in reports %}
+          <tr id="row-{{ r.id }}">
+            <td>
+              {% set tcol = {'bug':'var(--danger)','tip':'var(--warn)','cheat':'var(--accent)','other':'var(--text2)'} %}
+              {% set ticon = {'bug':'fa-bug','tip':'fa-lightbulb','cheat':'fa-user-slash','other':'fa-comment'} %}
+              <span style="color:{{ tcol.get(r.type,'var(--text2)') }}"><i class="fas {{ ticon.get(r.type,'fa-flag') }}"></i> {{ r.type|title }}</span>
+            </td>
+            <td>
+              <div style="font-weight:600;font-size:14px">{{ r.title }}</div>
+              <div style="font-size:12px;color:var(--text2);margin-top:3px">{{ r.description[:120] }}{% if r.description|length > 120 %}…{% endif %}</div>
+              {% if r.admin_note %}<div style="font-size:12px;color:var(--runner);margin-top:3px"><i class="fas fa-note-sticky"></i> {{ r.admin_note }}</div>{% endif %}
+            </td>
+            <td style="font-size:13px">{{ r.author.username }}</td>
+            <td style="font-size:13px">{% if r.game_code %}<span class="code">{{ r.game_code }}</span>{% else %}–{% endif %}</td>
+            <td>
+              <span class="badge" style="{{ 'background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.25)' if r.status=='open' else 'background:rgba(245,158,11,.1);color:var(--warn);border:1px solid rgba(245,158,11,.25)' if r.status=='reviewing' else 'background:rgba(16,185,129,.1);color:var(--runner);border:1px solid rgba(16,185,129,.25)' }}">
+                {{ r.status|title }}
+              </span>
+            </td>
+            <td style="font-size:12px;color:var(--text2)">{{ r.created_at.strftime('%d %b %y') }}</td>
+            <td>
+              <select onchange="updateReport({{ r.id }}, this.value, '{{ r.admin_note or '' }}')" class="form-control" style="width:110px;font-size:12px;padding:4px 8px">
+                {% for s in ['open','reviewing','resolved','closed'] %}
+                <option value="{{ s }}" {{ 'selected' if r.status==s }}>{{ s|title }}</option>
+                {% endfor %}
+              </select>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+<script>
+function updateReport(id, status, note) {
+  const newNote = status==='resolved'&&!note ? prompt('Admin notitie (optioneel):') || '' : note;
+  fetch(`/admin/reports/${id}/update`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status,note:newNote})})
+    .then(r=>r.json()).then(d=>{if(d.success)showToast('Status bijgewerkt','success');});
+}
+</script>
+{% endblock %}

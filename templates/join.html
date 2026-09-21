@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Join Spel – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container-sm" style="padding-top:72px">
+  <div style="text-align:center;margin-bottom:36px">
+    <div style="font-size:56px;margin-bottom:14px"><i class="fas fa-door-open" style="color:var(--hunter)"></i></div>
+    <h1 style="font-family:'Syne',sans-serif;font-size:30px;font-weight:800">Join een Spel</h1>
+    <p style="color:var(--text2);margin-top:8px">Voer de 6-letterige code in van de spelmaker</p>
+  </div>
+  <div class="card">
+    {% if request.args.get('scan') %}
+    <div id="scanBox" style="margin-bottom:20px;text-align:center">
+      <video id="qrVideo" playsinline style="width:100%;max-height:320px;border-radius:12px;background:#000;object-fit:cover"></video>
+      <div id="qrScanMsg" style="font-size:13px;color:var(--text2);margin-top:10px">Camera starten...</div>
+    </div>
+    {% endif %}
+    <div id="manualJoin">
+    <form method="POST">
+      <div class="form-group" style="margin-bottom:24px">
+        <label class="form-label" style="text-align:center;display:block">Spelcode</label>
+        <input name="code" id="codeI" class="form-control"
+               style="text-align:center;font-family:'Syne',sans-serif;font-size:34px;font-weight:700;letter-spacing:10px;text-transform:uppercase;padding:16px"
+               placeholder="ABCD12" maxlength="6" autocomplete="off" required autofocus>
+      </div>
+      <button type="submit" class="btn btn-hunter btn-full btn-lg">
+        <i class="fas fa-search"></i> Zoeken & Joinen
+      </button>
+    </form>
+    <div style="margin-top:20px;text-align:center">
+      <a href="{{ url_for('new_game') }}" style="color:var(--text2);font-size:14px">
+        <i class="fas fa-plus"></i> Liever een nieuw spel aanmaken?
+      </a>
+    </div>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById('codeI').addEventListener('input',function(){
+  this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+});
+{% if request.args.get('scan') %}
+const scanMode = true;
+(function hideManualJoin(){ const el = document.getElementById('manualJoin'); if (el) el.style.display = 'none'; })();
+(async function startQrScanner(){
+  const msg = document.getElementById('qrScanMsg');
+  const video = document.getElementById('qrVideo');
+  if (!('BarcodeDetector' in window)) {
+    msg.textContent = 'QR scanner wordt niet ondersteund in deze browser. Vul de code handmatig in.';
+    const manual = document.getElementById('manualJoin');
+    if (manual) manual.style.display = '';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = stream;
+    await video.play();
+    const detector = new BarcodeDetector({formats:['qr_code']});
+    const tick = async () => {
+      try {
+        const codes = await detector.detect(video);
+        if (codes && codes.length) {
+          const raw = codes[0].rawValue || '';
+          const match = raw.match(/[?&]code=([A-Z0-9]{6})/i) || raw.match(/\b([A-Z0-9]{6})\b/i);
+          if (match) {
+            const code = match[1].toUpperCase();
+            msg.textContent = 'Code gevonden: ' + code;
+            stream.getTracks().forEach(t=>t.stop());
+            window.location.href = '/join?code=' + encodeURIComponent(code);
+            return;
+          }
+        }
+      } catch(e) {}
+      requestAnimationFrame(tick);
+    };
+    msg.textContent = 'Richt de camera op de QR-code.';
+    tick();
+  } catch(e) {
+    msg.textContent = 'Camera geweigerd of niet beschikbaar. Vul de code handmatig in.';
+    const manual = document.getElementById('manualJoin');
+    if (manual) manual.style.display = '';
+  }
+})();
+{% endif %}
+</script>
+{% endblock %}

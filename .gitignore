@@ -1,0 +1,21 @@
+# Geheimen
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Database
+instance/*.db
+
+# Uploads (optioneel — backup apart)
+# static/uploads/
+# static/backgrounds/
+
+# Logs
+logs/*.log
+
+# OS
+.DS_Store
+Thumbs.db

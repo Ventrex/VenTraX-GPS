@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.tab-nav{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto}
+.tab-btn{padding:11px 18px;background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-family:inherit;font-size:14px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all var(--tr);margin-bottom:-1px;position:relative}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--r);padding:24px;text-align:center;cursor:pointer;transition:all var(--tr);position:relative}
+.upload-zone:hover{border-color:var(--accent);background:rgba(225,29,72,.04)}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.font-option{padding:12px 16px;border:2px solid var(--border);border-radius:var(--r2);cursor:pointer;transition:all var(--tr);text-align:center;font-size:14px}
+.font-option:hover,.font-option.active{border-color:var(--accent);background:var(--accent-glow)}
+.catalog-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:16px}
+.catalog-card{border:1px solid var(--border);background:var(--bg2);border-radius:var(--r);padding:16px}
+.catalog-preview{height:130px;border-radius:8px;overflow:hidden;background:var(--bg3);display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+.catalog-preview img{width:100%;height:100%;object-fit:cover}
+.catalog-preview i{font-size:44px;color:var(--accent)}
+.switch-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.switch-row label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800;margin-bottom:6px">
+    <i class="fas fa-shield-halved" style="color:var(--accent)"></i> Admin Panel
+  </h1>
+  <p style="color:var(--text2);margin-bottom:28px">Volledig beheer van {{ site_name }}</p>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('site',this)"><i class="fas fa-palette"></i> Site & Thema</button>
+    <button class="tab-btn" onclick="showTab('news',this)">
+      <i class="fas fa-newspaper"></i> Nieuws
+      {% if pending_news > 0 %}<span style="background:var(--accent);color:#fff;border-radius:10px;font-size:10px;padding:1px 7px;margin-left:4px">{{ pending_news }}</span>{% endif %}
+    </button>
+    <button class="tab-btn" onclick="showTab('catalog',this)"><i class="fas fa-th-large"></i> Spelen</button>
+    <button class="tab-btn" onclick="showTab('users',this)"><i class="fas fa-users"></i> Gebruikers ({{ users|length }})</button>
+    <button class="tab-btn" onclick="showTab('games',this)"><i class="fas fa-gamepad"></i> Spellen ({{ games|length }})</button>
+    <a class="tab-btn" href="{{ url_for('admin_todo') }}" style="text-decoration:none"><i class="fas fa-list-check"></i> TODO</a>
+  </div>
+
+  <!-- ── Tab: Site & Thema ─────────────────────────────── -->
+  <div class="tab-pane active" id="tab-site">
+    <form method="POST" action="/admin/settings" enctype="multipart/form-data">
+      <div class="grid g2" style="gap:20px;align-items:start">
+
+        <!-- Branding -->
+        <div class="card">
+          <div class="card-title"><i class="fas fa-tag"></i> Branding</div>
+          <div class="form-group">
+            <label class="form-label">Site Naam</label>
+            <input name="site_name" class="form-control" value="{{ settings.get('site_name','VenTrax') }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tagline</label>
+            <input name="site_tagline" class="form-control" value="{{ settings.get('site_tagline','') }}" placeholder="Het ultieme real-time jachtspel">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Accent Kleur</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input type="color" name="site_accent" id="accentPick" value="{{ settings.get('site_accent','#e11d48') }}"
+                     style="width:50px;height:38px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--bg3);cursor:pointer"
+                     oninput="document.getElementById('accentVal').textContent=this.value">
+              <span id="accentVal" style="font-family:monospace;font-size:14px">{{ settings.get('site_accent','#e11d48') }}</span>
+              <!-- Presets -->
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                {% for c in ['#e11d48','#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2'] %}
+                <div onclick="document.getElementById('accentPick').value='{{ c }}';document.getElementById('accentVal').textContent='{{ c }}'"
+                     style="width:28px;height:28px;border-radius:50%;background:{{ c }};cursor:pointer;border:2px solid var(--border);transition:transform .2s"
+                     onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'"></div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Hoek Radius (px)</label>
+            <input type="range" name="site_border_radius" min="0" max="24" value="{{ settings.get('site_border_radius','12') }}"
+                   oninput="document.getElementById('radiusVal').textContent=this.value+'px'" style="width:100%;accent-color:var(--accent)">
+            <div class="form-hint">Huidig: <span id="radiusVal">{{ settings.get('site_border_radius','12') }}px</span></div>
+          </div>
+        </div>
+
+        <!-- Typography -->
+        <div class="card">
+          <div class="card-title"><i class="fas fa-font"></i> Typografie (Lettertype)</div>
+          <div class="form-group">
+            <label class="form-label">Hoofdlettertype (titels)</label>
+            <select name="site_font" class="form-control" id="hfontSel" onchange="updateFontPreview()">
+              {% for f in ['Syne','Orbitron','Bebas Neue','Rajdhani','Exo 2','Oxanium','Press Start 2P','Cinzel','Playfair Display','Montserrat'] %}
+              <option value="{{ f }}" {{ 'selected' if settings.get('site_font','Syne')==f }}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Broodtekst lettertype</label>
+            <select name="site_font_body" class="form-control" id="bfontSel" onchange="updateFontPreview()">
+              {% for f in ['DM Sans','Inter','Nunito','Source Sans 3','Roboto','Open Sans','Lato','Jost','Outfit','Quicksand'] %}
+              <option value="{{ f }}" {{ 'selected' if settings.get('site_font_body','DM Sans')==f }}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="padding:16px;background:var(--bg3);border-radius:var(--r2);margin-top:4px">
+            <div id="hfontPrev" style="font-size:24px;font-weight:800;margin-bottom:6px">VenTrax Titel</div>
+            <div id="bfontPrev" style="font-size:14px;color:var(--text2);line-height:1.6">Dit is hoe de broodtekst eruit ziet op de website.</div>
+          </div>
+        </div>
+
+        <!-- Logo -->
+        <div class="card">
+          <div class="card-title"><i class="fas fa-image"></i> Logo</div>
+          {% if settings.get('site_logo') %}
+          <div style="margin-bottom:14px;background:var(--bg3);border-radius:8px;padding:14px;text-align:center">
+            <img src="/backgrounds/{{ settings.site_logo }}" style="max-height:80px;object-fit:contain;margin:0 auto" alt="Logo">
+          </div>
+          {% endif %}
+          <div class="upload-zone" id="logoZone">
+            <input type="file" name="site_logo" accept="image/*" onchange="previewUp(this,'logoP','logoZone')">
+            <i class="fas fa-cloud-upload-alt" style="font-size:28px;color:var(--accent);display:block;margin-bottom:8px"></i>
+            <div style="font-weight:600;margin-bottom:4px">Klik om logo te uploaden</div>
+            <div style="font-size:12px;color:var(--text2)">PNG transparant aanbevolen · max 400×200</div>
+            <img id="logoP" style="display:none;margin:10px auto 0;max-height:60px" alt="">
+          </div>
+          {% if settings.get('site_logo') %}
+          <button type="submit" name="clear_logo" value="1" class="btn btn-danger btn-sm" style="margin-top:10px" formnovalidate>
+            <i class="fas fa-trash"></i> Logo verwijderen
+          </button>
+          {% endif %}
+        </div>
+
+        <!-- Background -->
+        <div class="card">
+          <div class="card-title"><i class="fas fa-panorama"></i> Achtergrond</div>
+          {% if settings.get('site_bg') %}
+          <div style="margin-bottom:12px;border-radius:8px;overflow:hidden;height:120px;position:relative">
+            <img src="/backgrounds/{{ settings.site_bg }}" style="width:100%;height:100%;object-fit:cover">
+            <div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px">Huidige achtergrond</div>
+          </div>
+          {% endif %}
+          <div class="upload-zone" id="bgZone">
+            <input type="file" name="site_bg" accept="image/*" onchange="previewUp(this,'bgP','bgZone')">
+            <i class="fas fa-mountain-sun" style="font-size:28px;color:var(--accent);display:block;margin-bottom:8px"></i>
+            <div style="font-weight:600;margin-bottom:4px">Upload achtergrond</div>
+            <div style="font-size:12px;color:var(--text2)">Beste: 2560×1440px · JPG/PNG/WEBP</div>
+            <img id="bgP" style="display:none;margin:10px auto 0;max-height:100px;width:100%;object-fit:cover;border-radius:6px" alt="">
+          </div>
+          <div class="form-group" style="margin-top:12px">
+            <label class="form-label">Overlay transparantie</label>
+            <input type="range" name="site_bg_overlay" min="0.3" max="0.95" step="0.05"
+                   value="{{ settings.get('site_bg_overlay','0.82') }}"
+                   oninput="document.getElementById('overlayVal').textContent=Math.round(this.value*100)+'%'"
+                   style="width:100%;accent-color:var(--accent)">
+            <div class="form-hint">Huidig: <span id="overlayVal">{{ (settings.get('site_bg_overlay','0.82')|float * 100)|round|int }}%</span></div>
+          </div>
+          {% if settings.get('site_bg') %}
+          <button type="submit" name="clear_bg" value="1" class="btn btn-danger btn-sm" style="margin-top:8px" formnovalidate>
+            <i class="fas fa-trash"></i> Achtergrond verwijderen
+          </button>
+          {% endif %}
+        </div>
+
+        <!-- Difficulty logos -->
+        <div class="card" style="grid-column:1/-1">
+          <div class="card-title"><i class="fas fa-sliders"></i> Moeilijkheid Afbeeldingen</div>
+          <div class="grid g2" style="gap:14px">
+            {% for field,label in [('diff_easy_img','Logo Makkelijk spel'),('diff_medium_img','Logo Gemiddeld spel'),('diff_hard_img','Logo Moeilijk spel'),('diff_custom_img','Logo Custom spel')] %}
+            <div class="form-group">
+              <label class="form-label">{{ label }}</label>
+              {% if settings.get(field) %}
+              <div style="height:100px;border-radius:8px;overflow:hidden;background:var(--bg3);margin-bottom:8px">
+                <img src="/backgrounds/{{ settings.get(field) }}" style="width:100%;height:100%;object-fit:cover" alt="{{ label }}">
+              </div>
+              {% endif %}
+              <div class="upload-zone" id="{{ field }}Zone">
+                <input type="file" name="{{ field }}" accept="image/*" onchange="previewUp(this,'{{ field }}P','{{ field }}Zone')">
+                <i class="fas fa-cloud-upload-alt" style="font-size:24px;color:var(--accent);display:block;margin-bottom:6px"></i>
+                <div style="font-weight:600;margin-bottom:4px">{{ label }} uploaden</div>
+                <div style="font-size:12px;color:var(--text2)">PNG/JPG/WEBP, brede afbeelding werkt het mooist</div>
+                <img id="{{ field }}P" style="display:none;margin:10px auto 0;max-height:80px;width:100%;object-fit:cover;border-radius:6px" alt="">
+              </div>
+              {% if settings.get(field) %}
+              <button type="submit" name="clear_{{ field }}" value="1" class="btn btn-danger btn-sm" style="margin-top:8px" formnovalidate>
+                <i class="fas fa-trash"></i> Verwijderen
+              </button>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+      </div>
+
+      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Alle Instellingen Opslaan</button>
+        <button type="button" class="btn btn-ghost" onclick="cleanup()"><i class="fas fa-broom"></i> Spellen Opruimen</button>
+        <span id="cleanupMsg" style="font-size:13px;color:var(--text2);align-self:center"></span>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Tab: News moderation ─────────────────────────── -->
+  <div class="tab-pane" id="tab-news" style="display:none">
+    {% set pending = articles if articles is defined else [] %}
+    {% set all_news = [] %}
+    <div class="card">
+      <div class="card-title"><i class="fas fa-newspaper"></i> Nieuws Beheer</div>
+      <div style="display:flex;gap:10px;margin-bottom:16px">
+        <a href="{{ url_for('news') }}" class="btn btn-ghost btn-sm" target="_blank"><i class="fas fa-external-link"></i> Bekijk feed</a>
+        <a href="{{ url_for('news_submit') }}" class="btn btn-primary btn-sm"><i class="fas fa-pen"></i> Artikel plaatsen</a>
+      </div>
+      <div id="newsModerationList">
+        <p style="color:var(--text2);font-size:14px">Ga naar de <a href="{{ url_for('news') }}">nieuws pagina</a> om artikelen te beoordelen en te modereren.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-pane" id="tab-catalog" style="display:none">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><i class="fas fa-th-large"></i> Spelen op de homepage</div>
+      <p style="color:var(--text2);font-size:13px;line-height:1.6;margin:0">
+        Beheer hier welke speltypes bezoekers zien. Upload per spel een logo/foto, pas de tekst aan en zet aan of het speelbaar is of als Binnenkort zichtbaar blijft.
+      </p>
+    </div>
+    <div class="catalog-grid">
+      {% for c in catalog_games %}
+      <form method="POST" action="{{ url_for('admin_catalog_edit', cid=c.id) }}" enctype="multipart/form-data" class="catalog-card">
+        <div class="catalog-preview">
+          {% if c.logo_file %}
+            {% if c.logo_file == 'logo_round.png' %}
+            <img src="/static/img/{{ c.logo_file }}" alt="{{ c.name }}">
+            {% else %}
+            <img src="/backgrounds/{{ c.logo_file }}" alt="{{ c.name }}">
+            {% endif %}
+          {% else %}
+          <i class="fas {{ c.icon or 'fa-gamepad' }}"></i>
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Naam</label>
+          <input name="name" class="form-control" value="{{ c.name }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Slug</label>
+          <input class="form-control" value="{{ c.slug }}" readonly>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Korte tekst</label>
+          <input name="tagline" class="form-control" value="{{ c.tagline or '' }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Beschrijving</label>
+          <textarea name="description" class="form-control" style="min-height:92px;resize:vertical">{{ c.description or '' }}</textarea>
+        </div>
+        <div class="grid g2" style="gap:10px">
+          <div class="form-group">
+            <label class="form-label">Icon</label>
+            <input name="icon" class="form-control" value="{{ c.icon or 'fa-gamepad' }}" placeholder="fa-user-secret">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Kleur</label>
+            <input name="color" type="color" class="form-control" value="{{ c.color or '#e11d48' }}" style="height:42px;padding:4px">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Volgorde</label>
+          <input name="sort_order" type="number" class="form-control" value="{{ c.sort_order }}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Logo/foto</label>
+          <div class="upload-zone" id="catalog{{ c.id }}Zone">
+            <input type="file" name="logo_file" accept="image/*" onchange="previewUp(this,'catalog{{ c.id }}P','catalog{{ c.id }}Zone')">
+            <i class="fas fa-cloud-upload-alt" style="font-size:24px;color:var(--accent);display:block;margin-bottom:6px"></i>
+            <div style="font-weight:600;margin-bottom:4px">Logo/foto uploaden</div>
+            <div style="font-size:12px;color:var(--text2)">PNG/JPG/WEBP, breed of vierkant werkt goed</div>
+            <img id="catalog{{ c.id }}P" style="display:none;margin:10px auto 0;max-height:86px;width:100%;object-fit:cover;border-radius:6px" alt="">
+          </div>
+        </div>
+        <div class="switch-row" style="margin-bottom:14px">
+          <label><input type="checkbox" name="is_active" {{ 'checked' if c.is_active }} style="accent-color:var(--accent)"> Actief</label>
+          <label><input type="checkbox" name="coming_soon" {{ 'checked' if c.coming_soon }} style="accent-color:var(--accent)"> Binnenkort</label>
+          {% if c.logo_file %}<label><input type="checkbox" name="clear_logo" value="1" style="accent-color:var(--danger)"> Logo weg</label>{% endif %}
+        </div>
+        <button class="btn btn-primary btn-full"><i class="fas fa-save"></i> Spel opslaan</button>
+      </form>
+      {% else %}
+      <div class="card" style="color:var(--text2)">Nog geen speltypes gevonden. Herstart de app zodat de standaard spellen worden aangemaakt.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── Tab: Users ───────────────────────────────────── -->
+  <div class="tab-pane" id="tab-users" style="display:none">
+    <div class="card">
+      <div class="card-title"><i class="fas fa-users"></i> Gebruikersbeheer</div>
+      <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>Gebruiker</th><th>E-mail</th><th>Rol</th><th>Spellen</th><th>Punten</th><th>Acties</th></tr></thead>
+          <tbody>
+            {% for u in users %}
+            <tr id="urow-{{ u.id }}">
+              <td>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;flex-shrink:0">{{ u.avatar_letter }}</div>
+                  <div><div style="font-weight:600;font-size:14px">{{ u.username }}</div><div style="font-size:11px;color:var(--text2)">{{ u.created_at.strftime('%d %b %Y') }}</div></div>
+                </div>
+              </td>
+              <td style="font-size:13px;color:var(--text2)">{{ u.email or '–' }}</td>
+              <td>{% if u.is_admin %}<span class="badge badge-admin"><i class="fas fa-shield-halved"></i> Admin</span>{% else %}<span class="badge" style="background:var(--bg3);color:var(--text2)">Speler</span>{% endif %}</td>
+              <td>{{ u.total_games }}</td>
+              <td>{{ '%.2f'|format(u.total_points or 0) }}</td>
+              <td>
+                <div style="display:flex;gap:5px">
+                  <button class="btn btn-ghost btn-xs" onclick="editUser({{ u.id }},'{{ u.username }}','{{ u.email or '' }}',{{ u.is_admin|lower }},{{ u.total_points }},{{ u.hunter_wins }},{{ u.runner_wins }})"><i class="fas fa-pen"></i></button>
+                  {% if u.id != current_user.id %}<button class="btn btn-danger btn-xs" onclick="delUser({{ u.id }},'{{ u.username }}')"><i class="fas fa-trash"></i></button>{% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Games ───────────────────────────────────── -->
+  <div class="tab-pane" id="tab-games" style="display:none">
+    <div class="card">
+      <div class="card-title"><i class="fas fa-gamepad"></i> Spellenbeheer</div>
+      {% if not games %}<div style="color:var(--text2);text-align:center;padding:30px">Nog geen spellen</div>
+      {% else %}
+      <div style="overflow-x:auto">
+        <table class="table">
+          <thead><tr><th>Naam</th><th>Code</th><th>Status</th><th>Moeilijkheid</th><th>×</th><th>Maker</th><th>Acties</th></tr></thead>
+          <tbody>
+            {% for g in games %}
+            <tr>
+              <td style="font-weight:600">{{ g.name }}</td>
+              <td><span class="code">{{ g.code }}</span></td>
+              <td>
+                <span class="badge" style="background:{% if g.status=='active' %}rgba(16,185,129,.1){% elif g.status=='lobby' %}rgba(59,130,246,.1){% else %}rgba(100,100,100,.1){% endif %};color:{% if g.status=='active' %}var(--runner){% elif g.status=='lobby' %}var(--hunter){% else %}var(--text2){% endif %}">{{ g.status|title }}</span>
+              </td>
+              <td><span style="font-size:13px;text-transform:capitalize">{{ g.difficulty }}</span></td>
+              <td style="font-weight:700;color:var(--accent)">×{{ g.points_multiplier }}</td>
+              <td style="font-size:13px">{{ g.creator.username }}</td>
+              <td>
+                {% if g.status in ('active','lobby','paused') %}<a href="{{ url_for('game_dashboard', code=g.code) }}" class="btn btn-ghost btn-xs"><i class="fas fa-eye"></i></a>{% endif %}
+                <button class="btn btn-danger btn-xs" onclick="delGame({{ g.id }},'{{ g.name }}')"><i class="fas fa-trash"></i></button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Edit user modal -->
+<div id="userModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9900;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)closeModal()">
+  <div class="card" style="max-width:440px;width:100%;max-height:90vh;overflow-y:auto">
+    <div class="card-title"><i class="fas fa-pen"></i> Gebruiker Bewerken</div>
+    <div class="form-group"><label class="form-label">Gebruikersnaam</label><input id="mUN" class="form-control"></div>
+    <div class="form-group"><label class="form-label">E-mail</label><input id="mEM" type="email" class="form-control"></div>
+    <div class="form-group"><label class="form-label">Nieuw Wachtwoord <span style="font-weight:400;text-transform:none">(leeg = ongewijzigd)</span></label><input id="mPW" type="password" class="form-control"></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="checkbox" id="mAdmin" style="width:18px;height:18px;accent-color:var(--accent)"><span style="font-weight:600">Admin rechten</span></label></div>
+    <div class="grid g3" style="margin-bottom:16px">
+      <div class="form-group"><label class="form-label">Punten</label><input id="mPts" type="number" class="form-control"></div>
+      <div class="form-group"><label class="form-label">H-wins</label><input id="mHW" type="number" class="form-control"></div>
+      <div class="form-group"><label class="form-label">R-wins</label><input id="mRW" type="number" class="form-control"></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-ghost" onclick="closeModal()"><i class="fas fa-xmark"></i></button>
+      <button class="btn btn-primary btn-full" onclick="saveUser()"><i class="fas fa-save"></i> Opslaan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showTab(t,btn){
+  document.querySelectorAll('.tab-pane').forEach(e=>e.style.display='none');
+  document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));
+  document.getElementById('tab-'+t).style.display='block';
+  btn.classList.add('active');
+  history.replaceState(null,'','#'+t);
+}
+function previewUp(inp,prevId,zoneId){
+  const f=inp.files[0];if(!f)return;
+  const r=new FileReader();r.onload=e=>{const img=document.getElementById(prevId);img.src=e.target.result;img.style.display='block';};r.readAsDataURL(f);
+}
+function updateFontPreview(){
+  const hf=document.getElementById('hfontSel').value;
+  const bf=document.getElementById('bfontSel').value;
+  const link=document.createElement('link');
+  link.rel='stylesheet';
+  link.href=`https://fonts.googleapis.com/css2?family=${hf.replace(/ /g,'+')}:wght@700;800&family=${bf.replace(/ /g,'+')}:wght@400;500&display=swap`;
+  document.head.appendChild(link);
+  document.getElementById('hfontPrev').style.fontFamily=`'${hf}', sans-serif`;
+  document.getElementById('bfontPrev').style.fontFamily=`'${bf}', sans-serif`;
+}
+
+let editUid=null;
+function editUser(id,un,em,admin,pts,hw,rw){
+  editUid=id;
+  document.getElementById('mUN').value=un;document.getElementById('mEM').value=em;
+  document.getElementById('mPW').value='';document.getElementById('mAdmin').checked=admin;
+  document.getElementById('mPts').value=pts;document.getElementById('mHW').value=hw;document.getElementById('mRW').value=rw;
+  document.getElementById('userModal').style.display='flex';
+}
+function closeModal(){document.getElementById('userModal').style.display='none'}
+function saveUser(){
+  const p={username:document.getElementById('mUN').value.trim(),email:document.getElementById('mEM').value.trim(),
+    is_admin:document.getElementById('mAdmin').checked,
+    total_points:parseInt(document.getElementById('mPts').value)||0,
+    hunter_wins:parseInt(document.getElementById('mHW').value)||0,
+    runner_wins:parseInt(document.getElementById('mRW').value)||0};
+  const pw=document.getElementById('mPW').value;if(pw)p.password=pw;
+  fetch(`/admin/user/${editUid}/edit`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
+    .then(r=>r.json()).then(d=>{if(d.success){showToast('Opgeslagen!','success');closeModal();setTimeout(()=>location.reload(),800)}else showToast(d.error||'Fout','error')});
+}
+function delUser(id,name){if(!confirm(`Gebruiker "${name}" verwijderen?`))return;fetch(`/admin/user/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){document.getElementById('urow-'+id).remove();showToast('Verwijderd','success')}else showToast(d.error,'error')})}
+function delGame(id,name){if(!confirm(`Spel "${name}" verwijderen?`))return;fetch(`/admin/game/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast('Verwijderd','success');setTimeout(()=>location.reload(),800)}})}
+function cleanup(){fetch('/admin/cleanup',{method:'POST'}).then(r=>r.json()).then(d=>{document.getElementById('cleanupMsg').textContent=`${d.deleted} spel(len) verwijderd`;showToast(`${d.deleted} opgeruimd`,'success')})}
+document.addEventListener('DOMContentLoaded',()=>{
+  const tab=(location.hash||'').replace('#','');
+  if(tab){
+    const btn=[...document.querySelectorAll('.tab-btn')].find(b=>b.getAttribute('onclick')?.includes(`'${tab}'`));
+    if(btn && document.getElementById('tab-'+tab)) showTab(tab,btn);
+  }
+});
+</script>
+{% endblock %}

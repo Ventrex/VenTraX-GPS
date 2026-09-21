@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}GPS Test – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+#gpsMap{height:400px;border-radius:var(--r);border:1px solid var(--border)}
+.gps-stat{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;text-align:center}
+.gps-stat-num{font-family:'Syne',sans-serif;font-size:24px;font-weight:800}
+.gps-stat-lbl{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-top:3px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container" style="max-width:860px">
+  <h1 style="font-family:'Syne',sans-serif;font-size:30px;font-weight:800;margin-bottom:6px">
+    <i class="fas fa-satellite-dish" style="color:var(--accent)"></i> GPS Test
+  </h1>
+  <p style="color:var(--text2);margin-bottom:24px">Test of jouw GPS goed werkt voor VenTrax</p>
+
+  <!-- Status banner -->
+  <div id="statusBanner" class="alert alert-info" style="margin-bottom:20px">
+    <i class="fas fa-hourglass-half fa-spin"></i>
+    <div>GPS ophalen... Geef toestemming als jouw browser hierom vraagt.</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid g4" style="margin-bottom:20px">
+    <div class="gps-stat"><div class="gps-stat-num" id="accNum" style="color:var(--warn)">–</div><div class="gps-stat-lbl"><i class="fas fa-bullseye"></i> Nauwkeurigheid</div></div>
+    <div class="gps-stat"><div class="gps-stat-num" id="latNum" style="color:var(--hunter)">–</div><div class="gps-stat-lbl"><i class="fas fa-arrows-up-down"></i> Breedtegraad</div></div>
+    <div class="gps-stat"><div class="gps-stat-num" id="lonNum" style="color:var(--runner)">–</div><div class="gps-stat-lbl"><i class="fas fa-arrows-left-right"></i> Lengtegraad</div></div>
+    <div class="gps-stat"><div class="gps-stat-num" id="speedNum" style="color:var(--accent)">–</div><div class="gps-stat-lbl"><i class="fas fa-tachometer-alt"></i> Snelheid</div></div>
+  </div>
+
+  <!-- Map -->
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-weight:600"><i class="fas fa-map" style="color:var(--accent)"></i> Jouw Locatie</span>
+      <span id="updateCount" style="font-size:12px;color:var(--text2)">Wachten op GPS...</span>
+    </div>
+    <div id="gpsMap"></div>
+  </div>
+
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button id="btnStart" class="btn btn-primary btn-lg" onclick="startGPS()">
+      <i class="fas fa-satellite-dish"></i> GPS Inschakelen
+    </button>
+    <button id="btnStop" class="btn btn-danger btn-lg" onclick="stopGPS()" style="display:none">
+      <i class="fas fa-stop"></i> Stoppen
+    </button>
+    <a href="{{ url_for('gps_help') }}" class="btn btn-ghost btn-lg">
+      <i class="fas fa-circle-question"></i> GPS Problemen?
+    </a>
+  </div>
+</div>
+
+<script>
+let map, marker, circle, watcher, updates=0;
+
+map = L.map('gpsMap',{zoomControl:true,attributionControl:false}).setView([52.15,5.38],8);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(map);
+L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,opacity:0.7}).addTo(map);
+
+function startGPS(){
+  if(!navigator.geolocation){
+    document.getElementById('statusBanner').className='alert alert-danger';
+    document.getElementById('statusBanner').innerHTML='<i class="fas fa-xmark-circle"></i><div>GPS wordt niet ondersteund door deze browser.</div>';
+    return;
+  }
+  document.getElementById('statusBanner').innerHTML='<i class="fas fa-spinner fa-spin"></i><div>Wachten op GPS-signaal...</div>';
+  watcher=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:true,timeout:30000,maximumAge:3000});
+  document.getElementById('btnStart').style.display='none';
+  document.getElementById('btnStop').style.display='';
+}
+
+function onPos(p){
+  const {latitude:lat,longitude:lon,accuracy:acc,speed} = p.coords;
+  updates++;
+  document.getElementById('accNum').textContent=`±${Math.round(acc)}m`;
+  document.getElementById('accNum').style.color=acc<20?'var(--runner)':acc<50?'var(--warn)':'var(--danger)';
+  document.getElementById('latNum').textContent=lat.toFixed(6);
+  document.getElementById('lonNum').textContent=lon.toFixed(6);
+  document.getElementById('speedNum').textContent=speed?`${Math.round(speed*3.6)}km/h`:'0';
+  document.getElementById('updateCount').textContent=`Update #${updates}`;
+
+  const q=acc<=15?'Uitstekend ✓':acc<=30?'Goed':acc<=50?'Matig':'Slecht – ga naar buiten';
+  const col=acc<=15?'runner':acc<=30?'runner':acc<=50?'warn':'danger';
+  document.getElementById('statusBanner').className=`alert alert-${acc<=30?'success':'warning'}`;
+  document.getElementById('statusBanner').innerHTML=`<i class="fas fa-satellite-dish"></i><div><strong>GPS Actief – ${q}</strong><br>Nauwkeurigheid: ±${Math.round(acc)} meter</div>`;
+
+  if(!marker){
+    marker=L.marker([lat,lon]).addTo(map).bindPopup('Jij').openPopup();
+    circle=L.circle([lat,lon],{radius:acc,color:'#3b82f6',fillOpacity:.1,weight:1}).addTo(map);
+    map.setView([lat,lon],17);
+  } else { marker.setLatLng([lat,lon]); circle.setLatLng([lat,lon]).setRadius(acc); }
+}
+
+function onErr(e){
+  const msgs={1:'GPS geweigerd. Ga naar je browserinstellingen en sta locatie toe.',2:'Locatie niet beschikbaar.',3:'GPS time-out. Probeer opnieuw.'};
+  document.getElementById('statusBanner').className='alert alert-danger';
+  document.getElementById('statusBanner').innerHTML=`<i class="fas fa-triangle-exclamation"></i><div><strong>GPS Fout</strong><br>${msgs[e.code]||'Onbekende fout.'} <a href="${'{{ url_for("gps_help") }}'}" style="color:inherit">GPS Help</a></div>`;
+  document.getElementById('btnStart').style.display='';
+  document.getElementById('btnStop').style.display='none';
+}
+
+function stopGPS(){
+  if(watcher) navigator.geolocation.clearWatch(watcher);
+  document.getElementById('btnStart').style.display='';
+  document.getElementById('btnStop').style.display='none';
+  document.getElementById('statusBanner').className='alert alert-info';
+  document.getElementById('statusBanner').innerHTML='<i class="fas fa-info-circle"></i><div>GPS gestopt.</div>';
+}
+
+startGPS();
+</script>
+{% endblock %}

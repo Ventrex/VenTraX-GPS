@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="margin-bottom:28px">
+    <h1 style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800">
+      Hoi, <span style="color:var(--accent)">{{ current_user.username }}</span> 👋
+    </h1>
+    <p style="color:var(--text2);margin-top:4px">Welkom terug bij {{ site_name }}. Klaar voor de jacht?</p>
+  </div>
+
+  <div class="grid g4" style="margin-bottom:28px">
+    <div class="card stat-card"><div class="stat-num">{{ current_user.total_games }}</div><div class="stat-label"><i class="fas fa-gamepad"></i> Spellen</div></div>
+    <div class="card stat-card"><div class="stat-num" style="color:var(--hunter)">{{ current_user.hunter_wins }}</div><div class="stat-label"><i class="fas fa-crosshairs"></i> Hunter Wins</div></div>
+    <div class="card stat-card"><div class="stat-num" style="color:var(--runner)">{{ current_user.runner_wins }}</div><div class="stat-label"><i class="fas fa-person-running"></i> Runner Wins</div></div>
+    <div class="card stat-card"><div class="stat-num" style="color:var(--warn)">{{ '%.2f'|format(current_user.total_points or 0) }}</div><div class="stat-label"><i class="fas fa-star"></i> Punten</div></div>
+  </div>
+
+  <div class="grid g3" style="margin-bottom:28px">
+    <a href="{{ url_for('new_game') }}" class="card card-hover" style="text-decoration:none!important;display:block;border-color:rgba(225,29,72,.3)">
+      <div style="font-size:44px;margin-bottom:14px;line-height:1"><i class="fas fa-plus-circle" style="color:var(--accent)"></i></div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700">Nieuw Spel</div>
+      <div style="color:var(--text2);font-size:14px;margin-top:6px;line-height:1.5">Maak een spel en deel de code met vrienden</div>
+      <div class="btn btn-primary btn-sm" style="margin-top:16px"><i class="fas fa-arrow-right"></i> Aanmaken</div>
+    </a>
+    <a href="{{ url_for('join') }}" class="card card-hover" style="text-decoration:none!important;display:block;border-color:rgba(59,130,246,.3)">
+      <div style="font-size:44px;margin-bottom:14px;line-height:1"><i class="fas fa-door-open" style="color:var(--hunter)"></i></div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700">Join Spel</div>
+      <div style="color:var(--text2);font-size:14px;margin-top:6px;line-height:1.5">Voer de 6-letterige code in van de spelmaker</div>
+      <div class="btn btn-hunter btn-sm" style="margin-top:16px"><i class="fas fa-arrow-right"></i> Joinen</div>
+    </a>
+    <a href="{{ url_for('join') }}?scan=1" class="card card-hover" style="text-decoration:none!important;display:block;border-color:rgba(245,158,11,.3)">
+      <div style="font-size:44px;margin-bottom:14px;line-height:1"><i class="fas fa-qrcode" style="color:var(--warn)"></i></div>
+      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700">QR Scannen</div>
+      <div style="color:var(--text2);font-size:14px;margin-top:6px;line-height:1.5">Open direct je camera om een spel te joinen</div>
+      <div class="btn btn-warn btn-sm" style="margin-top:16px"><i class="fas fa-camera"></i> Camera openen</div>
+    </a>
+  </div>
+
+  {% if my_games %}
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><i class="fas fa-circle-play"></i> Spellen waar jij nog in zit</div>
+    {% for gp in my_games %}
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="badge badge-{{ gp.role }}">
+          <i class="fas fa-{{ 'crosshairs' if gp.role=='hunter' else 'person-running' }}"></i> {{ gp.role|title }}
+        </span>
+        <div>
+          <div style="font-weight:600">{{ gp.game.name }}</div>
+          <div style="font-size:12px;color:var(--text2)">Code: <span class="code">{{ gp.game.code }}</span> · <span style="text-transform:capitalize">{{ gp.game.status }}</span></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a href="{{ url_for('lobby' if gp.game.status=='lobby' else 'game_dashboard', code=gp.game.code) }}" class="btn btn-ghost btn-sm">
+          <i class="fas fa-arrow-right"></i> {{ 'Open lobby' if gp.game.status=='lobby' else 'Verder op kaart' }}
+        </a>
+        {% if gp.game.creator_id == current_user.id and gp.game.status == 'active' %}
+        <button class="btn btn-danger btn-sm" onclick="stopActiveGame('{{ gp.game.code }}','{{ gp.game.name }}')">
+          <i class="fas fa-stop"></i> Stop spel
+        </button>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><i class="fas fa-medal"></i> Badges</div>
+    {% if earned_badges %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+      {% for b in earned_badges %}
+      {% set bd = badge_defs.get(b.badge_type, {}) %}
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:12px;text-align:center">
+        <div style="font-size:26px;margin-bottom:4px;color:var(--accent)"><i class="fas {{ bd.get('icon','fa-medal') }}"></i></div>
+        <div style="font-weight:700;font-size:12px">{{ bd.get('name', b.badge_type) }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="color:var(--text2);font-size:14px">Nog geen badges behaald.</div>
+    {% endif %}
+    <a href="{{ url_for('badges') }}" class="btn btn-ghost btn-sm" style="margin-top:14px"><i class="fas fa-arrow-right"></i> Alle badges</a>
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-title"><i class="fas fa-wand-magic-sparkles"></i> Binnenkort</div>
+    <div class="grid g2">
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">VenTrax Extra's</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Dropboxes, landmijnen, laser-detectie, tripwire, hacker, glitch en speelvelden met gekleurde zones.</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">De Avonturier</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Ontdek leuke plekken dichtbij je GPS-locatie, krijg routes en luister naar uitleg over gebouwen of natuur.</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">Escape City</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Zoek echte locaties op basis van veilige spelersfoto's en cryptische hints uit de buurt.</div>
+      </div>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:14px">
+        <div style="font-weight:800;margin-bottom:6px">Player vs Player</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">Een avontuurlijke GPS-strijd met meer nadruk op dropboxes, acties en slimme power-ups.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fas fa-wrench"></i> Tools</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a href="{{ url_for('gps_test') }}" class="btn btn-ghost"><i class="fas fa-satellite-dish"></i> GPS Test</a>
+      <a href="{{ url_for('gps_help') }}" class="btn btn-ghost"><i class="fas fa-circle-question"></i> GPS Help</a>
+    </div>
+  </div>
+</div>
+<script>
+function stopActiveGame(code, name){
+  if(!confirm(`Spel "${name}" stoppen voor iedereen?`)) return;
+  fetch('/api/game/' + code + '/end', {method:'POST'})
+    .then(r=>r.json()).then(d=>{
+      if(d.error){ showToast(d.error,'error'); return; }
+      showToast('Spel gestopt voor iedereen','success');
+      setTimeout(()=>location.reload(),700);
+    }).catch(()=>showToast('Kon spel niet stoppen','error'));
+}
+</script>
+{% endblock %}

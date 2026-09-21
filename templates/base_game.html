@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="nl" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a0f">
+<title>{% block title %}VenTrax{% endblock %}</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"></noscript>
+{% block extra_head %}{% endblock %}
+<style>
+:root{
+  --accent:#e11d48;--accent-glow:#e11d4844;
+  --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--bg4:#22222e;
+  --border:#2a2a38;
+  --text:#f0f0f8;--text2:#8888aa;
+  --hunter:#3b82f6;--runner:#10b981;--warn:#f59e0b;--danger:#ef4444;
+  --r:12px;--r2:8px;--tr:.2s cubic-bezier(.4,0,.2,1);
+  --hfont:'Syne',sans-serif;--bfont:'DM Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--bfont)}
+button{font-family:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 18px;border-radius:var(--r2);font-size:14px;font-weight:600;font-family:inherit;border:none;cursor:pointer;transition:all var(--tr);text-decoration:none;line-height:1;white-space:nowrap}
+.btn:active{transform:scale(.94)}
+.btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{filter:brightness(1.1)}
+.btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border)}.btn-ghost:hover{background:var(--bg4)}
+.btn-hunter{background:var(--hunter);color:#fff}.btn-runner{background:var(--runner);color:#fff}
+.btn-warn{background:var(--warn);color:#111}.btn-danger{background:var(--danger);color:#fff}
+.btn-sm{padding:5px 11px;font-size:12px;border-radius:6px}
+.btn-full{width:100%}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.badge-hunter{background:rgba(59,130,246,.15);color:var(--hunter);border:1px solid rgba(59,130,246,.3)}
+.badge-runner{background:rgba(16,185,129,.15);color:var(--runner);border:1px solid rgba(16,185,129,.3)}
+.form-control{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);color:var(--text);padding:10px 13px;font-size:14px;font-family:inherit;outline:none;transition:border-color var(--tr)}
+.form-control:focus{border-color:var(--accent)}
+.form-control::placeholder{color:var(--text2)}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .65s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Toast */
+.toast-wrap{position:fixed;top:16px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:7px;z-index:9999;pointer-events:none;width:min(340px,90vw)}
+.toast{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:11px 15px;font-size:13px;box-shadow:0 4px 20px rgba(0,0,0,.6);display:flex;align-items:center;gap:8px;pointer-events:all;animation:tIn .25s ease}
+.toast.success{border-left:3px solid var(--runner)}.toast.error{border-left:3px solid var(--danger)}
+.toast.info{border-left:3px solid var(--hunter)}.toast.warn{border-left:3px solid var(--warn)}
+@keyframes tIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes tOut{from{opacity:1}to{opacity:0;transform:translateY(-8px)}}
+/* Leaflet attribution hide */
+.leaflet-control-attribution{display:none!important}
+</style>
+</head>
+<body>
+{% block content %}{% endblock %}
+<div class="toast-wrap" id="toastWrap"></div>
+<script>
+function showToast(msg,type='info',dur=4500){
+  const icons={success:'check-circle',error:'exclamation-circle',info:'info-circle',warn:'exclamation-triangle'};
+  const el=document.createElement('div');
+  el.className=`toast ${type}`;
+  el.innerHTML=`<i class="fas fa-${icons[type]||'info-circle'}" style="flex-shrink:0"></i><span>${msg}</span>`;
+  document.getElementById('toastWrap').appendChild(el);
+  const rm=()=>{el.style.animation='tOut .25s forwards';setTimeout(()=>el.remove(),260)};
+  setTimeout(rm,dur);el.addEventListener('click',rm);
+}
+function fmtTime(s){s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return[h,m,sec].map(v=>String(v).padStart(2,'0')).join(':')}
+function fmtMM(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m`}
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

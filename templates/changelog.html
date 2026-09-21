@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Changelog – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.cl-entry{border-left:3px solid var(--border);padding-left:20px;margin-bottom:32px;position:relative}
+.cl-entry::before{content:'';width:12px;height:12px;border-radius:50%;background:var(--border);position:absolute;left:-7px;top:4px}
+.cl-entry.feature::before{background:var(--runner)}
+.cl-entry.fix::before{background:var(--danger)}
+.cl-entry.update::before{background:var(--hunter)}
+.cl-entry.security::before{background:var(--warn)}
+.cl-entry.feature{border-color:rgba(16,185,129,.4)}
+.cl-entry.fix{border-color:rgba(239,68,68,.4)}
+.cl-entry.update{border-color:rgba(59,130,246,.4)}
+.cl-entry.security{border-color:rgba(245,158,11,.4)}
+.cl-tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;display:inline-block;margin-bottom:8px}
+.cl-tag.feature{background:rgba(16,185,129,.1);color:var(--runner)}
+.cl-tag.fix{background:rgba(239,68,68,.1);color:var(--danger)}
+.cl-tag.update{background:rgba(59,130,246,.1);color:var(--hunter)}
+.cl-tag.security{background:rgba(245,158,11,.1);color:var(--warn)}
+.cl-version{font-family:var(--hfont);font-size:13px;font-weight:700;color:var(--accent);margin-right:8px}
+.cl-title{font-family:var(--hfont);font-size:20px;font-weight:800;margin-bottom:6px}
+.cl-date{font-size:12px;color:var(--text2);margin-bottom:12px}
+.cl-body{font-size:14px;color:var(--text2);line-height:1.8}
+.cl-body ul{list-style:none;padding:0}
+.cl-body li::before{content:'→ ';color:var(--accent)}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container-md">
+  <div style="margin-bottom:32px">
+    <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800"><i class="fas fa-code-branch" style="color:var(--accent)"></i> Changelog</h1>
+    <p style="color:var(--text2);margin-top:6px">Versiegeschiedenis van {{ site_name }} — wat er per versie is toegevoegd, opgelost en verbeterd.</p>
+  </div>
+
+  {% if not entries %}
+  <div class="card" style="text-align:center;color:var(--text2);padding:40px">
+    <i class="fas fa-code-branch" style="font-size:36px;opacity:.3;display:block;margin-bottom:12px"></i>
+    Nog geen changelog entries.
+  </div>
+  {% endif %}
+
+  {% for e in entries %}
+  <div class="cl-entry {{ e.type }}">
+    <div>
+      <span class="cl-tag {{ e.type }}">{{ {'feature':'Nieuw','fix':'Bugfix','update':'Update','security':'Beveiliging'}.get(e.type, e.type)|upper }}</span>
+      <span class="cl-version">v{{ e.version }}</span>
+    </div>
+    <div class="cl-title">{{ e.title }}</div>
+    <div class="cl-date"><i class="fas fa-calendar-alt"></i> {{ e.created_at.strftime('%d %B %Y') }}</div>
+    <div class="cl-body">
+      <ul>
+        {% for line in e.body.split('\n') %}
+        {% if line.strip() %}
+        <li>{{ line.lstrip('•').lstrip('- ').strip() }}</li>
+        {% endif %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endfor %}
+
+  <!-- Disclaimer section -->
+  <div class="card" style="margin-top:40px;border-color:rgba(245,158,11,.3)">
+    <div class="card-title" style="color:var(--warn)"><i class="fas fa-triangle-exclamation"></i> Spelregels &amp; Disclaimer</div>
+    <div style="font-size:14px;line-height:1.8;color:var(--text2)">
+      <p style="margin-bottom:10px"><strong style="color:var(--text)">🚶 Veiligheid voorop — ren niet!</strong><br>
+      VenTrax is bedoeld voor wandelaars. Rennen is gevaarlijk in de openbare ruimte en wordt afgestraft met minder punten.
+      Boven de 10 km/u dalen punten snel. Speel slim, niet snel.</p>
+
+      <p style="margin-bottom:10px"><strong style="color:var(--text)">⚖️ Valsspelen</strong><br>
+      Beheerders monitoren activiteiten actief. Bij vermoeden van valsspelen (GPS spoofing, onnatuurlijk hoge snelheden, hacking)
+      kunnen beheerders naar eigen inzicht punten in mindering brengen of spelers uitsluiten. Hier kan niet tegen worden bezwaar gemaakt.</p>
+
+      <p style="margin-bottom:10px"><strong style="color:var(--text)">📸 Foto's</strong><br>
+      Maak geen foto's van personen zonder toestemming. Kentekens en privégegevens mogen niet zichtbaar zijn.
+      Beheerders kunnen foto's zonder opgaaf van reden verwijderen.</p>
+
+      <p><strong style="color:var(--text)">📍 Privacy</strong><br>
+      GPS-locaties worden automatisch verwijderd na afloop van het spel. Foto's blijven beschikbaar voor de spelgroep.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
