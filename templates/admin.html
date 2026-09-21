@@ -303,13 +303,23 @@
                 </div>
               </td>
               <td style="font-size:13px;color:var(--text2)">{{ u.email or '–' }}</td>
-              <td>{% if u.is_admin %}<span class="badge badge-admin"><i class="fas fa-shield-halved"></i> Admin</span>{% else %}<span class="badge" style="background:var(--bg3);color:var(--text2)">Speler</span>{% endif %}</td>
+              <td>
+                {% if u.is_admin %}<span class="badge badge-admin"><i class="fas fa-shield-halved"></i> Admin</span>{% else %}<span class="badge" style="background:var(--bg3);color:var(--text2)">Speler</span>{% endif %}
+                {% if u.is_banned %}<span class="badge" style="background:rgba(239,68,68,.1);color:var(--danger)"><i class="fas fa-ban"></i> Geband</span>{% endif %}
+              </td>
               <td>{{ u.total_games }}</td>
               <td>{{ '%.2f'|format(u.total_points or 0) }}</td>
               <td>
                 <div style="display:flex;gap:5px">
                   <button class="btn btn-ghost btn-xs" onclick="editUser({{ u.id }},'{{ u.username }}','{{ u.email or '' }}',{{ u.is_admin|lower }},{{ u.total_points }},{{ u.hunter_wins }},{{ u.runner_wins }})"><i class="fas fa-pen"></i></button>
-                  {% if u.id != current_user.id %}<button class="btn btn-danger btn-xs" onclick="delUser({{ u.id }},'{{ u.username }}')"><i class="fas fa-trash"></i></button>{% endif %}
+                  {% if u.id != current_user.id %}
+                  {% if u.is_banned %}
+                  <button class="btn btn-ghost btn-xs" onclick="unbanUser({{ u.id }},'{{ u.username }}')" title="Deblokkeren"><i class="fas fa-unlock"></i></button>
+                  {% else %}
+                  <button class="btn btn-ghost btn-xs" onclick="banUser({{ u.id }},'{{ u.username }}')" title="Bannen"><i class="fas fa-ban"></i></button>
+                  {% endif %}
+                  <button class="btn btn-danger btn-xs" onclick="delUser({{ u.id }},'{{ u.username }}')"><i class="fas fa-trash"></i></button>
+                  {% endif %}
                 </div>
               </td>
             </tr>
@@ -417,6 +427,17 @@ function saveUser(){
     .then(r=>r.json()).then(d=>{if(d.success){showToast('Opgeslagen!','success');closeModal();setTimeout(()=>location.reload(),800)}else showToast(d.error||'Fout','error')});
 }
 function delUser(id,name){if(!confirm(`Gebruiker "${name}" verwijderen?`))return;fetch(`/admin/user/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){document.getElementById('urow-'+id).remove();showToast('Verwijderd','success')}else showToast(d.error,'error')})}
+function banUser(id,name){
+  if(!confirm(`Gebruiker "${name}" bannen? Diegene wordt direct uitgelogd en kan niet meer inloggen.`))return;
+  const pts=parseInt(prompt('Punten in mindering brengen bij het bannen? (0 = geen)','0'))||0;
+  fetch(`/admin/user/${id}/ban`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({points_penalty:pts})})
+    .then(r=>r.json()).then(d=>{if(d.success){showToast('Gebruiker geband','success');setTimeout(()=>location.reload(),800)}else showToast(d.error||'Fout','error')});
+}
+function unbanUser(id,name){
+  if(!confirm(`Gebruiker "${name}" deblokkeren?`))return;
+  fetch(`/admin/user/${id}/unban`,{method:'POST'})
+    .then(r=>r.json()).then(d=>{if(d.success){showToast('Gebruiker gedeblokkeerd','success');setTimeout(()=>location.reload(),800)}else showToast(d.error||'Fout','error')});
+}
 function delGame(id,name){if(!confirm(`Spel "${name}" verwijderen?`))return;fetch(`/admin/game/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast('Verwijderd','success');setTimeout(()=>location.reload(),800)}})}
 function cleanup(){fetch('/admin/cleanup',{method:'POST'}).then(r=>r.json()).then(d=>{document.getElementById('cleanupMsg').textContent=`${d.deleted} spel(len) verwijderd`;showToast(`${d.deleted} opgeruimd`,'success')})}
 document.addEventListener('DOMContentLoaded',()=>{

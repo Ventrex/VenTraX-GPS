@@ -338,8 +338,11 @@ class User(UserMixin, db.Model):
     email_verified  = db.Column(db.Boolean, default=False)
     # New-registration-only gate (see register()). Existing rows default to False
     # (no new column = no new obligation) so no existing account is ever restricted
-    # by this. Distinct from email_verified/admin_ban_user's use of it for bans.
+    # by this. Distinct from email_verified/is_banned.
     requires_email_verification = db.Column(db.Boolean, default=False)
+    # Set by admin_ban_user(). Checked at login() and in load_user() so a ban
+    # both blocks future logins and immediately invalidates any active session.
+    is_banned       = db.Column(db.Boolean, default=False)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     total_points    = db.Column(db.Float,   default=0.0)
     hunter_wins     = db.Column(db.Integer, default=0)
@@ -657,7 +660,13 @@ class Badge(db.Model):
 
 # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @login_manager.user_loader
-def load_user(uid): return User.query.get(int(uid))
+def load_user(uid):
+    user = User.query.get(int(uid))
+    # Returning None for a banned user invalidates their session on the very
+    # next request, so a ban logs them out immediately, not just at next login.
+    if user and user.is_banned:
+        return None
+    return user
 
 def allowed_file(f): return '.' in f and f.rsplit('.', 1)[1].lower() in ALLOWED_IMG
 
@@ -2334,6 +2343,9 @@ def login():
     if request.method == 'POST':
         u = User.query.filter_by(username=request.form.get('username', '').strip()).first()
         if u and u.check_password(request.form.get('password', '')):
+            if u.is_banned:
+                flash('Dit account is geblokkeerd.', 'danger')
+                return render_template('login.html')
             ip = get_client_ip()
             # Log the login
             log_activity('login', f'IP:{ip}', user_id=u.id)
@@ -4051,8 +4063,18 @@ def admin_ban_user(uid):
     pts_penalty = d.get('points_penalty', 0)
     if pts_penalty:
         user.total_points = max(0, user.total_points - pts_penalty)
-    user.email_verified = False  # revoke access
+    user.is_banned = True
     log_activity('user_banned', f'penalty:{pts_penalty}', user_id=uid, flag=True)
+    db.session.commit()
+    return jsonify(success=True)
+
+@app.route('/admin/user/<int:uid>/unban', methods=['POST'])
+@login_required
+@admin_required
+def admin_unban_user(uid):
+    user = User.query.get_or_404(uid)
+    user.is_banned = False
+    log_activity('user_unbanned', '', user_id=uid, flag=True)
     db.session.commit()
     return jsonify(success=True)
 
@@ -4476,6 +4498,7 @@ def init_db():
         db.create_all()
         ensure_column('post', 'audio_filename', 'VARCHAR(256)')
         ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
+        ensure_column('user', 'is_banned', 'BOOLEAN DEFAULT 0')
         os.makedirs(AUDIO_FOLDER, exist_ok=True)
         if not SiteSetting.get('site_logo'):
             SiteSetting.set('site_logo', 'logo_default.png')
