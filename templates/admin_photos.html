@@ -20,7 +20,8 @@
   <div class="grid g3" style="gap:16px">
     {% for p in photos %}
     <div class="card" id="photo-{{ p.id }}" style="overflow:hidden">
-      <img src="/uploads/{{ p.image_filename }}" style="width:100%;height:190px;object-fit:cover;border-radius:8px;margin-bottom:10px" alt="">
+      {% if p.image_filename %}<img src="/uploads/{{ p.image_filename }}" style="width:100%;height:190px;object-fit:cover;border-radius:8px;margin-bottom:10px" alt="">{% endif %}
+      {% if p.audio_filename %}<audio controls src="/audio/{{ p.audio_filename }}" style="width:100%;margin-bottom:10px"></audio>{% endif %}
       <div style="font-size:13px;line-height:1.5;color:var(--text2)">
         <div><strong style="color:var(--text)">Uploader:</strong> {{ p.author.username }}{% if p.author.email %} · {{ p.author.email }}{% endif %}</div>
         <div><strong style="color:var(--text)">Spel:</strong> {{ p.game.name if p.game else 'Onbekend' }}</div>
