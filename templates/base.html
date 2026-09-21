@@ -328,6 +328,17 @@ footer a{color:var(--text2)}
 {% endif %}
 {% endwith %}
 
+{% if current_user.is_authenticated and current_user.requires_email_verification %}
+<div style="max-width:660px;margin:14px auto;padding:0 14px">
+  <div class="alert alert-warning" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+    <span><i class="fas fa-envelope-circle-check"></i> Bevestig je e-mailadres om een spel te maken of te joinen.</span>
+    <form method="POST" action="{{ url_for('resend_verification') }}" style="margin:0">
+      <button type="submit" class="btn btn-sm btn-ghost">Verstuur opnieuw</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
 <main class="page-enter">{% block content %}{% endblock %}</main>
 
 <footer>
