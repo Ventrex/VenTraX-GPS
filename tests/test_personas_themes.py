@@ -59,7 +59,7 @@ def test_players_pick_a_persona_for_their_role(appmodule, client, monkeypatch):
         s["_user_id"] = str(uid); s["_fresh"] = True
     d = client.get("/api/game/PRS123/personas").get_json()
     names = {p["name"]: p for p in d["personas"]}
-    assert set(names) == {"Leatherface", "Ghostface"}                  # hunter personas only
+    assert {"Leatherface", "Ghostface", "Freddy Krueger"} <= set(names) and "Sidney Prescott" not in names   # hunter personas only
     r = client.post("/api/game/PRS123/persona", json={"id": names["Ghostface"]["id"]})
     assert r.get_json()["persona"]["name"] == "Ghostface"
     assert client.get("/api/game/PRS123/lobby_state").get_json()["players"][0]["persona"]["name"] == "Ghostface"
@@ -117,3 +117,18 @@ def test_picture_slots_for_field_modes_colours_and_theme_cards(appmodule, client
     assert client.post("/admin/images/img_unknown", data={}).status_code == 404
     html = client.get("/new_game").get_data(as_text=True)
     assert 'class="pf-ico"' in html and "img_pfcolor" not in html
+
+
+def test_paste_a_table_of_films_with_bad_and_good_characters(appmodule, client):
+    login(client, appmodule)
+    with appmodule.app.app_context():
+        tid = appmodule.SoundTheme.query.filter_by(slug="halloween").first().id
+        names = {(p.name, p.role) for p in appmodule.ThemePersona.query.filter_by(theme_id=tid)}
+    assert ("Freddy Krueger", "hunter") in names and ("Nancy Thompson", "runner") in names      # seeded from the maker's list
+    assert ("Ichabod Crane", "runner") in names and len(names) >= 30
+    text = "| Film | Slecht 🔪 | Goed 🛡️ |\n|---|---|---|\n| **Poltergeist** | The Beast | Diane Freeling |\n| Scream | Ghostface | Sidney Prescott |"
+    client.post("/admin/personas/bulk", data={"theme_id": tid, "text": text})
+    with appmodule.app.app_context():
+        got = {(p.name, p.role): p.blurb for p in appmodule.ThemePersona.query.filter_by(theme_id=tid)}
+        assert got[("The Beast", "hunter")] == "Poltergeist" and got[("Diane Freeling", "runner")] == "Poltergeist"
+        assert sum(1 for k in got if k[0] == "Ghostface") == 1                               # no duplicates

@@ -5435,6 +5435,75 @@ def admin_persona_save():
     flash('Personage opgeslagen.', 'success')
     return redirect(url_for('admin_personas', theme=theme.id))
 
+HALLOWEEN_PERSONAS = """
+| Scream | Ghostface | Sidney Prescott |
+| Halloween | Michael Myers | Laurie Strode |
+| A Nightmare on Elm Street | Freddy Krueger | Nancy Thompson |
+| Friday the 13th: Part 2 | Jason Voorhees | Ginny Field |
+| Child's Play | Chucky | Andy Barclay |
+| The Texas Chain Saw Massacre | Leatherface | Sally Hardesty |
+| IT | Pennywise | Bill Denbrough en de Losers' Club |
+| The Conjuring 2 | Valak, de demonische non | Lorraine en Ed Warren |
+| The Black Phone | The Grabber | Finney Blake |
+| The Invisible Man (2020) | Adrian Griffin | Cecilia Kass |
+| The Shining | Jack Torrance, onder invloed van het hotel | Wendy en Danny Torrance |
+| Alien | De Xenomorph | Ellen Ripley |
+| Terrifier 2 | Art the Clown | Sienna Shaw |
+| The Ring (2002) | Samara Morgan | Rachel Keller |
+| Sleepy Hollow (1999) | De Ruiter zonder Hoofd en degene die hem aanstuurt | Ichabod Crane |
+"""
+
+def parse_persona_table(text):
+    """Pasted lines -> [(film, bad, good)]. Accepts the markdown table (| Film | Slecht | Goed |), or lines separated
+    by ; or tab. The 'bad' character becomes a Hunter, the 'good' one a Runner."""
+    rows = []
+    for line in (text or '').splitlines():
+        line = line.replace('**', '').strip()
+        if not line or set(line) <= set('|-: '):
+            continue
+        sep = '|' if '|' in line else (';' if ';' in line else ('\t' if '\t' in line else None))
+        if not sep:
+            continue
+        cols = [c.strip() for c in line.strip('|').split(sep)]
+        cols = [c for c in cols if c != ''] if sep != '|' else cols
+        if len(cols) < 3:
+            continue
+        film, bad, good = cols[0], cols[1], cols[2]
+        if film.lower().startswith('film') and 'slecht' in bad.lower():
+            continue                                    # header row
+        # drop the emoji the table uses in its header/cells
+        clean = lambda v: v.replace('\U0001F52A', '').replace('\U0001F6E1\uFE0F', '').strip()
+        rows.append((clean(film), clean(bad), clean(good)))
+    return rows
+
+def add_personas_from_rows(theme, rows):
+    added = 0
+    order = (db.session.query(db.func.max(ThemePersona.sort_order)).filter_by(theme_id=theme.id).scalar() or 0) + 1
+    for film, bad, good in rows:
+        for role, name in (('hunter', bad), ('runner', good)):
+            name = name[:60]
+            if not name or ThemePersona.query.filter_by(theme_id=theme.id, name=name, role=role).first():
+                continue
+            db.session.add(ThemePersona(theme_id=theme.id, role=role, name=name, blurb=(film or '')[:160],
+                                        icon='fa-skull' if role == 'hunter' else 'fa-shield-halved', sort_order=order))
+            order += 1
+            added += 1
+    return added
+
+@app.route('/admin/personas/bulk', methods=['POST'])
+@login_required
+@admin_required
+def admin_persona_bulk():
+    theme = db.session.get(SoundTheme, int(request.form.get('theme_id') or 0))
+    if not theme:
+        flash('Kies een thema.', 'danger')
+        return redirect(url_for('admin_personas'))
+    rows = parse_persona_table(request.form.get('text'))
+    n = add_personas_from_rows(theme, rows)
+    db.session.commit()
+    flash(f'{n} personage(s) toegevoegd.' if n else 'Niets nieuws gevonden. Gebruik per regel: Film | Slecht | Goed', 'success' if n else 'warning')
+    return redirect(url_for('admin_personas', theme=theme.id))
+
 @app.route('/admin/personas/<int:pid>/delete', methods=['POST'])
 @login_required
 @admin_required
@@ -6158,6 +6227,12 @@ def init_db():
                         db.session.add(ThemePersona(theme_id=hw.id, role=role, name=name, blurb=blurb, icon=icon, sort_order=i))
                 db.session.commit()
             SiteSetting.set('migr_personas_v1', '1')
+        if not SiteSetting.get('migr_personas_v2'):
+            hw = SoundTheme.query.filter_by(slug='halloween').first()
+            if hw:
+                add_personas_from_rows(hw, parse_persona_table(HALLOWEEN_PERSONAS))
+                db.session.commit()
+            SiteSetting.set('migr_personas_v2', '1')
         # themes made before colours were per theme: give them a look (Halloween keeps its orange)
         for th in SoundTheme.query.all():
             base = HALLOWEEN_UI if th.skin == 'halloween' else {}
