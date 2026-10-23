@@ -128,7 +128,7 @@ def _login(client, appmodule, name="maker2"):
 def test_new_game_page_renders_with_admin_images_and_info_buttons(appmodule, client):
     _login(client, appmodule)
     html = client.get("/new_game").get_data(as_text=True)
-    for must in ("wz-bar", "ibtn", "Geluid &amp; sfeer", "Class-thema", "multiH", "Krimp" if False else "Spelstijl"):
+    for must in ("wz-bar", "ibtn", "Geluid &amp; sfeer", "Classes voor Hunters", "multiH", "Krimp" if False else "Spelstijl"):
         assert must in html, must
     with appmodule.app.app_context():
         appmodule.SiteSetting.set("img_role_hunter", "does-not-exist.png")       # missing file -> icon, no broken image

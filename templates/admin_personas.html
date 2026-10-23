@@ -25,6 +25,13 @@
     </select>
   </div>
   {% if selected %}
+  <form class="card" method="POST" action="{{ url_for('admin_persona_bulk') }}" style="margin-bottom:16px">
+    <input type="hidden" name="theme_id" value="{{ selected.id }}">
+    <div class="card-title"><i class="fas fa-list"></i> Lijst plakken voor {{ selected.name }}</div>
+    <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:8px">Plak een lijst met per regel <b>Film | Slecht | Goed</b> (je mag ook de tabel uit een document plakken). De slechte personages worden Hunters, de goede Runners. Bestaande namen worden overgeslagen.</p>
+    <textarea name="text" class="form-control" rows="5" placeholder="Scream | Ghostface | Sidney Prescott"></textarea>
+    <button class="btn btn-primary btn-sm" style="margin-top:8px"><i class="fas fa-plus"></i> Toevoegen</button>
+  </form>
   <div class="pg">
     {% for r in personas %}
     <form class="pcard" method="POST" action="{{ url_for('admin_persona_save') }}" enctype="multipart/form-data">
