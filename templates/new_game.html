@@ -68,7 +68,7 @@
 .pts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 0}
 .pts-c{border-radius:18px;padding:14px 16px;background:var(--bg3);border:1px solid var(--border)}
 .pts-c small{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
-.pts-c b{display:block;font-family:var(--hfont);font-size:30px;letter-spacing:-.04em;margin-top:4px}
+.pts-c b{display:block;font-family:var(--bfont);font-weight:800;font-size:30px;letter-spacing:-.02em;margin-top:4px}
 .pts-c.h b{color:var(--hunter)}.pts-c.r b{color:var(--runner)}
 .pts-note{font-size:12.5px;color:var(--text2);margin-top:10px;line-height:1.55}
 
@@ -373,8 +373,8 @@ details.more summary::-webkit-details-marker{display:none}
           <button type="button" data-m="line" onclick="setPfMode('line')"><i class="fas fa-grip-lines"></i><span>Verboden lijn</span></button>
         </div>
         <div class="pf-hint" id="pfModeHint">Tik op de kaart om de hoeken van het speelveld te zetten (minimaal 3).</div>
-        <div class="pf-opt" id="pfOptCircle" style="display:none"><label>Straal <b id="pfRadVal">40 m</b></label><input type="range" id="pfRad" min="10" max="300" step="5" value="40" oninput="document.getElementById('pfRadVal').textContent=this.value+' m'"></div>
-        <div class="pf-opt" id="pfOptLine" style="display:none"><label>Breedte <b id="pfWidVal">12 m</b></label><input type="range" id="pfWid" min="6" max="40" step="2" value="12" oninput="document.getElementById('pfWidVal').textContent=this.value+' m'">
+        <div class="pf-opt" id="pfOptCircle" style="display:none"><label>Straal <b id="pfRadVal">40 m</b></label><input type="range" id="pfRad" min="5" max="300" step="5" value="40" oninput="pfSetSize(this.value)" onchange="pfSizeDone()"></div>
+        <div class="pf-opt" id="pfOptLine" style="display:none"><label>Breedte <b id="pfWidVal">12 m</b></label><input type="range" id="pfWid" min="3" max="60" step="1" value="12" oninput="pfSetSize(this.value)" onchange="pfSizeDone()">
           <button type="button" class="btn btn-primary btn-sm" onclick="finishLine()" style="margin-top:8px"><i class="fas fa-check"></i> Lijn afronden</button></div>
 
         <div id="playfieldMap"></div>
@@ -483,10 +483,11 @@ details.more summary::-webkit-details-marker{display:none}
           <div class="two">
             <div class="fld"><label>Eerste krimp na de voorsprong</label><select name="zone_first_min" class="form-control"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></div>
             <div class="fld"><label>Daarna elke</label><select name="zone_interval_min" class="form-control"><option value="5">5 min</option><option value="8" selected>8 min</option><option value="10">10 min</option><option value="15">15 min</option></select></div>
-            <div class="fld"><label>Elke keer kleiner met</label><select name="zone_shrink_pct" class="form-control"><option value="20">20%</option><option value="30" selected>30%</option><option value="40">40%</option><option value="50">50%</option></select></div>
+            <div class="fld"><label>Elke keer kleiner met</label><select name="zone_shrink_pct" class="form-control"><option value="20">20%</option><option value="30" selected>30%</option><option value="40">40%</option><option value="50">50%</option></select><div class="pts-note" style="margin-top:4px">van het <b>vorige</b> veld, niet van het begin</div></div>
             <div class="fld"><label>Melding vooraf</label><select name="zone_warning_sec" class="form-control"><option value="60">1 min</option><option value="90" selected>1,5 min</option><option value="120">2 min</option><option value="180">3 min</option></select></div>
           </div>
-          <div class="pts-note">Het veld stopt met krimpen als het ongeveer 70 m groot is.</div>
+          <div class="pts-note" style="margin-bottom:8px">Elke keer wordt het veld een percentage <b>kleiner dan het vorige veld</b>. Het wordt dus nooit 0: het stopt met krimpen als het ongeveer 70 m groot is.</div>
+          <div id="shrinkPlan" class="panel" style="margin:0;padding:12px 14px;font-size:13px;line-height:1.7"></div>
         </div>
       </div>
 
@@ -760,6 +761,34 @@ tog('offlineOpts',document.getElementById('offBtn'));
 tog('pauseOpts',document.getElementById('pauseAllw'));
 selDiff('medium');
 
+// Live planning of the shrinking zone, so the maker sees what 30% / 8 min really does over the game
+function pfFieldRadiusM(){
+  if(pfPoints.length<3) return null;
+  const la=pfPoints.reduce((a,p)=>a+p.lat,0)/pfPoints.length, lo=pfPoints.reduce((a,p)=>a+p.lng,0)/pfPoints.length;
+  const k=Math.cos(la*Math.PI/180);
+  return pfPoints.reduce((a,p)=>a+Math.hypot((p.lat-la)*111320,(p.lng-lo)*111320*k),0)/pfPoints.length;
+}
+function numOf(selId,customName){ const el=document.getElementById(selId); if(!el) return 0; return el.value==='custom'?Number(document.querySelector('[name='+customName+']')?.value||0):Number(el.value); }
+function renderShrinkPlan(){
+  const box=document.getElementById('shrinkPlan'); if(!box) return;
+  const D=numOf('durationSel','duration_custom'), H=numOf('headstartSel','headstart_custom');
+  const first=Number(document.querySelector('[name=zone_first_min]').value), every=Number(document.querySelector('[name=zone_interval_min]').value);
+  const f=1-Number(document.querySelector('[name=zone_shrink_pct]').value)/100;
+  let r=1, t=H+first, rows=[], R0=pfFieldRadiusM();
+  rows.push('<div><b>Start</b>: 100% breed'+(R0?' (ongeveer '+Math.round(R0*2)+' m doorsnede)':'')+'</div>');
+  for(let n=1;t<D && n<=12;n++,t+=every){
+    if(R0 && R0*r*f<70){ rows.push('<div><b>Daarna</b>: het veld is dan ±70 m en krimpt niet verder (laatste veld).</div>'); r=null; break; }
+    r*=f;
+    rows.push('<div><b>Na '+t+' min</b>: '+Math.round(r*100)+'% breed · '+Math.round(r*r*100)+'% van het oppervlak'+(R0?' · ±'+Math.round(R0*r*2)+' m':'')+'</div>');
+  }
+  if(rows.length===1) rows.push('<div>Het spel duurt niet lang genoeg voor een krimp.</div>');
+  box.innerHTML='<div style="font-weight:700;margin-bottom:4px">Zo gaat het in dit spel ('+D+' min, voorsprong '+H+' min)</div>'+rows.join('');
+}
+['durationSel','headstartSel'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderShrinkPlan));
+document.querySelectorAll('[name=zone_first_min],[name=zone_interval_min],[name=zone_shrink_pct],[name=duration_custom],[name=headstart_custom]').forEach(el=>el.addEventListener('input',renderShrinkPlan));
+document.getElementById('shrinkOn')?.addEventListener('change',renderShrinkPlan);
+setTimeout(renderShrinkPlan,0);
+
 function selText(name){
   const el=document.querySelector(`[name=${name}]`);
   if(!el) return '-';
@@ -829,7 +858,7 @@ function applyGameTemplate(idx){
   showToast('Vorige spelinstellingen geladen','success');
 }
 
-let pfMap=null, pfLayer=null, pfMarkers=[], pfPoints=[], pfForb=[], pfForbLayers=[], pfDraft=[], pfDraftLayer=null, pfMode='field';
+let pfMap=null, pfLayer=null, pfMarkers=[], pfPoints=[], pfForb=[], pfForbLayers=[], pfDraft=[], pfDraftLayer=null, pfMode='field', pfSel=-1, pfSelLayers={};
 let pfSaveTimer=null, pfLoadedSaved=false, pfCenteredOnGps=false, pfAutoLoaded=false;
 const SAVED_PLAYFIELD = {% if saved_playfield %}{{ saved_playfield|tojson }}{% else %}null{% endif %};
 const IMPORT_ZONE = {% if import_zone %}{{ import_zone|tojson }}{% else %}null{% endif %};
@@ -841,12 +870,13 @@ const PF_COLORS={
 };
 const MODE_HINTS={
   field:'Tik op de kaart om de hoeken van het speelveld te zetten (minimaal 3). Sleep een nummer om het te verplaatsen.',
-  circle:'Tik op de kaart waar een verboden zone moet komen, bijvoorbeeld rond een zendmast of een vijver. Stel eerst de straal in.',
-  line:'Tik langs bijvoorbeeld een spoorlijn of snelweg en tik op "Lijn afronden". Laat een opening bij een tunnel, dan kunnen spelers daar wel door.'
+  circle:'Tik op de kaart voor een nieuwe verboden zone (bijvoorbeeld rond een zendmast). Sleep het midden om te verplaatsen, sleep het witte bolletje of gebruik de schuif om de straal live aan te passen. Tik op een andere plek voor een nieuwe zone.',
+  line:'Tik langs bijvoorbeeld een spoorlijn of snelweg en tik op "Lijn afronden". De dikte op de kaart is de echte breedte in meters. Tik in de lijst op een lijn om de breedte live aan te passen. Laat een opening bij een tunnel.'
 };
 function getPlayfieldColor(){ return document.querySelector('[name=playfieldColorUi]:checked')?.value || 'storm'; }
 function setPfMode(m){
   pfMode=m; pfDraft=[];
+  if(m==='field' || (pfSel>=0 && pfForb[pfSel] && pfForb[pfSel].type!==m)) pfSel=-1;
   document.querySelectorAll('#pfModes button').forEach(b=>b.classList.toggle('on', b.dataset.m===m));
   document.getElementById('pfModeHint').textContent=MODE_HINTS[m];
   document.getElementById('pfOptCircle').style.display=m==='circle'?'':'none';
@@ -885,25 +915,51 @@ function onMapClick(e){
   else if(pfMode==='circle'){
     if(pfPoints.length<3){ showToast('Teken eerst het speelveld (minimaal 3 punten).','warn'); return; }
     pfForb.push({type:'circle',lat,lng,radius:parseInt(document.getElementById('pfRad').value,10)});
+    pfSel=pfForb.length-1;
     drawPlayfield();
   } else if(pfMode==='line'){
     if(pfPoints.length<3){ showToast('Teken eerst het speelveld (minimaal 3 punten).','warn'); return; }
-    pfDraft.push({lat,lng}); drawPlayfield(false);
+    pfSel=-1; pfDraft.push({lat,lng}); drawPlayfield(false);
   }
+}
+function selectForb(i){
+  const f=pfForb[i]; if(!f) return;
+  setPfMode(f.type); pfSel=i;
+  if(f.type==='circle'){ document.getElementById('pfRad').value=f.radius; document.getElementById('pfRadVal').textContent=Math.round(f.radius)+' m'; }
+  else { document.getElementById('pfWid').value=f.width; document.getElementById('pfWidVal').textContent=Math.round(f.width)+' m'; }
+  drawPlayfield(false);
+}
+// slider moves: the selected zone/line changes live on the map
+function pfSetSize(v){
+  v=parseInt(v,10);
+  const f=pfSel>=0?pfForb[pfSel]:null;
+  if(pfMode==='circle'){
+    document.getElementById('pfRadVal').textContent=v+' m';
+    if(f&&f.type==='circle'){ f.radius=v; if(pfSelLayers.main) pfSelLayers.main.setRadius(v); placeRadiusHandle(); }
+  } else {
+    document.getElementById('pfWidVal').textContent=v+' m';
+    if(f&&f.type==='line'){ f.width=v; if(pfSelLayers.main) pfSelLayers.main.setStyle({weight:Math.max(4,v*pfMapScale())}); }
+    else if(pfDraft.length) drawPlayfield(false);
+  }
+}
+function pfSizeDone(){ if(pfSel>=0) drawPlayfield(); }
+function placeRadiusHandle(){
+  const f=pfForb[pfSel]; if(!f||f.type!=='circle'||!pfSelLayers.handle) return;
+  pfSelLayers.handle.setLatLng([f.lat, f.lng+f.radius/(111320*Math.cos(f.lat*Math.PI/180))]);
 }
 function addPlayfieldPoint(lat,lng){pfPoints.push({lat,lng});drawPlayfield();}
 function finishLine(){
   if(pfDraft.length<2){ showToast('Tik minimaal 2 punten voor een lijn.','warn'); return; }
   pfForb.push({type:'line',points:pfDraft,width:parseInt(document.getElementById('pfWid').value,10)});
-  pfDraft=[]; drawPlayfield();
+  pfDraft=[]; pfSel=pfForb.length-1; drawPlayfield();
 }
-function removeForb(i){ pfForb.splice(i,1); drawPlayfield(); }
+function removeForb(i){ pfForb.splice(i,1); if(pfSel===i) pfSel=-1; else if(pfSel>i) pfSel--; drawPlayfield(); }
 function undoPlayfieldPoint(){
   if(pfMode==='line' && pfDraft.length){ pfDraft.pop(); drawPlayfield(false); return; }
   if(pfMode!=='field' && pfForb.length){ pfForb.pop(); drawPlayfield(); return; }
   pfPoints.pop(); drawPlayfield();
 }
-function clearPlayfield(){ pfPoints=[]; pfForb=[]; pfDraft=[]; drawPlayfield(false); }
+function clearPlayfield(){ pfSel=-1; pfPoints=[]; pfForb=[]; pfDraft=[]; drawPlayfield(false); }
 function loadSavedPlayfield(){ if(SAVED_PLAYFIELD && SAVED_PLAYFIELD.points) loadPlayfieldData(SAVED_PLAYFIELD); }
 function loadGlobalPlayfield(idx){
   if(idx==='') return;
@@ -964,7 +1020,7 @@ function sharePlayfield(){
       refreshProfilePlayfieldSelect(d.profile_playfields || []);
       const link=d.url;
       showTooltip('Speelveld delen',
-        'Geef deze code aan een vriend: <div style="font-family:var(--hfont);font-size:34px;letter-spacing:.18em;margin:10px 0">'+d.code+'</div>' +
+        'Geef deze code aan een vriend: <div style="font-family:var(--bfont);font-weight:800;font-size:34px;letter-spacing:.18em;margin:10px 0">'+d.code+'</div>' +
         'Of stuur deze link: <div style="word-break:break-all;font-size:12px;background:var(--bg3);padding:8px 10px;border-radius:10px;margin-top:6px">'+escHtml(link)+'</div>' +
         '<button type="button" class="btn btn-primary btn-sm" style="margin-top:12px" onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+link.replace(/'/g,'')+'\');showToast(\'Link gekopieerd\',\'success\')"><i class="fas fa-copy"></i> Kopieer link</button>');
     });
@@ -998,23 +1054,45 @@ function drawPlayfield(saveProfile=true){
   else if(pfPoints.length>=2) pfLayer=L.polyline(pfPoints.map(p=>[p.lat,p.lng]),{color:color.stroke,weight:3,dashArray:'6 6'}).addTo(pfMap);
   // forbidden areas (red)
   const red={color:'#ef4444',fillColor:'#ef4444',fillOpacity:.32,weight:2,dashArray:'5 4',interactive:false};
+  pfSelLayers={};
+  const icon=(html,sz)=>L.divIcon({className:'',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],html});
   pfForb.forEach((f,i)=>{
+    const sel=i===pfSel;
     if(f.type==='circle'){
-      pfForbLayers.push(L.circle([f.lat,f.lng],Object.assign({radius:f.radius},red)).addTo(pfMap));
+      const c=L.circle([f.lat,f.lng],Object.assign({},red,{radius:f.radius,interactive:true,weight:sel?3:2,fillOpacity:sel?.5:.32,dashArray:sel?null:'5 4'})).addTo(pfMap);
+      c.on('click',ev=>{L.DomEvent.stopPropagation(ev); selectForb(i);});
+      pfForbLayers.push(c);
+      if(sel){
+        pfSelLayers.main=c;
+        const mid=L.marker([f.lat,f.lng],{draggable:true,icon:icon('<div style="width:26px;height:26px;border-radius:50%;background:#ef4444;border:3px solid #fff;display:grid;place-items:center;color:#fff;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.5)"><i class="fas fa-up-down-left-right"></i></div>',26)}).addTo(pfMap);
+        mid.on('drag',ev=>{const ll=ev.target.getLatLng(); f.lat=ll.lat; f.lng=ll.lng; c.setLatLng(ll); placeRadiusHandle();});
+        mid.on('dragend',()=>drawPlayfield());
+        const hd=L.marker([f.lat,f.lng],{draggable:true,icon:icon('<div style="width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #ef4444;box-shadow:0 2px 8px rgba(0,0,0,.5)"></div>',20)}).addTo(pfMap);
+        pfSelLayers.handle=hd; pfForbLayers.push(mid,hd); placeRadiusHandle();
+        hd.on('drag',ev=>{
+          const r=Math.max(5,Math.min(500,Math.round(pfMap.distance([f.lat,f.lng],ev.target.getLatLng()))));
+          f.radius=r; c.setRadius(r);
+          document.getElementById('pfRad').value=Math.min(300,r); document.getElementById('pfRadVal').textContent=r+' m';
+        });
+        hd.on('dragend',()=>drawPlayfield());
+      }
     } else if(f.type==='line'){
       const pts=f.points.map(p=>[p.lat,p.lng]);
-      pfForbLayers.push(L.polyline(pts,{color:'#ef4444',opacity:.35,weight:Math.max(4,f.width*pfMapScale()),lineCap:'butt',interactive:false}).addTo(pfMap));
-      pfForbLayers.push(L.polyline(pts,{color:'#ef4444',weight:2,dashArray:'5 4',interactive:false}).addTo(pfMap));
+      const wide=L.polyline(pts,{color:'#ef4444',opacity:sel?.6:.35,weight:Math.max(4,f.width*pfMapScale()),lineCap:'butt',interactive:true}).addTo(pfMap);
+      wide.on('click',ev=>{L.DomEvent.stopPropagation(ev); selectForb(i);});
+      pfForbLayers.push(wide, L.polyline(pts,{color:sel?'#fff':'#ef4444',weight:2,dashArray:'5 4',interactive:false}).addTo(pfMap));
+      if(sel) pfSelLayers.main=wide;
     }
   });
   if(pfDraft.length){
-    pfDraftLayer=L.layerGroup([L.polyline(pfDraft.map(p=>[p.lat,p.lng]),{color:'#fca5a5',weight:3,dashArray:'4 6'}),
+    pfDraftLayer=L.layerGroup([L.polyline(pfDraft.map(p=>[p.lat,p.lng]),{color:'#ef4444',opacity:.35,weight:Math.max(4,parseInt(document.getElementById('pfWid').value,10)*pfMapScale()),lineCap:'butt',interactive:false}),L.polyline(pfDraft.map(p=>[p.lat,p.lng]),{color:'#fca5a5',weight:2,dashArray:'4 6'}),
       ...pfDraft.map(p=>L.circleMarker([p.lat,p.lng],{radius:5,color:'#fff',fillColor:'#ef4444',fillOpacity:1,weight:2}))]).addTo(pfMap);
   }
   const list=document.getElementById('pfForbList');
-  if(list) list.innerHTML=pfForb.map((f,i)=>`<div class="forb"><i class="fas fa-${f.type==='circle'?'ban':'grip-lines'}" style="color:#ef4444"></i><span>${f.type==='circle'?'Verboden zone · straal '+Math.round(f.radius)+' m':'Verboden lijn · '+f.points.length+' punten · '+Math.round(f.width)+' m breed'}</span><button type="button" class="btn btn-ghost btn-xs" onclick="removeForb(${i})"><i class="fas fa-xmark"></i></button></div>`).join('');
+  if(list) list.innerHTML=pfForb.map((f,i)=>`<div class="forb" style="${i===pfSel?'outline:2px solid #ef4444;':''}cursor:pointer" onclick="selectForb(${i})"><i class="fas fa-${f.type==='circle'?'ban':'grip-lines'}" style="color:#ef4444"></i><span>${f.type==='circle'?'Verboden zone · straal '+Math.round(f.radius)+' m':'Verboden lijn · '+f.points.length+' punten · '+Math.round(f.width)+' m breed'}</span><button type="button" class="btn btn-ghost btn-xs" onclick="event.stopPropagation();removeForb(${i})"><i class="fas fa-xmark"></i></button></div>`).join('');
   const help=document.getElementById('playfieldHelp');
   if(help && !(help.dataset.keep)) help.textContent=pfPoints.length>=3 ? `Speelveld klaar met ${pfPoints.length} punten${pfForb.length?' en '+pfForb.length+' verboden gebied'+(pfForb.length>1?'en':''):''}.` : `${pfPoints.length}/3 punten gezet. Tik minimaal 3 punten op de kaart.`;
+  if(typeof renderShrinkPlan==='function') renderShrinkPlan();
   const hidden=document.getElementById('playfieldJson');
   if(hidden) hidden.value=pfPoints.length>=3 ? JSON.stringify(pfPayload()) : '';
   if(saveProfile && pfPoints.length>=3) saveProfilePlayfield();
