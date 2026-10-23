@@ -740,7 +740,7 @@ function selectGameStyle(style, opts){
     // The style decides which features and extras are on; "Zelf alles aanpassen" lets you change everything.
     setNamedCheck('extra_dropboxes',st.loot);
     ALL_EXTRAS.forEach(n=>setNamedCheck(n,st.extras.includes(n)));
-    const cls=document.getElementById('classesEnabled'); if(cls) cls.checked=false;
+    const cls=document.getElementById('classesEnabled'); if(cls){ cls.checked=false; tog('classOpts',cls); }
     const ms=document.getElementById('missionsOn'); if(ms){ ms.checked=st.missions; tog('missionOpts',ms); }
     const sh=document.getElementById('shrinkOn'); if(sh){ sh.checked=st.zone; tog('shrinkOpts',sh); }
     const drop=document.querySelector('[name=extra_dropboxes]'); if(drop) tog('dropboxOpts', drop);

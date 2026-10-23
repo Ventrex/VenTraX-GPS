@@ -3191,7 +3191,7 @@ def lobby(code):
     if not os.path.exists(qr_path):
         generate_qr(code, app.config['BASE_URL'])
     join_url = f"{app.config['BASE_URL']}/join?code={code}"
-    return render_template('lobby.html', game=game, me=me, players=players,
+    return render_template('lobby.html', class_loadouts=CLASS_LOADOUTS, game=game, me=me, players=players,
                            qr_file=qr_file, join_url=join_url,
                            game_extras=get_game_extras(game), **game_sound_ctx(game))
 
