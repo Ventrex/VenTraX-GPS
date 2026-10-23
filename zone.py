@@ -7,7 +7,8 @@ import math
 import random
 
 M_LAT = 111320.0
-MIN_RADIUS_M = 70.0           # the last field: stop shrinking below this mean radius
+MIN_RADIUS_M = 200.0          # the last field: never smaller than this mean radius (runners must still be able to hide)
+FINAL_HOLD_SEC = 300          # the last field stays for at least the last 5 minutes of the game
 
 
 def _kx(lat):
@@ -99,7 +100,7 @@ def _circle_inside(points, factor):
 def step(state, elapsed, cfg, points, rng=None):
     """Advance the shrink schedule.
     state: {'phase': int, 'pending': None | {'phase', 'points', 'center', 'at'}}   (stored by the caller)
-    cfg:   headstart_sec, first_sec, interval_sec, warning_sec, factor
+    cfg:   headstart_sec, first_sec, interval_sec, warning_sec, factor  (+ optional min_radius_m, duration_sec, final_hold_sec)
     -> (state, events)   events: ('warn', info) / ('shrink', info) / ('final', info)"""
     state = dict(state or {})
     state.setdefault('phase', 0)
@@ -107,17 +108,25 @@ def step(state, elapsed, cfg, points, rng=None):
     events = []
     nxt = state['phase'] + 1
     t_shrink = cfg['headstart_sec'] + cfg['first_sec'] + (nxt - 1) * cfg['interval_sec']
+    lead = cfg['warning_sec']
+    if nxt == 1:
+        lead = min(lead, cfg['first_sec'] // 2)       # the first announcement may not come before the headstart ends
     pending = state['pending']
+    min_r = cfg.get('min_radius_m', MIN_RADIUS_M)
+    hold = cfg.get('final_hold_sec', FINAL_HOLD_SEC)
 
     if pending is None:
         if state.get('final'):
             return state, events
-        if mean_radius_m(points) * cfg['factor'] < MIN_RADIUS_M:
-            state['final'] = True
-            events.append(('final', {'phase': state['phase']}))
-            return state, events
-        if elapsed >= t_shrink - cfg['warning_sec']:
-            new_pts, center = shrink_polygon(points, cfg['factor'], rng)
+        if elapsed >= t_shrink - lead:
+            cur = mean_radius_m(points)
+            too_late = bool(cfg.get('duration_sec')) and t_shrink > cfg['duration_sec'] - hold
+            if cur <= min_r * 1.02 or too_late:
+                state['final'] = True
+                events.append(('final', {'phase': state['phase']}))
+                return state, events
+            factor = max(cfg['factor'], min_r / cur)      # never below the minimum: the last step is smaller
+            new_pts, center = shrink_polygon(points, factor, rng)
             pending = state['pending'] = {'phase': nxt, 'points': new_pts, 'center': center, 'at': t_shrink}
             events.append(('warn', {'phase': nxt, 'in_sec': max(0, int(t_shrink - elapsed)), 'points': new_pts,
                                     'center': center}))
