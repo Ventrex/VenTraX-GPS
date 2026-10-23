@@ -1480,6 +1480,18 @@ def get_runner_snapshot(game, player):
         SiteSetting.set(_runner_snapshot_key(game.id), json.dumps(snapshots))
     return {'lat': current['lat'], 'lon': current['lon'], 'live': False, 'slot': slot}
 
+def runner_location_view(game, me):
+    """Runner: when do the hunters get my location next, and what spot do they see right now?"""
+    if me.role != 'runner' or game.live_tracking or not game.is_headstart_over:
+        return None
+    iv = int(game.hunter_interval_sec or 0) or 600
+    elapsed = max(0, int(game.effective_elapsed or 0) - int(game.headstart_minutes or 0) * 60)
+    out = {'interval': iv, 'next_in': iv - (elapsed % iv), 'view': None}
+    snap = get_runner_snapshot(game, me) if me.last_lat is not None else None
+    if snap:
+        out['view'] = {'lat': snap['lat'], 'lon': snap['lon'], 'slot': snap.get('slot')}
+    return out
+
 def award_lootbox_badges(user_id, rare=False, game_id=None):
     try:
         stats = json.loads(SiteSetting.get(_lootbox_stats_key(user_id), '{}') or '{}')
@@ -3612,6 +3624,7 @@ def api_state(code):
         end_message=end_result.get('message'), no_points=bool(end_result.get('no_points')),
         playfield_status=playfield_status(game, me.last_lat, me.last_lon) if me.last_lat is not None and me.last_lon is not None else 'unknown',
         zone_pressure=get_zone_pressure(game, current_user.id),
+        loc_view=runner_location_view(game, me),
         is_offline=me.is_offline, is_paused=pause_active or me.is_paused, pause_active=pause_active,
         pause_reason=pause_state.get('reason'), is_caught=me.is_caught,
         offline_uses_left=me.offline_uses_left,
