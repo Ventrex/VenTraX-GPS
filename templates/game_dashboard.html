@@ -1005,7 +1005,7 @@ function updateZoneBar(z) {
   const bar = document.getElementById('zoneBar');
   if (!bar) return;
   const pct = z ? Math.max(0, Math.min(100, Number(z.pct || 0))) : 0;
-  if (pct <= 0 && !(z && z.outside)) { bar.style.display = 'none'; return; }
+  if ((pct <= 0 || Math.round(100 - pct) >= 100) && !(z && z.outside)) { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
   const lifePct = Math.max(0, 100 - pct);
   document.getElementById('zoneBarFill').style.width = lifePct + '%';
@@ -2302,6 +2302,7 @@ setInterval(()=>{
 
 // â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (GAME_STATUS === 'active') VXSound.startAmbient();
+if (MY_CLASS && GAME_STATUS === 'active') setTimeout(() => showToast(`Jouw class: ${MY_CLASS.name} · power ${MY_CLASS.power}. ${MY_CLASS.desc || ''} Gebruik de bliksemknop links onderaan zodra de voorsprong voorbij is.`, 'info', 14000), 2500);
 initMap();
 loadFeed();
 setInterval(pollState, 10000);

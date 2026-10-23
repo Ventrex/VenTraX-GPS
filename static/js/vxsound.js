@@ -293,11 +293,24 @@
     document.dispatchEvent(new CustomEvent('vx:mute', {detail: muted}));
   }
 
+  // After a refresh a browser may still allow sound (it remembers you used the site); if not, say so right away.
+  function tryAutoUnlock() {
+    var c = ensureCtx();
+    if (c && c.state === 'running') { unlocked = true; hideTapHint(); flush(); return; }
+    if (c && !unlocked) {
+      c.resume().then(function () { if (c.state === 'running') { unlocked = true; hideTapHint(); flush(); } }, function () {});
+    }
+    if (!unlocked && !muted) {
+      if (document.body) showTapHint(); else document.addEventListener('DOMContentLoaded', function () { if (!unlocked) showTapHint(); });
+    }
+  }
+
   function init(opts) {
     opts = opts || {};
     var url = opts.theme ? null : (opts.code ? '/api/sound_theme/' + encodeURIComponent(opts.code) : '/api/sound_theme');
     var done = function (t) {
       theme = t; applyVolume(); preload();
+      if (opts.hint !== false) tryAutoUnlock();
       document.dispatchEvent(new CustomEvent('vx:theme', {detail: theme}));
       flush();  // theme is known now: release anything queued before it loaded
     };

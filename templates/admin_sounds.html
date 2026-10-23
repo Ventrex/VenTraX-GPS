@@ -232,7 +232,7 @@ function testEvent(ev) {
     });
     if (list.length) t.events[key] = list;
   });
-  VXSound.init({theme: t}).then(() => { VXSound.stopAll(); VXSound.play(ev); });
+  VXSound.init({theme: t, hint: false}).then(() => { VXSound.stopAll(); VXSound.play(ev); });
 }
 
 function uploadFiles(ev, files) {

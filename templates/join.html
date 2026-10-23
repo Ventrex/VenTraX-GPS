@@ -12,8 +12,14 @@
     <div id="scanBox" style="margin-bottom:20px;text-align:center">
       <video id="qrVideo" playsinline style="width:100%;max-height:320px;border-radius:12px;background:#000;object-fit:cover"></video>
       <div id="qrScanMsg" style="font-size:13px;color:var(--text2);margin-top:10px">Camera starten...</div>
+      <a href="{{ url_for('join') }}" class="btn btn-ghost btn-sm" style="margin-top:10px"><i class="fas fa-keyboard"></i> Liever code invullen</a>
     </div>
     {% endif %}
+    <div id="joinChoice" style="display:none;gap:12px;flex-direction:column;margin-bottom:6px">
+      <a href="{{ url_for('join', scan=1) }}" class="btn btn-hunter btn-full btn-lg"><i class="fas fa-qrcode"></i> QR-code scannen</a>
+      <button type="button" class="btn btn-ghost btn-full btn-lg" onclick="showManual()"><i class="fas fa-keyboard"></i> Code invullen</button>
+      <div id="scanNote" style="font-size:12px;color:var(--text2);text-align:center;display:none">Werkt scannen hier niet? Open de camera-app van je telefoon, richt op de QR-code en tik op de link.</div>
+    </div>
     <div id="manualJoin">
     <form method="POST">
       <div class="form-group" style="margin-bottom:24px">
@@ -35,6 +41,16 @@
   </div>
 </div>
 <script>
+// On a phone: first choose how to join (scan the QR code or type the code)
+function showManual(){ document.getElementById('joinChoice').style.display='none'; document.getElementById('manualJoin').style.display=''; document.getElementById('codeI').focus(); }
+(function(){
+  const phone = window.matchMedia && window.matchMedia('(pointer:coarse)').matches;
+  const scan = {{ 'true' if request.args.get('scan') else 'false' }};
+  if (!phone || scan) return;
+  document.getElementById('manualJoin').style.display = 'none';
+  const ch = document.getElementById('joinChoice'); ch.style.display = 'flex';
+  if (!('BarcodeDetector' in window)) document.getElementById('scanNote').style.display = 'block';
+})();
 document.getElementById('codeI').addEventListener('input',function(){
   this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
 });

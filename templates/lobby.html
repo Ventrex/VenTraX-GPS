@@ -136,6 +136,18 @@
     </div>
   </div>
 
+<div id="camGate" style="position:fixed;inset:0;z-index:2900;background:rgba(9,12,20,.9);display:none;align-items:center;justify-content:center;padding:18px">
+    <div style="width:min(460px,100%);background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 22px 60px rgba(0,0,0,.45);text-align:center">
+      <div style="width:58px;height:58px;border-radius:50%;display:grid;place-items:center;margin:0 auto 14px;background:rgba(59,130,246,.14);color:var(--hunter);font-size:26px"><i class="fas fa-camera"></i></div>
+      <h2 style="font-family:var(--hfont);font-size:22px;font-weight:800;margin-bottom:8px">Camera toestaan</h2>
+      <p style="color:var(--text2);font-size:14px;line-height:1.5;margin-bottom:16px">
+        {% if game.feat_photo_missions %}In dit spel zijn foto-opdrachten. Sta de camera nu toe, dan hoef je dat tijdens het spel niet meer te doen.{% else %}Voor de foto-feed in het spel. Je kunt dit ook overslaan.{% endif %}
+      </p>
+      <button id="camGateBtn" class="btn btn-primary btn-lg btn-full" onclick="requestCamera()"><i class="fas fa-camera"></i> Camera toestaan</button>
+      {% if not game.feat_photo_missions %}<button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="camGateClose(true)">Nu niet</button>{% endif %}
+    </div>
+  </div>
+
   <div class="grid g2" style="gap:18px;align-items:start">
 
     <!-- LEFT -->
@@ -327,7 +339,7 @@
       <div class="card" style="margin-bottom:16px">
         <div class="card-title"><i class="fas fa-robot"></i> Bots</div>
         <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">
-          Computerspelers om alleen te testen of een groep aan te vullen. Ze starten in de buurt van jou, lopen over paden en
+          Computerspelers om een groep aan te vullen. Ze starten in de buurt van jou, lopen over paden en
           bruggen, <b>niet door water</b>, door bosjes met <b>halve snelheid</b>, en volgen de moeilijkheid van dit spel
           (makkelijk = langzaam, gemiddeld = normaal, moeilijk = vlot wandelen). Hunter-bots tikken onder dezelfde regels als jij.
         </p>
@@ -491,6 +503,7 @@ function setGpsGate(open, msg) {
   const err = document.getElementById('gpsGateErr');
   const btn = document.getElementById('gpsGateBtn');
   if (gate) gate.style.display = open ? 'flex' : 'none';
+  if (!open) setTimeout(maybeAskCamera, 500);
   if (err) {
     err.style.display = msg ? 'block' : 'none';
     err.textContent = msg || '';
@@ -600,9 +613,24 @@ function disableGPS() {
 function showGpsErr(msg) { document.getElementById('gpsErr').style.display='flex'; document.getElementById('gpsErrMsg').textContent=msg; }
 
 // â”€â”€ Camera â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-async function requestCamera() {
+let camGateDismissed = false;
+function camGateClose(dismiss) { if (dismiss) camGateDismissed = true; const g = document.getElementById('camGate'); if (g) g.style.display = 'none'; }
+// Ask for the camera in a popup once location is allowed. If the browser already remembers "allowed",
+// it is switched on silently (no popup, no tap).
+async function maybeAskCamera() {
+  if (myCam || camGateDismissed || GAME_STATUS !== 'lobby' || !myGps) return;
   try {
-    await navigator.mediaDevices.getUserMedia({video: true});
+    const st = await navigator.permissions.query({name: 'camera'});
+    if (st.state === 'granted') { requestCamera(true); return; }
+    if (st.state === 'denied') return;
+  } catch (e) {}
+  const g = document.getElementById('camGate'); if (g) g.style.display = 'flex';
+}
+async function requestCamera(silent) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({video: true});
+    stream.getTracks().forEach(t => t.stop());           // we only need the permission, not a running camera
+    camGateClose();
     myCam = true;
     document.getElementById('camIcon').textContent = 'AAN';
     document.getElementById('camTxt').textContent  = 'Toegang verleend';
@@ -611,8 +639,8 @@ async function requestCamera() {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({gps: myGps, camera: true})
     });
-    showToast('Camera toegang verleend!', 'success');
-  } catch { showToast('Camera geweigerd - foto feed niet beschikbaar', 'warn'); }
+    if (!silent) showToast('Camera toegang verleend!', 'success');
+  } catch { camGateClose(true); showToast('Camera geweigerd - foto feed niet beschikbaar', 'warn'); }
 }
 
 // â”€â”€ Role switch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -890,10 +918,7 @@ syncLobby(); // immediate first call
 
 // Resolve camera permission up-front in the lobby too (when photo missions are on)
 // so nobody is asked to approve anything after "Start spel" has been pressed.
-(function requireCameraInLobby() {
-  if (!FEAT_PHOTO || myCam) return;
-  setTimeout(() => { if (!myCam) requestCamera(); }, 1200);
-})();
+setTimeout(maybeAskCamera, 1500);
 </script>
 <script>
 // ---- Personages (Ghostface, Sidney, ...): chosen in the lobby, shown as avatar ----
