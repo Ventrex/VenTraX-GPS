@@ -621,5 +621,23 @@ function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m
 {% endif %}
 </script>
 {% block scripts %}{% endblock %}
+<button type="button" id="vxMute" class="vx-mute" aria-label="Geluid en muziek aan of uit" title="Geluid en muziek aan/uit"><i class="fas fa-volume-high"></i></button>
+<style>
+.vx-mute{position:fixed;right:14px;bottom:18px;z-index:780;width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--bg3);color:var(--text);display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);font-size:16px}
+.vx-mute.off{color:var(--text2)}
+@media(max-width:768px){body.has-tabbar .vx-mute{bottom:calc(86px + env(safe-area-inset-bottom))}}
+</style>
+<script>
+(function(){
+  var btn=document.getElementById('vxMute'); if(!btn||!window.VXSound) return;
+  function paint(){ var m=VXSound.isMuted(); btn.classList.toggle('off',m); btn.innerHTML='<i class="fas fa-volume-'+(m?'xmark':'high')+'"></i>'; }
+  btn.addEventListener('click',function(){ VXSound.unlock(); VXSound.setMuted(!VXSound.isMuted()); });
+  document.addEventListener('vx:mute',paint); paint();
+  {% if request.endpoint not in ('lobby','game_dashboard') and not (request.endpoint or '').startswith('admin') %}
+  VXSound.startMusic();           // background music; the lobby and the game have their own sounds
+  VXSound.init({});
+  {% endif %}
+})();
+</script>
 </body>
 </html>

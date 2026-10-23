@@ -44,6 +44,7 @@
       // a silent blip makes iOS Safari treat the context as user-started
       try { var o = c.createOscillator(), g = c.createGain(); g.gain.value = 0; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.01); } catch (e) {}
       flush();
+      if (musicWanted) startMusicNow();
       removeUnlockListeners();
     };
     if (c.state === 'suspended') c.resume().then(go, go); else go();
@@ -269,6 +270,48 @@
     else if (near) play('hunter_near');
   }
 
+  // Background music on the site (not in the lobby / game). A theme clip loops; without one a soft built-in drone plays.
+  var musicWanted = false;
+  function synthPad(c) {
+    var spooky = theme && theme.skin === 'halloween';
+    var notes = spooky ? [55, 65.4, 82.4, 110.4] : [110, 164.8, 220, 277.2];
+    var out = c.createGain(); out.gain.value = 0;
+    var filter = c.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = spooky ? 380 : 900;
+    filter.connect(out); out.connect(master);
+    var nodes = [];
+    notes.forEach(function (f, i) {
+      var o = c.createOscillator(); o.type = spooky ? 'sawtooth' : 'triangle'; o.frequency.value = f * (1 + (i % 2 ? 0.003 : -0.003));
+      var g = c.createGain(); g.gain.value = spooky ? 0.05 : 0.06;
+      o.connect(g); g.connect(filter); o.start(); nodes.push(o);
+    });
+    var lfo = c.createOscillator(); lfo.frequency.value = spooky ? 0.07 : 0.1;
+    var lg = c.createGain(); lg.gain.value = spooky ? 180 : 300; lfo.connect(lg); lg.connect(filter.frequency); lfo.start(); nodes.push(lfo);
+    out.gain.linearRampToValueAtTime(0.55, c.currentTime + 4);      // fade in
+    return {stop: function () {
+      try { out.gain.cancelScheduledValues(c.currentTime); out.gain.setValueAtTime(out.gain.value, c.currentTime); out.gain.linearRampToValueAtTime(0, c.currentTime + 0.4); } catch (e) {}
+      setTimeout(function () { nodes.forEach(function (o) { try { o.stop(); } catch (e) {} }); }, 600);
+    }};
+  }
+  function startMusicNow() {
+    var c = ensureCtx(); if (!c || muted || !theme || playing.site_music) return;
+    var clips = theme.events.site_music;
+    if (clips && clips.length) {
+      var clip = pick(clips);
+      playing.site_music = {stop: function () {}};                 // reserve (the clip loads asynchronously)
+      loadBuffer(clip.url).then(function (buf) {
+        if (!buf || !musicWanted || muted) { delete playing.site_music; return; }
+        var src = c.createBufferSource(); src.buffer = buf; src.loop = true;
+        var g = c.createGain(); g.gain.value = (clip.volume || 100) / 100 * 0.6;
+        src.connect(g); g.connect(master); src.start(0);
+        playing.site_music = src;
+      });
+    } else if (theme.synth) {
+      playing.site_music = synthPad(c);
+    }
+  }
+  function startMusic() { musicWanted = true; if (unlocked && theme) startMusicNow(); else if (!unlocked) showTapHint(); }
+  function stopMusic() { musicWanted = false; stop('site_music'); }
+
   // Random spooky sounds while a game runs.
   var ambientTimer = null;
   function startAmbient() {
@@ -289,16 +332,16 @@
     muted = !!m;
     try { localStorage.setItem('vx_muted', muted ? '1' : '0'); } catch (e) {}
     applyVolume();
-    if (muted) stopAll();
+    if (muted) stopAll(); else if (musicWanted) startMusicNow();
     document.dispatchEvent(new CustomEvent('vx:mute', {detail: muted}));
   }
 
   // After a refresh a browser may still allow sound (it remembers you used the site); if not, say so right away.
   function tryAutoUnlock() {
     var c = ensureCtx();
-    if (c && c.state === 'running') { unlocked = true; hideTapHint(); flush(); return; }
+    if (c && c.state === 'running') { unlocked = true; hideTapHint(); flush(); if (musicWanted) startMusicNow(); return; }
     if (c && !unlocked) {
-      c.resume().then(function () { if (c.state === 'running') { unlocked = true; hideTapHint(); flush(); } }, function () {});
+      c.resume().then(function () { if (c.state === 'running') { unlocked = true; hideTapHint(); flush(); if (musicWanted) startMusicNow(); } }, function () {});
     }
     if (!unlocked && !muted) {
       if (document.body) showTapHint(); else document.addEventListener('DOMContentLoaded', function () { if (!unlocked) showTapHint(); });
@@ -313,6 +356,7 @@
       if (opts.hint !== false) tryAutoUnlock();
       document.dispatchEvent(new CustomEvent('vx:theme', {detail: theme}));
       flush();  // theme is known now: release anything queued before it loaded
+      if (musicWanted && unlocked) startMusicNow();
     };
     if (opts.theme) { done(opts.theme); return Promise.resolve(opts.theme); }
     return fetch(url, {credentials: 'same-origin'}).then(function (r) { return r.json(); })
@@ -322,7 +366,7 @@
 
   window.VXSound = {
     init: init, play: play, stop: stop, stopAll: stopAll, isPlaying: isPlaying, has: has,
-    nearby: nearby, startAmbient: startAmbient, stopAmbient: stopAmbient,
+    nearby: nearby, startMusic: startMusic, stopMusic: stopMusic, startAmbient: startAmbient, stopAmbient: stopAmbient,
     setMuted: setMuted, isMuted: function () { return muted; }, isUnlocked: function () { return unlocked; },
     unlock: unlock, theme: function () { return theme; }, __test_hook: function (fn) { testHook = fn; },
     skin: function () { return (theme && theme.skin) || 'classic'; }

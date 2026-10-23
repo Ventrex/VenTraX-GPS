@@ -678,6 +678,7 @@ SOUND_EVENTS = [
     ('end',          'Spelverloop', 'Einde van het spel',            'Het spel is afgelopen.', False),
     ('end_win',      'Spelverloop', 'Einde: gewonnen',               'Optioneel: speelt i.p.v. "Einde" als jouw team wint.', False),
     ('end_lose',     'Spelverloop', 'Einde: verloren',               'Optioneel: speelt i.p.v. "Einde" als jouw team verliest.', False),
+    ('site_music',   'Sfeer',       'Achtergrondmuziek op de site',  'Speelt zacht en herhaalt zolang je op de site bent (niet in de lobby of tijdens het spel). Zonder eigen muziek speelt een ingebouwde sfeertoon.', True),
     ('ambient',      'Sfeer',       'Sfeergeluid (willekeurig)',     'Zet hier meerdere enge geluidjes: er wordt af en toe een willekeurig geluid gespeeld tijdens het spel.', False),
     ('hunter_near',  'Gevaar',      'Hunter in de buurt',            'Runner: een Hunter is dichtbij (afstand stel je per thema in).', False),
     ('hunter_close', 'Gevaar',      'Hunter heel dichtbij',          'Runner: een Hunter is bijna bij je. Wordt vaker herhaald.', False),
