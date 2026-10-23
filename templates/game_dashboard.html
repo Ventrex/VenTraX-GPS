@@ -1949,6 +1949,8 @@ function connectWS() {
       case 'game_ended':
         showEndScreen(d);
         break;
+      case 'bot_notice':
+        showToast(d.message, 'warn', 9000); break;
       case 'player_zone_out':
         VXSound.play('caught');
         showToast(`${d.codename || 'Speler'} was te lang buiten het speelveld en is af.`, 'warn', 8000);

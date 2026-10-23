@@ -46,6 +46,7 @@
   <div style="flex:1;min-width:0">
     <div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       {{ p.user.username }}
+      {% if p.user.is_bot %}<span style="font-size:10px;background:rgba(124,58,237,.15);color:#a78bfa;padding:1px 7px;border-radius:10px;border:1px solid rgba(124,58,237,.3)"><i class="fas fa-robot"></i> Bot</span>{% if me.user_id == game.creator_id %}<button class="btn btn-ghost btn-xs" style="margin-left:auto" title="Bot verwijderen" onclick="removeBot({{ p.user_id }})"><i class="fas fa-xmark"></i></button>{% endif %}{% endif %}
       {% if p.user_id == game.creator_id %}<span style="font-size:10px;background:rgba(245,158,11,.15);color:var(--warn);padding:1px 7px;border-radius:10px;border:1px solid rgba(245,158,11,.3)"><i class="fas fa-crown"></i> Maker</span>{% endif %}
     </div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px">
@@ -254,6 +255,25 @@
         </div>
         {% endif %}
       </div>
+
+      <!-- Bots -->
+      {% if me.user_id == game.creator_id %}
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-robot"></i> Bots</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">
+          Computerspelers om alleen te testen of een groep aan te vullen. Ze starten in de buurt van jou, lopen over paden en
+          bruggen, <b>niet door water</b>, door bosjes met <b>halve snelheid</b>, en volgen de moeilijkheid van dit spel
+          (makkelijk = langzaam, gemiddeld = normaal, moeilijk = vlot wandelen). Hunter-bots tikken onder dezelfde regels als jij.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="botRole" class="form-control" style="width:auto;flex:1;min-width:120px"><option value="runner">Runner-bot</option><option value="hunter">Hunter-bot</option></select>
+          <select id="botCount" class="form-control" style="width:auto"><option>1</option><option>2</option><option>3</option></select>
+          <button class="btn btn-primary btn-sm" id="btnBot" onclick="addBots()"><i class="fas fa-plus"></i> Toevoegen</button>
+        </div>
+        <div id="botErr" style="font-size:12px;color:var(--danger);margin-top:8px;display:none"></div>
+        <div class="form-hint" style="margin-top:10px">Let op: tuinen en hekken staan niet op de kaart, dus bots kunnen daar soms doorheen lopen. Ze weten altijd waar iedereen is en gebruiken geen offline-knop.</div>
+      </div>
+      {% endif %}
 
       <!-- Start -->
       {% if me.user_id == game.creator_id %}
@@ -470,6 +490,21 @@ function enableGPS(fromGate=false) {
     }).catch(()=>{});
     updateGpsBadge(MY_ID, false);
   }, {enableHighAccuracy: true, timeout: 20000, maximumAge: 0});
+}
+function addBots() {
+  const btn = document.getElementById('btnBot'), err = document.getElementById('botErr');
+  err.style.display = 'none'; btn.disabled = true;
+  fetch('/api/game/' + CODE + '/bots', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({role: document.getElementById('botRole').value, count: parseInt(document.getElementById('botCount').value, 10)})})
+    .then(r => r.json()).then(d => {
+      btn.disabled = false;
+      if (d.error) { err.textContent = d.error; err.style.display = ''; return; }
+      location.reload();
+    }).catch(() => { btn.disabled = false; err.textContent = 'Toevoegen mislukt'; err.style.display = ''; });
+}
+function removeBot(uid) {
+  fetch('/api/game/' + CODE + '/bots/remove', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({user_id: uid})})
+    .then(r => r.json()).then(d => { if (d.success) location.reload(); else showToast(d.error || 'Mislukt', 'error'); });
 }
 function disableGPS() {
   if (gpsWatcher) { navigator.geolocation.clearWatch(gpsWatcher); gpsWatcher = null; }

@@ -347,6 +347,7 @@ class User(UserMixin, db.Model):
     total_games     = db.Column(db.Integer, default=0)
     total_distance  = db.Column(db.Float,   default=0.0)
     runners_caught  = db.Column(db.Integer, default=0)  # for leaderboard
+    is_bot          = db.Column(db.Boolean, default=False)   # computer-controlled player (cannot log in)
 
     games    = db.relationship('GamePlayer', back_populates='user', foreign_keys='GamePlayer.user_id', lazy='dynamic')
     posts    = db.relationship('Post',       back_populates='author', lazy='dynamic')
@@ -2508,15 +2509,16 @@ def send_game_summary_email(game):
 # â”€â”€ Auth routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/')
 def index():
-    top_hunters = User.query.order_by(User.hunter_wins.desc()).limit(5).all()
-    top_runners = User.query.order_by(User.runner_wins.desc()).limit(5).all()
-    top_points  = User.query.order_by(User.total_points.desc()).limit(5).all()
+    humans = User.query.filter(User.is_bot.isnot(True))
+    top_hunters = humans.order_by(User.hunter_wins.desc()).limit(5).all()
+    top_runners = humans.order_by(User.runner_wins.desc()).limit(5).all()
+    top_points  = humans.order_by(User.total_points.desc()).limit(5).all()
     needs_setup = User.query.count() == 0
     recent_news = (NewsArticle.query.filter_by(status='approved')
                    .order_by(NewsArticle.created_at.desc()).limit(3).all())
     games_catalog = GameCatalog.query.order_by(GameCatalog.sort_order).all()
     total_games  = Game.query.filter_by(status='finished').count()
-    total_users  = User.query.count()
+    total_users  = User.query.filter(User.is_bot.isnot(True)).count()
     return render_template('index.html', top_hunters=top_hunters,
                            top_runners=top_runners, top_points=top_points,
                            needs_setup=needs_setup, recent_news=recent_news,
@@ -2550,7 +2552,7 @@ def login():
     if current_user.is_authenticated: return redirect(url_for('dashboard'))
     if request.method == 'POST':
         u = User.query.filter_by(username=request.form.get('username', '').strip()).first()
-        if u and u.check_password(request.form.get('password', '')):
+        if u and not u.is_bot and u.check_password(request.form.get('password', '')):
             ip = get_client_ip()
             # Log the login
             log_activity('login', f'IP:{ip}', user_id=u.id)
@@ -2971,6 +2973,7 @@ def api_lobby_state(code):
             'camera':    p.camera_enabled,
             'is_ready':  p.is_ready,
             'is_creator': p.user_id == game.creator_id,
+            'is_bot': bool(p.user.is_bot),
         })
     return jsonify(
         players=players,
@@ -3212,6 +3215,7 @@ def api_start_game(code):
                     'code': code,
                     'headstart_minutes': g2.headstart_minutes,
                 })
+                start_bot_loop(code)
     gevent.spawn(_do_start)
     # Return countdown=0 so maker's frontend also waits for WS event
     return jsonify(success=True, countdown=5,
@@ -3332,6 +3336,7 @@ def api_state(code):
             'is_offline': p.is_offline,
             'is_paused': pause_active or p.is_paused,
             'is_caught': p.is_caught,
+            'is_bot': bool(p.user.is_bot),
             'offline_uses_left': p.offline_uses_left,
             'offline_remaining': max(0, int(math.ceil(game.max_offline_sec - (now - p.offline_since).total_seconds()))) if p.is_offline and p.offline_since and game.max_offline_sec else 0,
             'offline_until': utc_iso(p.offline_since + timedelta(seconds=game.max_offline_sec)) if p.is_offline and p.offline_since and game.max_offline_sec else None,
@@ -4544,7 +4549,7 @@ def news_like(aid):
 @login_required
 @admin_required
 def admin():
-    users    = User.query.order_by(User.created_at.desc()).all()
+    users    = User.query.filter(User.is_bot.isnot(True)).order_by(User.created_at.desc()).all()
     games    = Game.query.order_by(Game.created_at.desc()).all()
     settings = {s.key: s.value for s in SiteSetting.query.all()}
     catalog_games = GameCatalog.query.order_by(GameCatalog.sort_order, GameCatalog.name).all()
@@ -5127,6 +5132,202 @@ def service_worker():
     resp.mimetype = 'application/javascript'
     return resp
 
+# -- Bots -----------------------------------------------------------------------
+import bots as botlib
+
+BOT_NAMES = ['Kees', 'Mira', 'Sven', 'Noor', 'Daan', 'Fenna', 'Bram', 'Lotte']
+MAX_BOTS = len(BOT_NAMES)
+BOT_TICK = 2.0                                           # seconds between bot moves
+BOT_TIME_SCALE = 1.0                                     # tests run the clock faster than real time
+BOT_CATCH_M = 6                                          # bot reach: the map grid is 6 m, so 2 m (human rule) is not reachable for a bot
+OVERPASS_URL = os.environ.get('OVERPASS_URL') or 'https://overpass-api.de/api/interpreter'
+TERRAIN_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'terrain')
+BOT_LOOPS = set()
+
+def get_bot_user(name):
+    """Shared computer-player account (created on first use). Cannot log in: random password, no e-mail."""
+    username = f'Bot {name}'
+    u = User.query.filter_by(username=username).first()
+    if u and not u.is_bot:
+        return None                       # a human already took that name
+    if not u:
+        import secrets
+        u = User(username=username, is_bot=True, email_verified=True)
+        u.set_password(secrets.token_hex(24))
+        db.session.add(u); db.session.commit()
+    return u
+
+def bot_players(game):
+    return [p for p in game.players.all() if p.user and p.user.is_bot]
+
+@app.route('/api/game/<code>/bots', methods=['POST'])
+@login_required
+def api_add_bots(code):
+    game = Game.query.filter_by(code=code).first_or_404()
+    if game.creator_id != current_user.id:
+        return jsonify(error='Alleen de spelmaker kan bots toevoegen'), 403
+    if game.status != 'lobby':
+        return jsonify(error='Bots kunnen alleen vóór de start worden toegevoegd'), 400
+    d = request.get_json(silent=True) or {}
+    role = d.get('role')
+    if role not in ('hunter', 'runner'):
+        return jsonify(error='Kies Hunter of Runner'), 400
+    try:
+        count = max(1, min(3, int(d.get('count', 1))))
+    except (TypeError, ValueError):
+        count = 1
+    me = GamePlayer.query.filter_by(game_id=game.id, user_id=current_user.id).first()
+    if not me or me.last_lat is None or me.last_lon is None:
+        return jsonify(error='Zet eerst je eigen GPS aan: de bots starten in de buurt van jou.'), 400
+    existing = bot_players(game)
+    if len(existing) + count > MAX_BOTS:
+        return jsonify(error=f'Maximaal {MAX_BOTS} bots per spel'), 400
+    taken = {p.user.username for p in existing}
+    added = []
+    for name in BOT_NAMES:
+        if len(added) >= count:
+            break
+        if f'Bot {name}' in taken:
+            continue
+        u = get_bot_user(name)
+        if not u or GamePlayer.query.filter_by(game_id=game.id, user_id=u.id).first():
+            continue
+        gp = GamePlayer(game_id=game.id, user_id=u.id, role=role, codename=assign_codename(role, game.id),
+                        is_ready=True, gps_enabled=True, camera_enabled=True, last_lat=me.last_lat,
+                        last_lon=me.last_lon, last_accuracy=5.0, last_seen=datetime.utcnow(),
+                        offline_uses_left=game.offline_uses)
+        db.session.add(gp); db.session.commit()
+        added.append(gp)
+        hub.broadcast(code, 'player_joined', {'user_id': u.id, 'username': u.username, 'codename': gp.codename, 'role': role})
+    log_activity('bots_added', f'{len(added)}x {role} in {code}', user_id=current_user.id, game_id=game.id)
+    return jsonify(success=True, added=len(added))
+
+@app.route('/api/game/<code>/bots/remove', methods=['POST'])
+@login_required
+def api_remove_bot(code):
+    game = Game.query.filter_by(code=code).first_or_404()
+    if game.creator_id != current_user.id or game.status != 'lobby':
+        return jsonify(error='Niet toegestaan'), 403
+    uid = (request.get_json(silent=True) or {}).get('user_id')
+    gp = GamePlayer.query.filter_by(game_id=game.id, user_id=uid).first()
+    if not gp or not gp.user.is_bot:
+        return jsonify(error='Geen bot'), 404
+    db.session.delete(gp); db.session.commit()
+    hub.broadcast(code, 'player_left', {'user_id': uid})
+    return jsonify(success=True)
+
+def bot_catch(game, hunter, runner):
+    """A bot hunter tags a runner (same distance and timing rules as a human hunter, no user statistics)."""
+    runner.is_caught = True
+    runner.caught_by = hunter.user_id
+    runner.caught_at = datetime.utcnow()
+    runner.real_name_revealed = True
+    hunter.points = (hunter.points or 0) + 10 * (game.points_multiplier or 1)
+    db.session.commit()
+    hub.broadcast(game.code, 'runner_caught', {
+        'runner_id': runner.user_id, 'runner_codename': runner.codename, 'runner_username': runner.user.username,
+        'caught_by': hunter.user.username, 'caught_by_codename': hunter.codename,
+    })
+    if GamePlayer.query.filter_by(game_id=game.id, role='runner', is_caught=False).count() == 0:
+        finish_game(game, 'all_caught')
+
+def start_bot_loop(code):
+    """Start the bot simulation for a running game (once)."""
+    if code in BOT_LOOPS:
+        return
+    import gevent
+    BOT_LOOPS.add(code)
+    gevent.spawn(_bot_loop, code)
+
+def resume_bot_games():
+    """After a server restart: pick up running games that have bots."""
+    with app.app_context():
+        for g in Game.query.filter_by(status='active').all():
+            if bot_players(g):
+                start_bot_loop(g.code)
+
+def _bot_loop(code):
+    import gevent
+    pool = gevent.get_hub().threadpool          # heavy work (map download, routes) runs in a thread, never blocks the server
+    rng = random.Random()
+    try:
+        with app.app_context():
+            game = Game.query.filter_by(code=code).first()
+            if not game or not bot_players(game):
+                return
+            pf = get_playfield(game)
+            pf_pts = [(p['lat'], p['lng']) for p in pf['points']] if pf else None
+            humans = [(p.last_lat, p.last_lon) for p in game.players.all()
+                      if not p.user.is_bot and p.last_lat is not None]
+            pts = (pf_pts or []) + humans
+            if not pts:
+                return
+            bbox = botlib.bbox_of(pts, margin_m=250 if pf_pts else 700)
+            difficulty = game.difficulty or 'medium'
+        terrain = pool.spawn(botlib.load_terrain, bbox, OVERPASS_URL, pf_pts, TERRAIN_CACHE_DIR).get()
+        if terrain.degraded:
+            hub.broadcast(code, 'bot_notice', {'message': 'Kaartdata niet beschikbaar: de bots lopen zonder water- en bosregels.'})
+
+        states = {}
+        with app.app_context():
+            game = Game.query.filter_by(code=code).first()
+            centre = None
+            if humans:
+                centre = terrain.to_xy(sum(h[0] for h in humans) / len(humans), sum(h[1] for h in humans) / len(humans))
+            for gp in bot_players(game):
+                cell = terrain.random_walkable(rng, near=centre, min_m=120, max_m=400) if centre else None
+                cell = cell or terrain.random_walkable(rng)
+                if not cell:
+                    continue
+                lat, lon = terrain.to_latlon(*cell)
+                gp.last_lat, gp.last_lon, gp.last_seen = lat, lon, datetime.utcnow()
+                states[gp.user_id] = botlib.Bot(gp.user_id, gp.role, lat, lon, difficulty)
+            db.session.commit()
+
+        while True:
+            gevent.sleep(BOT_TICK)
+            with app.app_context():
+                game = Game.query.filter_by(code=code).first()
+                if not game or game.status != 'active':
+                    break
+                if get_game_pause_state(game).get('active'):
+                    continue
+                now = time.time() * BOT_TIME_SCALE
+                players = game.players.all()
+                hunters = [(p.last_lat, p.last_lon) for p in players
+                           if p.role == 'hunter' and not p.is_caught and p.last_lat is not None]
+                prey = [(p, (p.last_lat, p.last_lon)) for p in players
+                        if p.role == 'runner' and not p.is_caught and not p.is_offline and not p.is_paused
+                        and p.last_lat is not None]
+                headstart_over = game.is_headstart_over
+                for gp in players:
+                    bot = states.get(gp.user_id)
+                    if not bot or gp.is_caught:
+                        continue
+                    if gp.role == 'hunter' and not headstart_over:
+                        gp.last_seen = datetime.utcnow()          # hunters wait for the head start to end
+                        continue
+                    others = [ll for _, ll in prey] if gp.role == 'hunter' else [h for h in hunters if h != (bot.lat, bot.lon)]
+                    if now >= bot.replan_at or bot.arrived:
+                        pool.spawn(botlib.plan, terrain, bot, others, now).get()
+                    moved = bot.walk(BOT_TICK * BOT_TIME_SCALE)
+                    gp.last_lat, gp.last_lon = bot.lat, bot.lon
+                    gp.last_accuracy, gp.last_speed_ms = 5.0, bot.last_speed
+                    gp.last_seen = datetime.utcnow()
+                    gp.gps_enabled = True
+                    gp.distance = (gp.distance or 0) + moved
+                    if gp.role == 'hunter' and game.progress_pct >= CATCH_MIN_PROGRESS_PCT:
+                        for runner, ll in prey:
+                            if botlib.haversine(bot.lat, bot.lon, ll[0], ll[1]) <= max(CATCH_MAX_DISTANCE_M, BOT_CATCH_M) and not runner.is_caught:
+                                db.session.commit()
+                                bot_catch(game, gp, runner)
+                                break
+                db.session.commit()
+    except Exception:
+        app.logger.exception(f'bot loop for {code} crashed')
+    finally:
+        BOT_LOOPS.discard(code)
+
 # â”€â”€ Static files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/uploads/<fn>')
 def uploaded_file(fn): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
@@ -5176,6 +5377,7 @@ def init_db():
         db.create_all()
         ensure_column('post', 'audio_filename', 'VARCHAR(256)')
         ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
+        ensure_column('user', 'is_bot', 'BOOLEAN DEFAULT 0')
         for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),
                          ('font_body', 'VARCHAR(40)'), ('radius', 'INTEGER'), ('bg_image', 'VARCHAR(200)'),
                          ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)'),
@@ -5278,6 +5480,10 @@ def init_db():
             db.session.add(Changelog(version='3.0.0', title='Halloween-update: geluidsthema\'s, nieuwe look, bewerkbare pagina\'s', type='feature',
                           body='- Geluidsthema\'s: kies per thema geluidjes bij start, einde, lootbox, offline, target, buiten de zone en Hunter in de buurt\n- Admin > Geluiden: upload en beluister geluidjes per gebeurtenis\n- Eng Halloween-uiterlijk voor site en spel\n- Admin kan pagina\'s en teksten zelf aanpassen\n- Kapotte logo\'s en achtergronden hersteld\n- Eenmalige toestemmingen (locatie/geluid) en installeerbare app zodat de popup niet steeds terugkomt'))
             db.session.commit()
+        if not Changelog.query.filter_by(version='3.1.0').first():
+            db.session.add(Changelog(version='3.1.0', title='Bots, eigen lettertypes en rustigere typografie', type='feature',
+                          body='- Bots: computerspelers (Runner of Hunter) om te testen, met regels: niet door water, bosjes half tempo, snelheid volgt de moeilijkheid\n- Eigen lettertypes per thema, ook horror-lettertypes of een eigen upload\n- Leesbare dropdowns en een rustiger, minder uitgerekt lettertype\n- Dashboard opnieuw vormgegeven'))
+            db.session.commit()
         # Seed game catalog if empty
         if GameCatalog.query.count() == 0:
             catalog = [
@@ -5336,6 +5542,7 @@ def init_db():
 
 if __name__ == '__main__':
     init_db()
+    resume_bot_games()
     from gevent import pywsgi
     port = int(os.environ.get('PORT', 5000))
     print(f'\nVenTrax -> http://0.0.0.0:{port}\n')
