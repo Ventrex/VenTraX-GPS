@@ -77,6 +77,7 @@
 .tile{position:relative;border:2px solid var(--border);border-radius:18px;overflow:hidden;cursor:pointer;background:var(--bg3);display:block;transition:all .2s}
 .tile input{position:absolute;opacity:0;pointer-events:none}
 .tile-img{aspect-ratio:1/1;background-size:cover;background-position:center;display:grid;place-items:center;font-size:34px;color:var(--text2)}
+.cls-tile .tile-img{aspect-ratio:16/9}
 .tile-t{padding:9px 10px 11px;font-size:13px;font-weight:600;text-align:center}
 .tile:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .tile:has(input:checked) .tile-img{color:var(--accent)}
@@ -101,6 +102,8 @@ details.more summary::-webkit-details-marker{display:none}
 .pf-modes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:16px 0 8px}
 .pf-modes button{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:16px;border:2px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;min-height:64px}
 .pf-modes button i{font-size:18px}
+.pf-ico{width:38px;height:38px;object-fit:cover;border-radius:10px}
+.pf-color img{width:26px;height:26px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:2px}
 .pf-modes button.on{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 10%,var(--bg3))}
 .pf-modes button[data-m=circle].on,.pf-modes button[data-m=line].on{border-color:#ef4444;background:rgba(239,68,68,.1)}
 .pf-hint{font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:8px}
@@ -219,7 +222,7 @@ details.more summary::-webkit-details-marker{display:none}
     <!-- ===================== 2. MOEILIJKHEID ===================== -->
     <div class="step" id="step2">
       <div class="panel">
-        <div class="panel-h"><div class="panel-ic"><i class="fas fa-layer-group"></i></div><div class="panel-t">Kies je spelstijl {{ ibtn('Spelstijl', 'De spelstijl bepaalt wat er in het spel zit: lootboxen, een krimpende zone, missies. De volgende stappen laten alleen de keuzes zien die bij jouw stijl horen. Wil je alles zelf mixen, zet dan “Zelf alles aanpassen” aan.') }}</div></div>
+        <div class="panel-h"><div class="panel-ic"><i class="fas fa-layer-group"></i></div><div class="panel-t">Kies je spelstijl {{ ibtn('Spelstijl', 'De spelstijl bepaalt wat er in het spel zit: lootboxen, een krimpende zone, missies. De volgende stappen laten alleen de keuzes zien die bij jouw stijl horen. Wil je alles zelf mixen, kies dan Custom.') }}</div></div>
         <p class="panel-sub">Kies eerst wat voor spel het wordt. Daarna krijg je alleen de vragen die erbij horen.</p>
         <input type="hidden" name="game_style" id="gameStyleInput" value="classic">
         <div class="picks">
@@ -238,11 +241,9 @@ details.more summary::-webkit-details-marker{display:none}
           <div class="pick" id="style-survival" onclick="selectGameStyle('survival')">
             {% if img('img_style_survival') %}<div class="bg" style="background-image:url('{{ img('img_style_survival') }}')"></div>{% else %}<div class="ph"><i class="fas fa-skull-crossbones"></i></div>{% endif %}
             <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Survival</div><div class="pick-d">Krimpende zone, lootboxen en vallen (landmijn, laser). Zoek spullen en blijf binnen de lijn.</div></div></div>
-        </div>
-        <div class="set" style="margin-top:14px">
-          <div class="set-ic"><i class="fas fa-sliders"></i></div>
-          <div class="set-tx"><div class="set-t">Zelf alles aanpassen</div><div class="set-s">Toon in de volgende stappen alle opties, ook die niet bij de stijl horen</div></div>
-          <label class="switch"><input type="checkbox" id="advancedOn" onchange="applyStyleVisibility()"><span class="slider"></span></label>
+          <div class="pick" id="style-custom" onclick="selectGameStyle('custom')">
+            {% if img('img_style_custom') %}<div class="bg" style="background-image:url('{{ img('img_style_custom') }}')"></div>{% else %}<div class="ph"><i class="fas fa-sliders"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Custom</div><div class="pick-d">Zelf alles instellen: lootboxen, krimpende zone, missies en alle extra's. Je krijgt alle opties te zien.</div></div></div>
         </div>
         <div class="pts-note" id="styleSummary"></div>
       </div>
@@ -400,9 +401,9 @@ details.more summary::-webkit-details-marker{display:none}
         </div>
 
         <div class="pf-modes" id="pfModes">
-          <button type="button" class="on" data-m="field" onclick="setPfMode('field')"><i class="fas fa-draw-polygon"></i><span>Veld</span></button>
-          <button type="button" data-m="circle" onclick="setPfMode('circle')"><i class="fas fa-ban"></i><span>Verboden zone</span></button>
-          <button type="button" data-m="line" onclick="setPfMode('line')"><i class="fas fa-grip-lines"></i><span>Verboden lijn</span></button>
+          <button type="button" class="on" data-m="field" onclick="setPfMode('field')">{% if img('img_pf_field') %}<img class="pf-ico" src="{{ img('img_pf_field') }}" alt="">{% else %}<i class="fas fa-draw-polygon"></i>{% endif %}<span>Veld</span></button>
+          <button type="button" data-m="circle" onclick="setPfMode('circle')">{% if img('img_pf_circle') %}<img class="pf-ico" src="{{ img('img_pf_circle') }}" alt="">{% else %}<i class="fas fa-ban"></i>{% endif %}<span>Verboden zone</span></button>
+          <button type="button" data-m="line" onclick="setPfMode('line')">{% if img('img_pf_line') %}<img class="pf-ico" src="{{ img('img_pf_line') }}" alt="">{% else %}<i class="fas fa-grip-lines"></i>{% endif %}<span>Verboden lijn</span></button>
         </div>
         <div class="pf-hint" id="pfModeHint">Tik op de kaart om de hoeken van het speelveld te zetten (minimaal 3).</div>
         <div class="pf-opt" id="pfOptCircle" style="display:none"><label>Straal <b id="pfRadVal">40 m</b></label><input type="range" id="pfRad" min="5" max="300" step="5" value="40" oninput="pfSetSize(this.value)" onchange="pfSizeDone()"></div>
@@ -425,16 +426,16 @@ details.more summary::-webkit-details-marker{display:none}
         </div>
         <div class="fld-l">Kleur van het gebied buiten het veld</div>
         <div class="pf-row" style="margin-bottom:12px">
-          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="radiation"> Radiation groen</label>
-          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="storm" checked> Storm blauw</label>
-          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="nuclear"> Nuclear geel</label>
-          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="heat"> Heat rood</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="radiation">{% if img('img_pfcolor_radiation') %}<img src="{{ img('img_pfcolor_radiation') }}" alt="">{% endif %} Radiation groen</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="storm" checked>{% if img('img_pfcolor_storm') %}<img src="{{ img('img_pfcolor_storm') }}" alt="">{% endif %} Storm blauw</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="nuclear">{% if img('img_pfcolor_nuclear') %}<img src="{{ img('img_pfcolor_nuclear') }}" alt="">{% endif %} Nuclear geel</label>
+          <label class="pf-color"><input type="radio" name="playfieldColorUi" value="heat">{% if img('img_pfcolor_heat') %}<img src="{{ img('img_pfcolor_heat') }}" alt="">{% endif %} Heat rood</label>
         </div>
         <button type="button" class="btn btn-primary btn-sm" onclick="saveNamedProfilePlayfield()"><i class="fas fa-floppy-disk"></i> Nu opslaan</button>
       </div>
 
       <div class="panel" id="extrasPanel" data-feat="loot">
-        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-box-open"></i></div><div class="panel-t">Lootboxen &amp; extra's {{ ibtn("Extra's", 'Lootboxen (dropboxes) liggen verspreid over de kaart. Onder “Zelf alles aanpassen” kun je ook landmijnen, lasers en andere extra\'s aan zetten.') }}</div></div>
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-box-open"></i></div><div class="panel-t">Lootboxen &amp; extra's {{ ibtn("Extra's", 'Lootboxen (dropboxes) liggen verspreid over de kaart. Bij Custom kun je ook landmijnen, lasers en andere extra\'s aan zetten.') }}</div></div>
         <p class="panel-sub">Tik om aan of uit te zetten.</p>
         <div class="tiles" id="extraTiles">
           {{ tile('extra_dropboxes', 'img_extra_dropboxes', 'Dropboxes', 'fa-box-open', 'onchange="tog(\'dropboxOpts\',this)"') }}
@@ -510,7 +511,7 @@ details.more summary::-webkit-details-marker{display:none}
           {% for th in sound_themes %}
           <label class="pick small {{ 'sel' if default_sound_theme and th.id == default_sound_theme.id }}" style="--c:{{ th.accent or '#c4161c' }}" onclick="selTheme(this)">
             <input type="radio" name="sound_theme" value="{{ th.id }}" style="display:none" {{ 'checked' if default_sound_theme and th.id == default_sound_theme.id }}>
-            <div class="ph" style="font-size:34px"><i class="fas {{ 'fa-ghost' if th.skin == 'halloween' else 'fa-music' }}"></i></div>
+            {% if img('img_soundtheme_' ~ th.id) %}<div class="bg" style="background-image:url('{{ img('img_soundtheme_' ~ th.id) }}')"></div>{% else %}<div class="ph" style="font-size:34px"><i class="fas {{ 'fa-ghost' if th.skin == 'halloween' else 'fa-music' }}"></i></div>{% endif %}
             <div class="pick-ck"><i class="fas fa-check"></i></div>
             <div class="pick-body"><div class="pick-t" style="font-size:15px">{{ th.name }}</div></div>
           </label>
@@ -520,33 +521,27 @@ details.more summary::-webkit-details-marker{display:none}
 
       <div class="panel">
         <div class="panel-h"><div class="panel-ic" style="--c:var(--warn)"><i class="fas fa-id-badge"></i></div><div class="panel-t">Classes {{ ibtn('Classes', 'Als classes aan staan krijgt iedere speler willekeurig een rol met een speciale kracht en een cooldown, zoals Echo, Hack of een landmijn. Het gekozen thema bepaalt de sfeer van de namen.') }}</div></div>
-        <p class="panel-sub">Iedere speler krijgt een speciale kracht met cooldown.</p>
+        <p class="panel-sub">Elke speler krijgt een speciale kracht met een cooldown. Jij kiest welke classes er in het spel zitten.</p>
         <div class="set" style="border-top:none;padding-top:0">
           <div class="set-ic"><i class="fas fa-shuffle"></i></div>
-          <div class="set-tx"><div class="set-t">Random classes</div><div class="set-s">Elke speler krijgt een willekeurige class</div></div>
-          <label class="switch"><input type="checkbox" name="classes_enabled" id="classesEnabled"><span class="slider"></span></label>
+          <div class="set-tx"><div class="set-t">Classes aan</div><div class="set-s">Elke speler krijgt willekeurig een van de classes die jij hieronder aanklikt</div></div>
+          <label class="switch"><input type="checkbox" name="classes_enabled" id="classesEnabled" onchange="tog('classOpts',this)"><span class="slider"></span></label>
         </div>
-        <div class="fld-l" style="margin-top:6px">Class-thema</div>
-        <div class="picks three" style="margin-bottom:16px">
-          {% for k, name, icon in [('street','Street Ops','fa-city'),('space','Space Scouts','fa-user-astronaut'),('forest','Boswachters','fa-tree'),('spy','Spy Kids','fa-user-secret')] %}
-          <label class="pick small {{ 'sel' if loop.first }}" onclick="selClassTheme(this)">
-            <input type="radio" name="class_theme" value="{{ k }}" style="display:none" {{ 'checked' if loop.first }}>
-            {% if img('img_classtheme_' ~ k) %}<div class="bg" style="background-image:url('{{ img('img_classtheme_' ~ k) }}')"></div>{% else %}<div class="ph" style="font-size:34px"><i class="fas {{ icon }}"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div>
-            <div class="pick-body"><div class="pick-t" style="font-size:15px">{{ name }}</div></div>
-          </label>
-          {% endfor %}
-        </div>
-        <div class="fld"><label>Cooldown speciale kracht</label>
-          <select name="class_cooldown_sec" class="form-control"><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
-        <details class="more"><summary><i class="fas fa-chevron-down"></i> Welke classes bestaan er?</summary>
-          <div class="cls-list">
+        <div id="classOpts" style="display:none;margin-top:8px">
+          {% for side, label, ico in [('hunter','Classes voor Hunters','fa-crosshairs'),('runner','Classes voor Runners','fa-person-running')] %}
+          <div class="grp-h"><i class="fas {{ ico }}" style="color:var(--{{ side }})"></i> {{ label }} <small id="clsCnt-{{ side }}" style="color:var(--text2);font-weight:500"></small></div>
+          <div class="tiles cls-tiles" style="margin-bottom:14px">
             {% for c in class_loadouts %}
-            <div class="cls"><div class="cls-img" {% if img('img_class_' ~ c.id) %}style="background-image:url('{{ img('img_class_' ~ c.id) }}')"{% endif %}>{% if not img('img_class_' ~ c.id) %}<i class="fas fa-id-badge"></i>{% endif %}</div>
-              <b>{{ c.name }}</b><span>{{ c.desc }}</span></div>
+            <label class="tile cls-tile"><input type="checkbox" name="classes_{{ side }}" value="{{ c.id }}" checked onchange="clsCount()">
+              <div class="tile-img" {% if img('img_class_' ~ c.id) %}style="background-image:url('{{ img('img_class_' ~ c.id) }}')"{% endif %}>{% if not img('img_class_' ~ c.id) %}<i class="fas fa-id-badge"></i>{% endif %}</div>
+              <div class="tile-t">{{ c.name }}<small style="display:block;font-weight:500;color:var(--text2);font-size:11px;margin-top:3px;line-height:1.35">{{ c.desc }}</small></div></label>
             {% endfor %}
           </div>
-        </details>
+          {% endfor %}
+          <div class="pts-note" style="margin-bottom:10px">Per kant moet minimaal 1 class aangevinkt staan.</div>
+          <div class="fld"><label>Cooldown speciale kracht</label>
+            <select name="class_cooldown_sec" class="form-control"><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
+        </div>
       </div>
     </div>
 
@@ -588,7 +583,14 @@ function goStep(n){
   if(n===4) setTimeout(initPlayfieldMap, 80);
   window.scrollTo({top:0,behavior:'smooth'});
 }
+function classesOk(){
+  if(!document.getElementById('classesEnabled')?.checked) return true;
+  if(clsCount()) return true;
+  showToast('Kies per kant (Hunter en Runner) minimaal 1 class.','warn',5000);
+  return false;
+}
 function nextStep(){
+  if(currentStep===5 && !classesOk()) return;
   if(currentStep===1){
     const nm=document.querySelector('[name=name]');
     if(nm && !nm.value.trim()){ nm.focus(); showToast('Geef het spel eerst een naam.','warn'); return; }
@@ -599,7 +601,15 @@ function markPicks(name){
   document.querySelectorAll(`input[name=${name}]`).forEach(r=>{const p=r.closest('.pick'); if(p) p.classList.toggle('sel', r.checked);});
 }
 function selTheme(el){const r=el.querySelector('input'); if(r){r.checked=true; markPicks('sound_theme');}}
-function selClassTheme(el){const r=el.querySelector('input'); if(r){r.checked=true; markPicks('class_theme');}}
+function clsCount(){
+  let ok=true;
+  ['hunter','runner'].forEach(side=>{
+    const n=document.querySelectorAll('[name=classes_'+side+']:checked').length;
+    const el=document.getElementById('clsCnt-'+side); if(el) el.textContent=n?'('+n+' gekozen)':'(kies er minimaal 1)';
+    if(!n) ok=false;
+  });
+  return ok;
+}
 
 function selRole(inp){
   document.getElementById('rh').classList.toggle('sel', inp.value==='hunter');
@@ -713,6 +723,7 @@ const STYLE_INFO={
   adventure:{name:'Adventure',loot:true,zone:false,missions:false,extras:['extra_echo'],text:'Met lootboxen en Echo. Je stelt het in bij “Lootboxen & extra\'s”.'},
   battlefield:{name:'Battlefield',loot:false,zone:true,missions:false,extras:['extra_landmine','extra_laser','extra_tripwire'],text:'Met krimpende zone en vallen (landmijn, laser, tripwire). De zone werkt het best met een getekend speelveld.'},
   stealth:{name:'Shadow Ops',loot:true,zone:true,missions:true,extras:['extra_tripwire','feat_hacker','feat_glitch','extra_echo'],text:'Krimpende zone, missies voor runners, lootboxen en sluipextra\'s: tripwire, hacker, glitch en echo.'},
+  custom:{name:'Custom',custom:true,loot:true,zone:true,missions:true,extras:[],text:'Je stelt alles zelf in: je ziet in de volgende stappen alle opties.'},
   survival:{name:'Survival',loot:true,zone:true,missions:false,extras:['extra_landmine','extra_laser'],text:'Krimpende zone, lootboxen en vallen (landmijn, laser).'}
 };
 const ALL_EXTRAS=['extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'];
@@ -724,7 +735,7 @@ function selectGameStyle(style, opts){
     const el=document.getElementById('style-'+s);
     if(el) el.classList.toggle('sel', s===style);
   });
-  if(opts.preset!==false){
+  if(opts.preset!==false && !STYLE_INFO[style].custom){
     const st=STYLE_INFO[style];
     // The style decides which features and extras are on; "Zelf alles aanpassen" lets you change everything.
     setNamedCheck('extra_dropboxes',st.loot);
@@ -740,7 +751,7 @@ function selectGameStyle(style, opts){
 // Show a panel when the style has that feature, "alles aanpassen" is on, or the option is switched on anyway.
 function applyStyleVisibility(){
   const st=STYLE_INFO[document.getElementById('gameStyleInput').value]||STYLE_INFO.classic;
-  const adv=!!document.getElementById('advancedOn')?.checked;
+  const adv=!!st.custom;
   const isOn=n=>!!document.querySelector('[name='+n+']')?.checked;
   const vis={
     extrasPanel: st.loot||st.extras.length>0||adv||['extra_dropboxes',...ALL_EXTRAS].some(isOn),
@@ -793,7 +804,7 @@ tog('targetOpts',document.getElementById('tgEn'));
 tog('offlineOpts',document.getElementById('offBtn'));
 tog('pauseOpts',document.getElementById('pauseAllw'));
 selDiff('medium');
-setTimeout(()=>applyStyleVisibility(),0);
+setTimeout(()=>{applyStyleVisibility();clsCount();},0);
 
 // Live planning of the shrinking zone, so the maker sees what 30% / 8 min really does over the game
 function pfFieldRadiusM(){
@@ -873,7 +884,11 @@ function applyGameTemplate(idx){
   setFormValue('feat_glitch', e.glitch);
   setFormValue('extra_echo', e.echo);
   setFormValue('classes_enabled', e.classes_enabled);
-  setFormValue('class_theme', e.class_theme);
+  ['hunter','runner'].forEach(side=>{
+    const list=e['classes_'+side]; if(!Array.isArray(list)) return;
+    document.querySelectorAll('[name=classes_'+side+']').forEach(cb=>{cb.checked=list.includes(cb.value);});
+  });
+  tog('classOpts', document.getElementById('classesEnabled')); clsCount();
   if(e.sound_theme) setFormValue('sound_theme', e.sound_theme);
   setFormValue('class_cooldown_sec', e.class_cooldown_sec);
   setFormValue('dropboxes_per_team', e.dropboxes_per_team);
@@ -1154,7 +1169,7 @@ function buildSummary(){
   const on=id=>!!document.getElementById(id)?.checked;
   const nm=n=>!!document.querySelector(`[name=${n}]`)?.checked;
   const theme=document.querySelector('[name=sound_theme]:checked')?.closest('.pick')?.querySelector('.pick-t')?.textContent||'-';
-  const cTheme=document.querySelector('[name=class_theme]:checked')?.closest('.pick')?.querySelector('.pick-t')?.textContent||'-';
+  const nCls=s=>document.querySelectorAll('[name=classes_'+s+']:checked').length;
   const chip=(label,icon,isOn)=>`<span class="chip ${isOn?'on':''}"><i class="fas ${isOn?'fa-check':'fa-xmark'}"></i> ${label}</span>`;
   const extras=[['extra_dropboxes','Dropboxes'],['extra_landmine','Landmijn'],['extra_laser','Laser'],['extra_tripwire','Tripwire'],['feat_hacker','Hacker'],['feat_glitch','Glitch'],['extra_echo','Echo']];
   const box=(k,v)=>`<div class="sum-box"><small>${k}</small><b>${v}</b></div>`;
@@ -1187,13 +1202,14 @@ function buildSummary(){
       <div class="sum-grid">
         ${box('Speelveld',pfPoints.length>=3?pfPoints.length+' punten'+(pfForb.length?' · '+pfForb.length+' verboden':''):'Niet ingesteld')}
         ${box('Geluid & sfeer',e(theme))}
-        ${box('Classes',nm('classes_enabled')?'Aan · '+e(cTheme):'Uit')}
+        ${box('Classes',nm('classes_enabled')?'Aan · '+nCls('hunter')+' hunter, '+nCls('runner')+' runner':'Uit')}
       </div>
     </div>
     <p class="pts-note" style="text-align:center">Klopt alles? Tik op <b>Spel aanmaken</b> hieronder. Je kunt daarna in de lobby nog dingen aanpassen.</p>`;
 }
 
-document.getElementById('gf').addEventListener('submit',function(){
+document.getElementById('gf').addEventListener('submit',function(ev){
+  if(!classesOk()){ ev.preventDefault(); goStep(5); return; }
   const btn=document.getElementById('createBtn');
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Aanmaken...';
 });

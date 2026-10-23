@@ -86,3 +86,34 @@ def test_admin_manages_personas(appmodule, client):
     client.post(f"/admin/personas/{pid}/delete")
     with appmodule.app.app_context():
         assert appmodule.ThemePersona.query.filter_by(name="Kerstman").first() is None
+
+
+def test_classes_are_chosen_per_side_and_each_side_keeps_at_least_one(appmodule, client):
+    uid = make_user(appmodule, username="cl", email="cl@example.com")
+    other = make_user(appmodule, username="cl2", email="cl2@example.com")
+    with appmodule.app.app_context():
+        g = appmodule.Game(name="C", code="CLS123", creator_id=uid, status="lobby")
+        appmodule.db.session.add(g); appmodule.db.session.commit()
+        appmodule.db.session.add(appmodule.GamePlayer(game_id=g.id, user_id=uid, role="hunter"))
+        appmodule.db.session.add(appmodule.GamePlayer(game_id=g.id, user_id=other, role="runner"))
+        appmodule.db.session.commit()
+        from werkzeug.datastructures import MultiDict
+        form = MultiDict([("classes_enabled", "on"), ("classes_hunter", "codekraker"), ("classes_hunter", "glitcher")])   # runner side left empty
+        ex = appmodule.save_game_extras(g, form)
+        assert ex["classes_hunter"] == ["codekraker", "glitcher"]
+        assert len(ex["classes_runner"]) == len(appmodule.CLASS_LOADOUTS)            # empty side falls back to all
+        assigned = appmodule.assign_game_classes(g)
+        assert assigned[str(uid)]["id"] in ("codekraker", "glitcher")
+        assert assigned[str(other)]["id"] in {c["id"] for c in appmodule.CLASS_LOADOUTS}
+
+
+def test_picture_slots_for_field_modes_colours_and_theme_cards(appmodule, client):
+    login(client, appmodule)
+    with appmodule.app.app_context():
+        tid = appmodule.SoundTheme.query.filter_by(slug="kerst").first().id
+    for key in ("img_pf_field", "img_pf_circle", "img_pf_line", "img_pfcolor_storm", "img_style_custom", f"img_soundtheme_{tid}"):
+        r = client.post(f"/admin/images/{key}", data={"file": (png_bytes(), "a.png")}, content_type="multipart/form-data")
+        assert r.get_json().get("success"), key
+    assert client.post("/admin/images/img_unknown", data={}).status_code == 404
+    html = client.get("/new_game").get_data(as_text=True)
+    assert 'class="pf-ico"' in html and "img_pfcolor" not in html

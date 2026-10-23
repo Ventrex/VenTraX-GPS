@@ -242,7 +242,7 @@
         <summary class="card-title" style="cursor:pointer;list-style:none"><i class="fas fa-box-open"></i> Extra's in dit spel</summary>
         <div style="font-size:13px;color:var(--text2);line-height:1.6">
           <div><strong style="color:var(--text)">Spelstijl:</strong> {{ game_extras.game_style|default('classic')|title }}</div>
-          {% if game_extras.classes_enabled %}<div><strong style="color:var(--text)">Classes:</strong> Random classes aan, thema {{ game_extras.class_theme|default('street')|title }}, cooldown {{ game_extras.class_cooldown_sec|default(180) }}s.</div>{% endif %}
+          {% if game_extras.classes_enabled %}<div><strong style="color:var(--text)">Classes:</strong> Classes aan ({{ (game_extras.classes_hunter or [])|length }} voor hunters, {{ (game_extras.classes_runner or [])|length }} voor runners), cooldown {{ game_extras.class_cooldown_sec|default(180) }}s.</div>{% endif %}
           {% if game_extras.dropboxes %}<div><strong style="color:var(--text)">Dropboxes:</strong> {{ game_extras.dropboxes_per_team }} per team en {{ game_extras.dropboxes_global }} algemeen. Openen binnen 50 meter{% if game_extras.dropbox_wait_enabled %}, na {{ game_extras.dropbox_wait_sec }} seconden wachten{% endif %}.</div>{% endif %}
           {% if game_extras.dropboxes %}<div><strong style="color:var(--text)">Dropbox afstand:</strong> binnen speelveld, of {{ game_extras.dropbox_min_m|default(500) }}-{{ game_extras.dropbox_max_m|default(1500) }}m als er geen speelveld is.</div>{% endif %}
           {% if game_extras.landmine %}<div><strong style="color:var(--text)">Landmijn:</strong> tegenstander binnen bereik moet stilstaan om te ontmantelen.</div>{% endif %}

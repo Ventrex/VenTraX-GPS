@@ -1178,8 +1178,16 @@ def save_game_extras(game, form):
     if dropbox_max_m < dropbox_min_m:
         dropbox_min_m, dropbox_max_m = dropbox_max_m, dropbox_min_m
 
+    def pick_classes(name):
+        valid = [c['id'] for c in CLASS_LOADOUTS]
+        raw = form.getlist(name) if hasattr(form, 'getlist') else (form.get(name) or [])
+        ids = [i for i in valid if i in raw]
+        return ids or valid           # every side always has at least one class
+
     extras = {
         'game_style': form.get('game_style') or 'classic',
+        'classes_hunter': pick_classes('classes_hunter'),
+        'classes_runner': pick_classes('classes_runner'),
         'dropboxes': form.get('extra_dropboxes') == 'on',
         'landmine': form.get('extra_landmine') == 'on',
         'laser': form.get('extra_laser') == 'on',
@@ -1225,6 +1233,12 @@ def get_available_classes(extras):
     # full class pool so players do not all receive Echo when only Echo is ticked.
     return CLASS_LOADOUTS[:]
 
+def class_pool(extras, role):
+    """Classes a side may get: the ones the maker ticked for that side (always at least one)."""
+    by_id = {c['id']: c for c in CLASS_LOADOUTS}
+    ids = extras.get('classes_' + role) or [c['id'] for c in CLASS_LOADOUTS]
+    return [by_id[i] for i in ids if i in by_id] or CLASS_LOADOUTS[:]
+
 def assign_game_classes(game):
     extras = get_game_extras(game)
     if not extras.get('classes_enabled'):
@@ -1232,31 +1246,29 @@ def assign_game_classes(game):
         return {}
     try:
         assigned = json.loads(SiteSetting.get(_classes_key(game.id), '{}') or '{}')
+        if not isinstance(assigned, dict):
+            assigned = {}
     except Exception:
         assigned = {}
-    choices = get_available_classes(extras)
-    assigned_ids = {v.get('id') for v in assigned.values() if isinstance(v, dict)}
-    if len(game.players.all()) > 1 and len(assigned_ids) <= 1 and len(choices) > 1:
-        assigned = {}
-    unused = [c for c in choices if c['id'] not in {v.get('id') for v in assigned.values() if isinstance(v, dict)}]
-    if not unused:
-        unused = choices[:]
-    random.shuffle(unused)
-    for p in game.players:
+    players = list(game.players)
+    role_of = {str(p.user_id): p.role for p in players}
+    for p in players:
         key = str(p.user_id)
-        if key not in assigned:
-            if not unused:
-                unused = choices[:]
-                random.shuffle(unused)
-            cls = unused.pop()
-            assigned[key] = {
-                'id': cls['id'],
-                'name': cls['name'],
-                'power': cls['power'],
-                'desc': cls.get('desc', ''),
-                'cooldown_sec': int(extras.get('class_cooldown_sec') or 180),
-                'theme': extras.get('class_theme') or 'street',
-            }
+        pool = class_pool(extras, p.role)
+        cur = assigned.get(key)
+        if isinstance(cur, dict) and cur.get('id') in {c['id'] for c in pool}:
+            continue
+        used = {v.get('id') for k, v in assigned.items()
+                if k != key and isinstance(v, dict) and role_of.get(k) == p.role}
+        cls = random.choice([c for c in pool if c['id'] not in used] or pool)      # different classes per side when possible
+        assigned[key] = {
+            'id': cls['id'],
+            'name': cls['name'],
+            'power': cls['power'],
+            'desc': cls.get('desc', ''),
+            'cooldown_sec': int(extras.get('class_cooldown_sec') or 180),
+            'theme': extras.get('class_theme') or 'street',
+        }
     SiteSetting.set(_classes_key(game.id), json.dumps(assigned))
     return assigned
 
@@ -5237,17 +5249,22 @@ IMAGE_SLOTS = [
     ("Extra's", [('img_extra_dropboxes', 'Dropboxes'), ('img_extra_landmine', 'Landmijn'), ('img_extra_laser', 'Laser detectie'),
                  ('img_extra_tripwire', 'Tripwire'), ('img_extra_hacker', 'Hacker'), ('img_extra_glitch', 'Glitch'),
                  ('img_extra_echo', 'Echo')]),
+    ('Speelveld tekenen', [('img_pf_field', 'Veld'), ('img_pf_circle', 'Verboden zone'), ('img_pf_line', 'Verboden lijn')]),
+    ('Kleur buiten het veld', [('img_pfcolor_radiation', 'Radiation groen'), ('img_pfcolor_storm', 'Storm blauw'),
+                               ('img_pfcolor_nuclear', 'Nuclear geel'), ('img_pfcolor_heat', 'Heat rood')]),
     ('Spelstijl', [('img_style_classic', 'Classic'), ('img_style_adventure', 'Adventure'),
-                   ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'), ('img_style_survival', 'Survival'),
+                   ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'), ('img_style_survival', 'Survival'), ('img_style_custom', 'Custom'),
                    ('img_style_zone', 'Krimpende zone'), ('img_style_missions', 'Missies')]),
-    ("Class-thema's", [('img_classtheme_street', 'Street Ops'), ('img_classtheme_space', 'Space Scouts'),
-                       ('img_classtheme_forest', 'Boswachters'), ('img_classtheme_spy', 'Spy Kids')]),
     ('Classes', [('img_class_signal_scout', 'Signal Scout'), ('img_class_codekraker', 'Codekraker'),
                  ('img_class_bomexpert', 'Bomexpert'), ('img_class_laserwachter', 'Laserwachter'),
                  ('img_class_saboteur', 'Saboteur'), ('img_class_glitcher', 'Glitcher'),
                  ('img_class_spoorzoeker', 'Spoorzoeker')]),
 ]
 IMAGE_KEYS = {k for _, items in IMAGE_SLOTS for k, _ in items}
+_THEME_IMG_RE = __import__('re').compile(r'^img_soundtheme_\d+$')
+
+def image_key_ok(key):
+    return key in IMAGE_KEYS or bool(_THEME_IMG_RE.match(key))
 
 def _image_theme_id():
     """Theme whose pictures are shown right now: the game's theme while in a game, else the site default."""
@@ -5285,7 +5302,9 @@ def _image_scope():
 def admin_images():
     tid = _image_scope()
     groups = []
-    for title, items in IMAGE_SLOTS:
+    all_slots = list(IMAGE_SLOTS) + [("Geluid & sfeer thema's (Nieuw Spel)",
+                                      [(f'img_soundtheme_{t.id}', t.name) for t in SoundTheme.query.order_by(SoundTheme.name).all()])]
+    for title, items in all_slots:
         row = []
         for k, label in items:
             own = _existing_bg(SiteSetting.get(_img_setting(k, tid), '') or '')
@@ -5299,7 +5318,7 @@ def admin_images():
 @login_required
 @admin_required
 def admin_image_upload(key):
-    if key not in IMAGE_KEYS:
+    if not image_key_ok(key):
         return jsonify(error='Onbekende afbeelding'), 404
     f = request.files.get('file')
     if not f or not f.filename or not allowed_file(f.filename):
@@ -5315,7 +5334,7 @@ def admin_image_upload(key):
 @login_required
 @admin_required
 def admin_image_clear(key):
-    if key not in IMAGE_KEYS:
+    if not image_key_ok(key):
         return jsonify(error='Onbekende afbeelding'), 404
     SiteSetting.set(_img_setting(key, _image_scope()), '')
     return jsonify(success=True)
