@@ -1,371 +1,345 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block title %}Nieuw Spel - {{ site_name }}{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-.step{display:none}.step.active{display:block}
-.step-dots{display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:36px}
-.step-item{display:flex;flex-direction:column;align-items:center;position:relative;flex:1}
-.step-item:not(:last-child)::after{content:'';position:absolute;top:14px;left:50%;width:100%;height:2px;background:var(--border);z-index:0;transition:background .4s}
-.step-item.done:not(:last-child)::after{background:var(--accent)}
-.step-circle{width:28px;height:28px;border-radius:50%;background:var(--border);color:var(--text2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;position:relative;z-index:1;transition:all .3s;border:2px solid var(--border)}
-.step-item.done .step-circle{background:var(--accent);color:#fff;border-color:var(--accent)}
-.step-lbl{font-size:11px;color:var(--text2);margin-top:6px;text-align:center;font-weight:500}
-.step-item.done .step-lbl{color:var(--accent)}
+/* ---------- wizard shell ---------- */
+.wz{max-width:780px;margin:0 auto;padding:26px 16px 150px}
+.wz-title{font-family:var(--hfont);font-size:clamp(26px,5vw,36px);font-weight:700;letter-spacing:-.03em;line-height:1.1}
+.wz-sub{color:var(--text2);margin-top:6px;font-size:14.5px}
+.wz-prog{display:flex;gap:6px;margin:22px 0 8px}
+.wz-prog i{flex:1;height:5px;border-radius:5px;background:var(--bg4);transition:background .3s}
+.wz-prog i.on{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+.wz-step{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px}
+.wz-step b{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.wz-step span{font-size:12px;color:var(--text2)}
+.step{display:none}.step.active{display:block;animation:pageIn .25s var(--tr)}
 
-/* Difficulty cards */
-.diff-card{border:2px solid var(--border);border-radius:var(--r);padding:18px;cursor:pointer;transition:all var(--tr);position:relative;text-align:center}
-.diff-card:hover{border-color:var(--accent);transform:translateY(-2px)}
-.diff-card.sel-easy{border-color:var(--runner);background:rgba(16,185,129,.06)}
-.diff-card.sel-medium{border-color:var(--warn);background:rgba(245,158,11,.06)}
-.diff-card.sel-hard{border-color:var(--danger);background:rgba(239,68,68,.06)}
-.diff-card.sel-custom{border-color:var(--hunter);background:rgba(59,130,246,.06)}
-.diff-icon{font-size:32px;margin-bottom:10px}
-.diff-img{width:100%;height:110px;object-fit:cover;border-radius:8px;margin-bottom:10px;border:1px solid var(--border)}
-.diff-name{font-family:var(--hfont);font-size:17px;font-weight:700;margin-bottom:4px}
-.diff-desc{font-size:12px;color:var(--text2);line-height:1.5}
-.diff-multi{position:absolute;top:10px;right:10px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px}
-
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border)}
-.toggle-row:last-child{border:none}
-.toggle-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
-.toggle-label{font-weight:500;font-size:15px}
-.toggle-sub{font-size:12px;color:var(--text2);margin-top:2px}
-#customSettings{opacity:1!important}
-
-/* Multiplier badge */
-.multi-badge{
-  display:inline-flex;align-items:center;gap:6px;
-  background:var(--bg3);border:1px solid var(--border);
-  border-radius:var(--r);padding:12px 18px;
-  font-family:var(--hfont);font-size:24px;font-weight:800;
-}
-
-.summary-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
-.summary-row:last-child{border:none}
-.summary-key{color:var(--text2)}
-.summary-val{font-weight:600}
-#summaryContent{color:var(--text)}
-
-/* custom interval row */
+/* ---------- panels ---------- */
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:24px;padding:22px;margin-bottom:16px}
+.panel-h{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.panel-ic{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;background:color-mix(in srgb,var(--c,var(--accent)) 15%,transparent);color:var(--c,var(--accent));font-size:17px;flex-shrink:0}
+.panel-t{font-family:var(--hfont);font-size:18px;font-weight:700;letter-spacing:-.02em;flex:1;display:flex;align-items:center;gap:8px}
+.panel-sub{color:var(--text2);font-size:13.5px;line-height:1.6;margin:2px 0 18px}
+.ibtn{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--text2);background:transparent;color:var(--text2);display:inline-grid;place-items:center;font-size:10px;cursor:pointer;flex-shrink:0;padding:0;transition:all var(--tr)}
+.ibtn:hover{border-color:var(--accent);color:var(--accent)}
+.fld{margin-bottom:16px}
+.fld>label,.fld-l{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--text2);margin-bottom:7px;letter-spacing:.07em;text-transform:uppercase}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:560px){.two{grid-template-columns:1fr}}
 .custom-input-row{display:none;margin-top:10px}
-#playfieldMap{height:320px;border-radius:var(--r2);overflow:hidden;border:1px solid var(--border);background:var(--bg3);margin:12px 0}
+
+/* ---------- picture cards (role, difficulty, style, class theme, sound theme) ---------- */
+.picks{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:420px){.picks.wide{grid-template-columns:1fr}}
+.picks.three{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.pick{position:relative;border-radius:20px;overflow:hidden;border:2px solid var(--border);cursor:pointer;min-height:176px;display:flex;align-items:flex-end;background:var(--bg3);transition:transform .2s,border-color .2s,box-shadow .2s;-webkit-tap-highlight-color:transparent}
+.pick:hover{transform:translateY(-2px)}
+.pick .bg{position:absolute;inset:0;background-size:cover;background-position:center;transition:transform .4s}
+.pick:hover .bg{transform:scale(1.04)}
+.pick .ph{position:absolute;inset:0;display:grid;place-items:center;font-size:46px;color:var(--c,var(--accent));background:radial-gradient(circle at 50% 35%,color-mix(in srgb,var(--c,var(--accent)) 22%,transparent),transparent 70%),linear-gradient(160deg,var(--bg4),var(--bg3))}
+.pick::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.88) 6%,rgba(0,0,0,.25) 55%,transparent);pointer-events:none}
+.pick-body{position:relative;z-index:2;padding:14px 15px;width:100%}
+.pick-t{font-family:var(--hfont);font-size:17px;font-weight:700;color:#fff;letter-spacing:-.02em}
+.pick-d{font-size:12px;color:rgba(255,255,255,.72);line-height:1.45;margin-top:3px}
+.pick-tag{position:absolute;top:10px;left:10px;z-index:3;font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;backdrop-filter:blur(6px)}
+.pick-ck{position:absolute;top:10px;right:10px;z-index:3;width:26px;height:26px;border-radius:50%;background:var(--c,var(--accent));color:#fff;display:none;place-items:center;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.4)}
+.pick.sel{border-color:var(--c,var(--accent));box-shadow:0 0 0 3px color-mix(in srgb,var(--c,var(--accent)) 28%,transparent),0 12px 34px rgba(0,0,0,.4)}
+.pick.sel .pick-ck{display:grid}
+.pick.small{min-height:128px}
+
+/* ---------- setting rows ---------- */
+.set{display:flex;align-items:center;gap:14px;padding:15px 0;border-top:1px solid var(--border)}
+.set:first-of-type{border-top:none}
+.set-ic{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--bg4);color:var(--text2);font-size:15px;flex-shrink:0}
+.set-tx{flex:1;min-width:0}
+.set-t{font-weight:600;font-size:15px;display:flex;align-items:center;gap:7px}
+.set-s{font-size:12.5px;color:var(--text2);margin-top:2px;line-height:1.5}
+.fx{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.fx span{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid}
+.fx .h{color:var(--hunter);border-color:color-mix(in srgb,var(--hunter) 40%,transparent);background:color-mix(in srgb,var(--hunter) 10%,transparent)}
+.fx .r{color:var(--runner);border-color:color-mix(in srgb,var(--runner) 40%,transparent);background:color-mix(in srgb,var(--runner) 10%,transparent)}
+.sub-opts{padding:4px 0 6px 50px}
+@media(max-width:560px){.sub-opts{padding-left:0}}
+.grp-h{display:flex;align-items:center;gap:10px;font-family:var(--hfont);font-size:15px;font-weight:700;margin:6px 0 2px}
+
+/* ---------- points box ---------- */
+.pts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:4px 0 0}
+.pts-c{border-radius:18px;padding:14px 16px;background:var(--bg3);border:1px solid var(--border)}
+.pts-c small{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2)}
+.pts-c b{display:block;font-family:var(--hfont);font-size:30px;letter-spacing:-.04em;margin-top:4px}
+.pts-c.h b{color:var(--hunter)}.pts-c.r b{color:var(--runner)}
+.pts-note{font-size:12.5px;color:var(--text2);margin-top:10px;line-height:1.55}
+
+/* ---------- extras / tiles ---------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:10px}
+.tile{position:relative;border:2px solid var(--border);border-radius:18px;overflow:hidden;cursor:pointer;background:var(--bg3);display:block;transition:all .2s}
+.tile input{position:absolute;opacity:0;pointer-events:none}
+.tile-img{aspect-ratio:1/1;background-size:cover;background-position:center;display:grid;place-items:center;font-size:34px;color:var(--text2)}
+.tile-t{padding:9px 10px 11px;font-size:13px;font-weight:600;text-align:center}
+.tile:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.tile:has(input:checked) .tile-img{color:var(--accent)}
+.tile:has(input:checked)::after{content:'\f00c';font-family:'Font Awesome 6 Free';font-weight:900;position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:11px}
+.cls-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-top:6px}
+.cls{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--bg3)}
+.cls-img{aspect-ratio:4/3;background-size:cover;background-position:center;display:grid;place-items:center;color:var(--text2);font-size:26px}
+.cls b{display:block;padding:8px 10px 2px;font-size:13px}.cls span{display:block;padding:0 10px 10px;font-size:11.5px;color:var(--text2);line-height:1.4}
+details.more{margin-top:14px}
+details.more summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);list-style:none}
+details.more summary::-webkit-details-marker{display:none}
+
+/* ---------- playfield ---------- */
+#playfieldMap{height:min(58vh,460px);border-radius:18px;overflow:hidden;border:1px solid var(--border);background:var(--bg3);margin:12px 0}
 .pf-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.pf-color{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:13px;cursor:pointer}
+.pf-color{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:999px;padding:9px 14px;font-size:13px;cursor:pointer}
 .pf-color input{accent-color:var(--accent)}
 .pf-help{font-size:12px;color:var(--text2);line-height:1.5}
-.extra-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin:8px 0 14px}
-.extra-choice{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r2);padding:9px 10px;font-size:13px;cursor:pointer;color:var(--text2)}
-.extra-choice input{accent-color:var(--accent)}
-.extra-choice:has(input:checked){border-color:var(--accent);background:rgba(225,29,72,.08);color:var(--text)}
-.style-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:10px 0 16px}
-.style-card{border:1px solid var(--border);background:var(--bg3);border-radius:var(--r);padding:14px;cursor:pointer;transition:all .2s}
-.style-card:hover{border-color:var(--accent);transform:translateY(-1px)}
-.style-card.active{border-color:var(--accent);background:rgba(225,29,72,.08)}
-.style-name{font-family:var(--hfont);font-size:16px;font-weight:800;margin-bottom:4px}
-.style-desc{font-size:12px;color:var(--text2);line-height:1.45}
+
+/* ---------- summary ---------- */
+.sum-hero{display:flex;align-items:center;gap:14px;padding:18px;border-radius:20px;background:linear-gradient(135deg,color-mix(in srgb,var(--accent) 18%,var(--bg3)),var(--bg3));border:1px solid var(--border);margin-bottom:14px}
+.sum-hero .ic{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;background:var(--accent);color:#fff;font-size:22px;flex-shrink:0}
+.sum-hero h3{font-family:var(--hfont);font-size:20px;letter-spacing:-.02em}
+.sum-hero p{font-size:13px;color:var(--text2);margin-top:2px}
+.sum-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.sum-box{border:1px solid var(--border);border-radius:16px;padding:12px 14px;background:var(--bg3)}
+.sum-box small{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);font-weight:700}
+.sum-box b{display:block;margin-top:3px;font-size:15px}
+.sum-sec{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:var(--text2);margin:16px 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:12.5px;font-weight:600;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
+.chip.on{color:var(--text);border-color:color-mix(in srgb,var(--accent) 50%,transparent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.chip i{font-size:11px}
+
+/* ---------- sticky action bar ---------- */
+.wz-bar{position:fixed;left:0;right:0;bottom:0;z-index:700;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:var(--glass);backdrop-filter:blur(20px) saturate(160%);-webkit-backdrop-filter:blur(20px) saturate(160%);border-top:1px solid var(--border)}
+.wz-bar-in{max-width:780px;margin:0 auto;display:flex;gap:10px}
+.wz-bar .btn{height:52px;font-size:15px}
 </style>
 {% endblock %}
+
+{% macro ibtn(title, text) -%}
+<button type="button" class="ibtn" aria-label="Uitleg" onclick='showTooltip({{ title|tojson }}, {{ text|tojson }})'><i class="fas fa-info"></i></button>
+{%- endmacro %}
+
+{% macro tile(name, key, label, icon, extra='') -%}
+<label class="tile"><input type="checkbox" name="{{ name }}" {{ extra|safe }}>
+  <div class="tile-img" {% if img(key) %}style="background-image:url('{{ img(key) }}')"{% endif %}>{% if not img(key) %}<i class="fas {{ icon }}"></i>{% endif %}</div>
+  <div class="tile-t">{{ label }}</div></label>
+{%- endmacro %}
+
 {% block content %}
-<div class="container-md" style="padding-top:36px">
-  <div style="margin-bottom:28px">
-    <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800"><i class="fas fa-plus-circle" style="color:var(--accent)"></i> Nieuw Spel</h1>
-    <p style="color:var(--text2);margin-top:6px">Configureer een nieuw VenTrax spel</p>
-  </div>
+<div class="wz">
+  <h1 class="wz-title">Nieuw spel</h1>
+  <p class="wz-sub">In 5 korte stappen klaar om te spelen.</p>
+
+  <div class="wz-prog" id="prog"><i class="on"></i><i></i><i></i><i></i><i></i></div>
+  <div class="wz-step"><b id="stepName">Basis</b><span id="stepOf">Stap 1 van 5</span></div>
 
   <form method="POST" id="gf">
 
-    <!-- Step indicator -->
-    <div class="step-dots">
-      <div class="step-item done" id="si1"><div class="step-circle" id="sc1">1</div><div class="step-lbl">Basis</div></div>
-      <div class="step-item" id="si2"><div class="step-circle" id="sc2">2</div><div class="step-lbl">Moeilijkheid</div></div>
-      <div class="step-item" id="si3"><div class="step-circle" id="sc3">3</div><div class="step-lbl">Instellingen</div></div>
-      <div class="step-item" id="si4"><div class="step-circle" id="sc4">4</div><div class="step-lbl">Extra</div></div>
-      <div class="step-item" id="si5"><div class="step-circle" id="sc5">5</div><div class="step-lbl">Samenvatting</div></div>
-    </div>
-
-    <!-- Step 1: Basis -->
+    <!-- ===================== 1. BASIS ===================== -->
     <div class="step active" id="step1">
-      <div class="card">
-        <div class="card-title"><i class="fas fa-gamepad"></i> Basisinstellingen</div>
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic"><i class="fas fa-flag"></i></div><div class="panel-t">Je spel</div></div>
+        <p class="panel-sub">Geef het spel een naam en kies hoe lang het duurt.</p>
 
-        <div class="form-group">
-          <label class="form-label">Spelnaam</label>
+        <div class="fld">
+          <label>Spelnaam</label>
           <input name="name" class="form-control" placeholder="Geef het spel een naam" value="{{ default_game_name }}" required>
         </div>
 
         {% if game_templates %}
-        <div class="form-group">
-          <label class="form-label">Vorig spel hergebruiken</label>
+        <div class="fld">
+          <label>Vorig spel hergebruiken</label>
           <select id="templateSelect" class="form-control" onchange="applyGameTemplate(this.value)">
             <option value="">Nieuw instellen</option>
-            {% for t in game_templates %}
-            <option value="{{ loop.index0 }}">{{ t.name }} Â· {{ t.created_at[:10] }}</option>
-            {% endfor %}
+            {% for t in game_templates %}<option value="{{ loop.index0 }}">{{ t.name }} · {{ t.created_at[:10] }}</option>{% endfor %}
           </select>
-          <div class="form-hint">Neemt instellingen en extra's over. Spelers en persoonlijke locaties worden niet opgeslagen in templates.</div>
         </div>
         {% endif %}
 
-        <div class="form-group">
-          <label class="form-label">Jouw Rol</label>
-          <div class="grid g2" style="margin-top:6px">
-            <label><input type="radio" name="role" value="hunter" style="display:none" onchange="selRole(this)" checked>
-              <div class="role-pick selected-hunter" id="rh" onclick="selectRole('hunter', event)">
-                <div class="role-icon"><i class="fas fa-crosshairs" style="color:var(--hunter)"></i></div>
-                <div class="role-name" style="color:var(--hunter)">Hunter</div>
-                <div style="font-size:13px;color:var(--text2)">Jij jaagt op de runners</div>
-              </div></label>
-            <label><input type="radio" name="role" value="runner" style="display:none" onchange="selRole(this)">
-              <div class="role-pick" id="rr" onclick="selectRole('runner', event)">
-                <div class="role-icon"><i class="fas fa-person-running" style="color:var(--runner)"></i></div>
-                <div class="role-name" style="color:var(--runner)">Runner</div>
-                <div style="font-size:13px;color:var(--text2)">Jij ontsnapt aan de hunters</div>
-              </div></label>
-          </div>
-        </div>
-
-        <div class="grid g2">
-          <div class="form-group">
-            <label class="form-label">Spelduur</label>
+        <div class="two">
+          <div class="fld">
+            <label>Speelduur</label>
             <select name="duration" id="durationSel" class="form-control" onchange="checkCustom('durationSel','durationCustom'); adjustHeadstartForDuration()">
-              <option value="30">30 min</option><option value="45">45 min</option>
-              <option value="60">1 uur</option>
-              <option value="90">1,5 uur</option><option value="120" selected>2 uur</option>
-              <option value="180">3 uur</option><option value="240">4 uur</option>
-              <option value="300">5 uur</option>
-              <option value="custom">Aangepast...</option>
+              <option value="30">30 min</option><option value="45">45 min</option><option value="60">1 uur</option>
+              <option value="90">1,5 uur</option><option value="120" selected>2 uur</option><option value="180">3 uur</option>
+              <option value="240">4 uur</option><option value="300">5 uur</option><option value="custom">Aangepast...</option>
             </select>
-            <div class="custom-input-row" id="durationCustom">
-              <input name="duration_custom" type="number" class="form-control" placeholder="Minuten" min="5" max="300" value="120">
-            </div>
+            <div class="custom-input-row" id="durationCustom"><input name="duration_custom" type="number" class="form-control" placeholder="Minuten" min="5" max="300" value="120"></div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Voorsprong Runners
-              <button type="button" class="info-btn" onclick="showTooltip('Voorsprong Runners','Hoe lang de runners een hoofd-start hebben <em>voordat</em> hunters hun locatie op de kaart zien. In die tijd zijn runners onzichtbaar.')"><i class="fas fa-circle-info"></i></button>
-            </label>
+          <div class="fld">
+            <label>Voorsprong runners {{ ibtn('Voorsprong Runners', 'Hoe lang de runners een voorsprong hebben voordat hunters hun locatie op de kaart zien. In die tijd zijn runners onzichtbaar.') }}</label>
             <select name="headstart" id="headstartSel" class="form-control" onchange="checkCustom('headstartSel','headstartCustom')">
-              <option value="0">Geen</option><option value="3">3 min</option>
-              <option value="5" selected>5 min</option><option value="10">10 min</option>
-              <option value="15">15 min</option><option value="20">20 min</option>
-              <option value="30">30 min</option>
-              <option value="custom">Aangepast...</option>
+              <option value="0">Geen</option><option value="3">3 min</option><option value="5" selected>5 min</option>
+              <option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option>
+              <option value="30">30 min</option><option value="custom">Aangepast...</option>
             </select>
-            <div class="custom-input-row" id="headstartCustom">
-              <input name="headstart_custom" type="number" class="form-control" placeholder="Minuten" min="0" max="30" value="5">
-            </div>
+            <div class="custom-input-row" id="headstartCustom"><input name="headstart_custom" type="number" class="form-control" placeholder="Minuten" min="0" max="30" value="5"></div>
           </div>
         </div>
+      </div>
 
-        <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(2)">
-          Volgende <i class="fas fa-arrow-right"></i>
-        </button>
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-user"></i></div><div class="panel-t">Jouw rol</div></div>
+        <p class="panel-sub">Je kunt in de lobby nog wisselen.</p>
+        <div class="picks">
+          <label class="pick sel" id="rh" style="--c:var(--hunter)" onclick="selectRole('hunter', event)">
+            <input type="radio" name="role" value="hunter" style="display:none" checked>
+            {% if img('img_role_hunter') %}<div class="bg" style="background-image:url('{{ img('img_role_hunter') }}')"></div>{% else %}<div class="ph"><i class="fas fa-crosshairs"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t">Hunter</div><div class="pick-d">Jij jaagt op de runners</div></div>
+          </label>
+          <label class="pick" id="rr" style="--c:var(--runner)" onclick="selectRole('runner', event)">
+            <input type="radio" name="role" value="runner" style="display:none">
+            {% if img('img_role_runner') %}<div class="bg" style="background-image:url('{{ img('img_role_runner') }}')"></div>{% else %}<div class="ph"><i class="fas fa-person-running"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t">Runner</div><div class="pick-d">Jij ontsnapt aan de hunters</div></div>
+          </label>
+        </div>
       </div>
     </div>
 
-    <!-- Step 2: Difficulty -->
+    <!-- ===================== 2. MOEILIJKHEID ===================== -->
     <div class="step" id="step2">
-      <div class="card">
-        <div class="card-title"><i class="fas fa-sliders"></i> Moeilijkheidsgraad</div>
-        <p style="font-size:14px;color:var(--text2);margin-bottom:20px">Kies een preset vanuit Hunter-oogpunt. Moeilijker voor hunters geeft runners meer punten.</p>
-
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--warn)"><i class="fas fa-gauge-high"></i></div><div class="panel-t">Moeilijkheid {{ ibtn('Moeilijkheid en punten', 'Kies hoe moeilijk het spel is voor de hunters. Is het makkelijker voor de hunters, dan krijgen zij minder punten en de runners meer (want die hebben het zwaarder). Is het moeilijker voor de hunters, dan krijgen zij meer punten en de runners minder.') }}</div></div>
+        <p class="panel-sub">Kies een preset. Wat het makkelijker maakt voor de ene kant, levert de andere kant meer punten op.</p>
         <input type="hidden" name="difficulty" id="diffInput" value="medium">
-        <div class="grid g2" style="margin-bottom:24px;gap:12px">
-          <div class="diff-card" id="dc-easy" onclick="selDiff('easy')">
-            <span class="diff-multi" style="background:rgba(16,185,129,.1);color:var(--runner)">x1.0</span>
-            {% if diff_easy_img %}<img class="diff-img" src="/backgrounds/{{ diff_easy_img }}" alt="Makkelijk">{% else %}<div class="diff-icon"><i class="fas fa-seedling" style="color:var(--runner)"></i></div>{% endif %}
-            <div class="diff-name">Makkelijk</div>
-            <div class="diff-desc">Makkelijk voor hunters: geen offline knop, snellere runner updates.</div>
+        <div class="picks">
+          <div class="pick" id="dc-easy" style="--c:var(--runner)" onclick="selDiff('easy')">
+            {% if img('diff_easy_img') %}<div class="bg" style="background-image:url('{{ img('diff_easy_img') }}')"></div>{% else %}<div class="ph"><i class="fas fa-seedling"></i></div>{% endif %}
+            <div class="pick-tag">Hunters ×1.0 · Runners ×1.5</div><div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t">Makkelijk</div><div class="pick-d">Makkelijk voor hunters: geen offline knop, snelle updates.</div></div>
           </div>
-          <div class="diff-card" id="dc-medium" onclick="selDiff('medium')">
-            <span class="diff-multi" style="background:rgba(245,158,11,.1);color:var(--warn)">x1.25</span>
-            {% if diff_medium_img %}<img class="diff-img" src="/backgrounds/{{ diff_medium_img }}" alt="Gemiddeld">{% else %}<div class="diff-icon"><i class="fas fa-scale-balanced" style="color:var(--warn)"></i></div>{% endif %}
-            <div class="diff-name">Gemiddeld</div>
-            <div class="diff-desc">Balans tussen hunters en runners. Aanbevolen preset.</div>
+          <div class="pick" id="dc-medium" style="--c:var(--warn)" onclick="selDiff('medium')">
+            {% if img('diff_medium_img') %}<div class="bg" style="background-image:url('{{ img('diff_medium_img') }}')"></div>{% else %}<div class="ph"><i class="fas fa-scale-balanced"></i></div>{% endif %}
+            <div class="pick-tag">Beide ×1.25</div><div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t">Gemiddeld</div><div class="pick-d">Balans tussen hunters en runners. Aanbevolen.</div></div>
           </div>
-          <div class="diff-card" id="dc-hard" onclick="selDiff('hard')">
-            <span class="diff-multi" style="background:rgba(239,68,68,.1);color:var(--danger)">x1.5</span>
-            {% if diff_hard_img %}<img class="diff-img" src="/backgrounds/{{ diff_hard_img }}" alt="Moeilijk">{% else %}<div class="diff-icon"><i class="fas fa-fire" style="color:var(--danger)"></i></div>{% endif %}
-            <div class="diff-name">Moeilijk</div>
-            <div class="diff-desc">Moeilijk voor hunters: geen target, runners krijgen meer hulp.</div>
+          <div class="pick" id="dc-hard" style="--c:var(--danger)" onclick="selDiff('hard')">
+            {% if img('diff_hard_img') %}<div class="bg" style="background-image:url('{{ img('diff_hard_img') }}')"></div>{% else %}<div class="ph"><i class="fas fa-fire"></i></div>{% endif %}
+            <div class="pick-tag">Hunters ×1.5 · Runners ×1.0</div><div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t">Moeilijk</div><div class="pick-d">Moeilijk voor hunters: geen target, runners krijgen meer hulp.</div></div>
           </div>
-          <div class="diff-card" id="dc-custom" onclick="selDiff('custom')">
-            <span class="diff-multi" style="background:rgba(59,130,246,.1);color:var(--hunter)">x1.25</span>
-            {% if diff_custom_img %}<img class="diff-img" src="/backgrounds/{{ diff_custom_img }}" alt="Custom">{% else %}<div class="diff-icon"><i class="fas fa-wand-magic-sparkles" style="color:var(--hunter)"></i></div>{% endif %}
-            <div class="diff-name">Custom</div>
-            <div class="diff-desc">Stel alles zelf in. Multiplier wordt automatisch berekend.</div>
+          <div class="pick" id="dc-custom" style="--c:var(--hunter)" onclick="selDiff('custom')">
+            {% if img('diff_custom_img') %}<div class="bg" style="background-image:url('{{ img('diff_custom_img') }}')"></div>{% else %}<div class="ph"><i class="fas fa-wand-magic-sparkles"></i></div>{% endif %}
+            <div class="pick-tag">Punten automatisch</div><div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t">Custom</div><div class="pick-d">Stel alles zelf in. De punten worden eerlijk berekend.</div></div>
           </div>
         </div>
+      </div>
 
-        <!-- Multiplier preview -->
-        <div style="display:flex;align-items:center;gap:14px;padding:16px;background:var(--bg3);border-radius:var(--r);margin-bottom:20px">
-          <div class="multi-badge" id="multiDisp" style="color:var(--accent)">x1.0</div>
-          <div>
-            <div style="font-weight:600;margin-bottom:3px">Puntenmultiplier</div>
-            <div id="multiDesc" style="font-size:13px;color:var(--text2)">Runners ontvangen x1.0 punten voor elke meter</div>
-          </div>
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--warn)"><i class="fas fa-star"></i></div><div class="panel-t">Punten in dit spel</div></div>
+        <div class="pts">
+          <div class="pts-c h"><small><i class="fas fa-crosshairs"></i> Hunters</small><b id="multiH">x1.25</b></div>
+          <div class="pts-c r"><small><i class="fas fa-person-running"></i> Runners</small><b id="multiR">x1.25</b></div>
         </div>
-
-        <div style="display:flex;gap:10px">
-          <button type="button" class="btn btn-ghost" onclick="goStep(1)"><i class="fas fa-arrow-left"></i> Terug</button>
-          <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(3)">Volgende <i class="fas fa-arrow-right"></i></button>
-        </div>
+        <div class="pts-note" id="multiDesc">Punten per meter en per tik worden hiermee vermenigvuldigd.</div>
       </div>
     </div>
 
-    <!-- Step 3: Settings (Hunter + Runner) -->
+    <!-- ===================== 3. INSTELLINGEN + SPEELVELD ===================== -->
     <div class="step" id="step3">
-      <!-- Hunter settings -->
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title" style="color:var(--hunter)"><i class="fas fa-crosshairs"></i> Hunter Instellingen</div>
+      <div class="pts" style="margin-bottom:14px">
+        <div class="pts-c h"><small><i class="fas fa-crosshairs"></i> Hunters</small><b id="multiH2">x1.25</b></div>
+        <div class="pts-c r"><small><i class="fas fa-person-running"></i> Runners</small><b id="multiR2">x1.25</b></div>
+      </div>
 
-        <div class="form-group">
-          <label class="form-label">Locatie Update Interval
-            <button type="button" class="info-btn" onclick="showTooltip('Locatie Update Interval','Hoe vaak hunters een nieuwe locatie van runners op de kaart krijgen. De laatste locatie blijft zichtbaar totdat de volgende binnenkomt.<br><br>Voorbeeld: bij 20 minuten zie je de locatie van 20 minuten geleden totdat er een nieuwe update is. Dit maakt het spannender bij langere intervallen.')"><i class="fas fa-circle-info"></i></button>
-          </label>
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-crosshairs"></i></div><div class="panel-t">Hunter-regels</div></div>
+        <p class="panel-sub">Wat de hunters mogen en zien.</p>
+
+        <div class="fld">
+          <label>Locatie-update voor hunters {{ ibtn('Locatie Update Interval', 'Hoe vaak hunters een nieuwe locatie van runners op de kaart krijgen. De laatste locatie blijft zichtbaar totdat de volgende binnenkomt. Bij 20 minuten zie je dus de plek van 20 minuten geleden. Langere intervallen zijn spannender en geven hunters meer punten.') }}</label>
           <select name="hunter_interval" id="hunterIvSel" class="form-control" onchange="checkCustom('hunterIvSel','hunterIvCustom');calcMulti()">
-            <option value="180">3 minuten</option>
-            <option value="300">5 minuten</option>
-            <option value="420">7 minuten</option>
-            <option value="600" selected>10 minuten</option>
-            <option value="900">15 minuten</option>
-            <option value="1200">20 minuten</option>
+            <option value="180">Elke 3 minuten</option><option value="300">Elke 5 minuten</option><option value="420">Elke 7 minuten</option>
+            <option value="600" selected>Elke 10 minuten</option><option value="900">Elke 15 minuten</option><option value="1200">Elke 20 minuten</option>
             <option value="custom">Zelf invullen...</option>
           </select>
-          <div class="custom-input-row" id="hunterIvCustom">
-            <input name="hunter_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 1800 = 30 min)" min="60" max="7200" oninput="calcMulti()">
-          </div>
+          <div class="custom-input-row" id="hunterIvCustom"><input name="hunter_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 1800 = 30 min)" min="60" max="7200" oninput="calcMulti()"></div>
         </div>
 
-        <div style="margin-bottom:14px;font-family:var(--hfont);font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px">
-          <i class="fas fa-bullseye" style="color:var(--warn)"></i> Target Systeem
-          <button type="button" class="info-btn" onclick="showTooltip('Target Systeem','Een hunter kan een runner targeten. De runner ziet dit als waarschuwing op zijn scherm (hunter in de buurt!). Zowel de hunter als de runner krijgt dubbele punten zolang het target actief is.<br><br>Na de ingestelde duur vervalt het target en begint een cooldown voor de hunter.')"><i class="fas fa-circle-info"></i></button>
-        </div>
-        <div class="toggle-row">
-          <div class="toggle-left">
-            <div><div class="toggle-label">Target Systeem</div><div class="toggle-sub">Hunter kan runner aanwijzen voor dubbele punten</div></div>
+        <div class="set">
+          <div class="set-ic" style="color:var(--warn)"><i class="fas fa-bullseye"></i></div>
+          <div class="set-tx">
+            <div class="set-t">Target-systeem {{ ibtn('Target Systeem', 'Een hunter kan een runner aanwijzen. De runner krijgt een waarschuwing en beide spelers krijgen dubbele punten zolang het target actief is. Daarna volgt een cooldown voor de hunter.') }}</div>
+            <div class="set-s">Hunter wijst een runner aan voor dubbele punten</div>
+            <div class="fx"><span class="h">Hunters −0.05</span><span class="r">Runners +0.05</span></div>
           </div>
-          <label class="switch"><input type="checkbox" name="target_enabled" id="tgEn" checked onchange="tog('targetOpts',this)"><span class="slider"></span></label>
+          <label class="switch"><input type="checkbox" name="target_enabled" id="tgEn" checked onchange="tog('targetOpts',this);calcMulti()"><span class="slider"></span></label>
         </div>
-        <div id="targetOpts" style="margin-top:12px">
-          <div class="grid g2">
-            <div class="form-group">
-              <label class="form-label">Target Duur</label>
-              <select name="target_duration" class="form-control">
-                <option value="120">2 min</option><option value="300" selected>5 min</option>
-                <option value="600">10 min</option><option value="900">15 min</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Cooldown na gebruik</label>
-              <select name="target_cooldown" class="form-control">
-                <option value="300">5 min</option><option value="600" selected>10 min</option>
-                <option value="900">15 min</option><option value="1800">30 min</option>
-              </select>
-            </div>
+        <div id="targetOpts" class="sub-opts">
+          <div class="two">
+            <div class="fld"><label>Target-duur</label>
+              <select name="target_duration" class="form-control"><option value="120">2 min</option><option value="300" selected>5 min</option><option value="600">10 min</option><option value="900">15 min</option></select></div>
+            <div class="fld"><label>Cooldown daarna</label>
+              <select name="target_cooldown" class="form-control"><option value="300">5 min</option><option value="600" selected>10 min</option><option value="900">15 min</option><option value="1800">30 min</option></select></div>
           </div>
         </div>
       </div>
 
-      <!-- Runner settings -->
-      <div class="card" id="customSettings">
-        <div class="card-title" style="color:var(--runner)"><i class="fas fa-person-running"></i> Runner Instellingen</div>
+      <div class="panel" id="customSettings">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--runner)"><i class="fas fa-person-running"></i></div><div class="panel-t">Runner-regels</div></div>
+        <p class="panel-sub">Wat de runners mogen en zien. Hulpmiddelen voor runners maken het makkelijker voor hen, dus ze leveren minder punten op.</p>
 
-        <div class="form-group">
-          <label class="form-label">Afstand Update Interval
-            <button type="button" class="info-btn" onclick="showTooltip('Afstand Update Interval','Hoe vaak runners de afstand tot de dichtstbijzijnde hunter te zien krijgen op hun scherm.<br><br>Kies <em>Uitgeschakeld</em> om het moeilijker te maken: runners weten dan niet hoe ver de hunter is (tenzij Live Afstand aanstaat).')"><i class="fas fa-circle-info"></i></button>
-          </label>
-          <select name="runner_interval" id="runnerIvSel" class="form-control" onchange="checkCustom('runnerIvSel','runnerIvCustom');checkRunnerDist();calcMulti()">
-            <option value="off">Uitgeschakeld (+0.05 punten)</option>
-            <option value="180">3 minuten</option>
-            <option value="300">5 minuten</option>
-            <option value="420">7 minuten</option>
-            <option value="600" selected>10 minuten</option>
-            <option value="900">15 minuten</option>
-            <option value="1200">20 minuten</option>
-            <option value="custom">Zelf invullen...</option>
+        <div class="fld">
+          <label>Afstand tot hunter bijwerken {{ ibtn('Afstand Update Interval', 'Hoe vaak runners de afstand tot de dichtstbijzijnde hunter te zien krijgen. Kies Uitgeschakeld om het moeilijker te maken: runners weten dan niet hoe ver de hunter is (tenzij Live afstand aanstaat).') }}</label>
+          <select name="runner_interval" id="runnerIvSel" class="form-control" onchange="checkCustom('runnerIvSel','runnerIvCustom');calcMulti()">
+            <option value="off">Uitgeschakeld</option><option value="180">Elke 3 minuten</option><option value="300">Elke 5 minuten</option>
+            <option value="420">Elke 7 minuten</option><option value="600" selected>Elke 10 minuten</option><option value="900">Elke 15 minuten</option>
+            <option value="1200">Elke 20 minuten</option><option value="custom">Zelf invullen...</option>
           </select>
-          <div class="custom-input-row" id="runnerIvCustom">
-            <input name="runner_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 900 = 15 min)" min="60" max="7200">
-          </div>
+          <div class="custom-input-row" id="runnerIvCustom"><input name="runner_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 900 = 15 min)" min="60" max="7200"></div>
         </div>
 
-        <div class="toggle-row">
-          <div class="toggle-left">
-            <div><div class="toggle-label">Afstand Tonen
-              <button type="button" class="info-btn" onclick="showTooltip('Afstand Tonen','Als dit uit staat zien runners de afstand NIET, ook al is het interval ingesteld. Handig om het moeilijker te maken.')"><i class="fas fa-circle-info"></i></button>
-            </div><div class="toggle-sub">Runners zien de afstand tot dichtstbijzijnde hunter (-0.05 punten)</div></div>
-          </div>
+        <div class="set">
+          <div class="set-ic"><i class="fas fa-ruler"></i></div>
+          <div class="set-tx"><div class="set-t">Afstand tonen {{ ibtn('Afstand Tonen', 'Als dit uit staat zien runners de afstand NIET, ook al is het interval ingesteld. Handig om het moeilijker te maken.') }}</div>
+            <div class="set-s">Runners zien de afstand tot de dichtstbijzijnde hunter</div>
+            <div class="fx"><span class="h">Hunters +0.05</span><span class="r">Runners −0.05</span></div></div>
           <label class="switch"><input type="checkbox" name="show_distance" id="showDist" onchange="calcMulti()"><span class="slider"></span></label>
         </div>
-
-        <div class="toggle-row">
-          <div class="toggle-left">
-            <div><div class="toggle-label">Live Afstand
-              <button type="button" class="info-btn" onclick="showTooltip('Live Afstand','Als aan: runners zien de afstand <em>continu</em> bijwerken, ongeacht het interval. Dit maakt het aanzienlijk makkelijker voor runners.')"><i class="fas fa-circle-info"></i></button>
-            </div><div class="toggle-sub">Continue afstandsweergave i.p.v. op interval (-0.05 punten)</div></div>
-          </div>
+        <div class="set">
+          <div class="set-ic"><i class="fas fa-tower-broadcast"></i></div>
+          <div class="set-tx"><div class="set-t">Live afstand {{ ibtn('Live Afstand', 'Runners zien de afstand continu bijwerken, ongeacht het interval. Dit maakt het een stuk makkelijker voor runners.') }}</div>
+            <div class="set-s">Continu in plaats van op een interval</div>
+            <div class="fx"><span class="h">Hunters +0.05</span><span class="r">Runners −0.05</span></div></div>
           <label class="switch"><input type="checkbox" name="live_tracking" id="liveTrk" onchange="calcMulti()"><span class="slider"></span></label>
         </div>
-
-        <div style="margin-top:16px;margin-bottom:8px;font-family:var(--hfont);font-weight:700;display:flex;align-items:center;gap:8px">
-          <i class="fas fa-eye-slash" style="color:var(--runner)"></i> Offline Knop
-          <button type="button" class="info-btn" onclick="showTooltip('Offline Knop','Runners kunnen tijdelijk hun locatie verbergen van hunters. Na de maximale tijd worden ze automatisch weer zichtbaar. Team-modus: alle runners delen een offline-status.')"><i class="fas fa-circle-info"></i></button>
-        </div>
-        <div class="toggle-row">
-          <div class="toggle-left">
-            <div><div class="toggle-label">Offline Knop Inschakelen</div><div class="toggle-sub">Runners kunnen locatie verbergen (-0.05 punten)</div></div>
-          </div>
+        <div class="set">
+          <div class="set-ic" style="color:var(--runner)"><i class="fas fa-eye-slash"></i></div>
+          <div class="set-tx"><div class="set-t">Offline-knop {{ ibtn('Offline Knop', 'Runners kunnen tijdelijk hun locatie verbergen voor hunters. Na de maximale tijd zijn ze automatisch weer zichtbaar. Team-modus: alle runners delen één offline-status.') }}</div>
+            <div class="set-s">Runners kunnen hun locatie even verbergen</div>
+            <div class="fx"><span class="h">Hunters +0.05</span><span class="r">Runners −0.05</span></div></div>
           <label class="switch"><input type="checkbox" name="offline_button" id="offBtn" checked onchange="tog('offlineOpts',this);calcMulti()"><span class="slider"></span></label>
         </div>
-        <div id="offlineOpts" style="margin-top:12px">
-          <div class="grid g2">
-            <div class="form-group">
-              <label class="form-label">Max. Offline Tijd</label>
-              <select name="max_offline" class="form-control">
-                <option value="60">1 min</option><option value="120">2 min</option>
-                <option value="180">3 min</option><option value="300" selected>5 min</option><option value="600">10 min</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Offline Modus</label>
-              <select name="team_mode" class="form-control">
-                <option value="">Ieder voor zich</option>
-                <option value="on">Team - gedeeld</option>
-              </select>
-            </div>
+        <div id="offlineOpts" class="sub-opts">
+          <div class="two">
+            <div class="fld"><label>Maximale offline-tijd</label>
+              <select name="max_offline" class="form-control"><option value="60">1 min</option><option value="120">2 min</option><option value="180">3 min</option><option value="300" selected>5 min</option><option value="600">10 min</option></select></div>
+            <div class="fld"><label>Offline-modus</label>
+              <select name="team_mode" class="form-control"><option value="">Ieder voor zich</option><option value="on">Team - gedeeld</option></select></div>
           </div>
         </div>
-
-        <div class="toggle-row" style="margin-top:8px">
-          <div class="toggle-left">
-            <div><div class="toggle-label">Pauze Toestaan
-              <button type="button" class="info-btn" onclick="showTooltip('Pauze Toestaan','Runners kunnen pauzeren wanneer dat nodig is. De pauze is een aan/uit-stand en wordt hervat zodra iedereen weer op zijn plek staat.')"><i class="fas fa-circle-info"></i></button>
-            </div><div class="toggle-sub">Runners kunnen pauzeren en later weer doorgaan (-0.05 punten)</div></div>
-          </div>
+        <div class="set">
+          <div class="set-ic"><i class="fas fa-circle-pause"></i></div>
+          <div class="set-tx"><div class="set-t">Pauze toestaan {{ ibtn('Pauze Toestaan', 'Runners kunnen pauzeren wanneer dat nodig is. De pauze is een aan/uit-stand en gaat verder zodra iedereen weer op zijn plek staat.') }}</div>
+            <div class="set-s">Runners kunnen pauzeren en later weer doorgaan</div>
+            <div class="fx"><span class="h">Hunters +0.05</span><span class="r">Runners −0.05</span></div></div>
           <label class="switch"><input type="checkbox" name="pause_allowed" id="pauseAllw" onchange="tog('pauseOpts',this);calcMulti()"><span class="slider"></span></label>
         </div>
-        <div class="form-hint" id="pauseOpts" style="margin-top:12px">Pauze staat aan of uit. Er is geen max pauzetijd meer in de interface.</div>
-
-        <!-- Live multiplier -->
-        <div style="margin-top:16px;padding:14px;background:var(--bg3);border-radius:var(--r);display:flex;align-items:center;gap:14px" id="multiRow">
-          <div class="multi-badge" id="multiDispSmall" style="color:var(--accent);font-size:20px">x1.0</div>
-          <div style="font-size:13px;color:var(--text2)" id="multiExplain">Puntenmultiplier op basis van instellingen</div>
-        </div>
-
-        <div style="display:flex;gap:10px;margin-top:20px">
-          <button type="button" class="btn btn-ghost" onclick="goStep(2)"><i class="fas fa-arrow-left"></i> Terug</button>
-          <span class="btn btn-ghost btn-full" style="pointer-events:none;justify-content:center">Ga hieronder verder met speelveld en extra's</span>
-        </div>
+        <div id="pauseOpts" style="display:none"></div>
       </div>
 
-      <div class="card" style="margin-top:16px;border-color:rgba(245,158,11,.35)">
-        <div class="card-title" style="color:var(--warn)"><i class="fas fa-draw-polygon"></i> Speelveld Instellen</div>
-        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px">Klik punten op de kaart om het speelveld te tekenen. Vanaf 3 punten sluit VenTrax de lijn vanzelf. Dit speelveld wordt bij het spel opgeslagen en tijdens het spel op de kaart getoond.</p>
+            <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--warn)"><i class="fas fa-draw-polygon"></i></div><div class="panel-t">Speelveld</div></div>
+        <p class="panel-sub">Klik punten op de kaart om het speelveld te tekenen. Vanaf 3 punten sluit VenTrax de lijn vanzelf. Dit speelveld wordt bij het spel opgeslagen en tijdens het spel op de kaart getoond.</p>
         <input type="hidden" name="playfield_json" id="playfieldJson">
-        <div class="form-group">
-          <label class="form-label">Naam speelveld</label>
+        <div class="fld">
+          <label>Naam speelveld</label>
           <input name="playfield_name" id="playfieldNameInput" class="form-control" placeholder="Bijv. Parkroute Noord">
           <div class="form-hint">Gebruik een veilige eigen naam. Met de knop hieronder bewaar je dit speelveld in je profiel.</div>
         </div>
@@ -404,143 +378,116 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:16px;border-color:rgba(59,130,246,.25)">
-        <div class="card-title"><i class="fas fa-box-open"></i> Extra's</div>
-        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:14px">Kies welke extra's in dit spel gebruikt mogen worden. De instellingen worden alvast bij het spel bewaard; de volledige in-game werking wordt per extra verder opgebouwd.</p>
-        <div class="extra-grid">
-          <label class="extra-choice"><input type="checkbox" name="extra_dropboxes" onchange="tog('dropboxOpts',this)"> Dropboxes</label>
-          <label class="extra-choice"><input type="checkbox" name="extra_landmine"> Landmijn</label>
-          <label class="extra-choice"><input type="checkbox" name="extra_laser"> Laser detectie</label>
-          <label class="extra-choice"><input type="checkbox" name="extra_tripwire"> Tripwire</label>
-          <label class="extra-choice"><input type="checkbox" name="feat_hacker"> Hacker</label>
-          <label class="extra-choice"><input type="checkbox" name="feat_glitch"> Glitch</label>
-          <label class="extra-choice"><input type="checkbox" name="extra_echo"> Echo</label>
-        </div>
-        <div id="dropboxOpts" style="display:none">
-        <div class="grid g2">
-          <div class="form-group">
-            <label class="form-label">Dropboxes tegelijk per team</label>
-            <select name="dropboxes_per_team" class="form-control"><option value="1">1</option><option value="2" selected>2 standaard</option><option value="3">3</option><option value="4">4</option><option value="5">5 max</option></select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Dropboxes voor iedereen</label>
-            <select name="dropboxes_global" class="form-control"><option value="0">Geen</option><option value="1" selected>1 standaard</option><option value="2">2</option><option value="3">3 max</option></select>
-          </div>
-        </div>
-        <div class="grid g2">
-          <div class="form-group">
-            <label class="form-label">Wachten voor openen</label>
-            <select name="dropbox_wait_enabled" class="form-control" onchange="tog('dropboxWaitRow',this)"><option value="">Nee</option><option value="on">Ja</option></select>
-          </div>
-          <div class="form-group" id="dropboxWaitRow" style="display:none">
-            <label class="form-label">Wachttijd seconden</label>
-            <input name="dropbox_wait_sec" type="number" min="5" max="120" value="20" class="form-control">
-          </div>
-        </div>
-        <div class="grid g2">
-          <div class="form-group">
-            <label class="form-label">Min. afstand bij geen speelveld</label>
-            <input name="dropbox_min_m" type="number" min="50" max="5000" value="500" class="form-control">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Max. afstand bij geen speelveld</label>
-            <input name="dropbox_max_m" type="number" min="100" max="10000" value="1500" class="form-control">
-          </div>
-        </div>
-        <div class="form-hint">Met speelveld worden dropboxes binnen het speelveld geplaatst. Zonder speelveld gebruikt VenTrax deze afstand rond spelers of het gebied.</div>
-        </div>
-      </div>
 
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button type="button" class="btn btn-ghost" onclick="goStep(2)"><i class="fas fa-arrow-left"></i> Terug</button>
-        <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(4)">Extra scherm <i class="fas fa-arrow-right"></i></button>
+
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-box-open"></i></div><div class="panel-t">Extra's {{ ibtn("Extra's", 'Kies welke extra\'s in dit spel meedoen. Een spelstijl in de volgende stap zet er alvast een paar klaar.') }}</div></div>
+        <p class="panel-sub">Tik om aan of uit te zetten.</p>
+        <div class="tiles">
+          {{ tile('extra_dropboxes', 'img_extra_dropboxes', 'Dropboxes', 'fa-box-open', 'onchange="tog(\'dropboxOpts\',this)"') }}
+          {{ tile('extra_landmine', 'img_extra_landmine', 'Landmijn', 'fa-bomb') }}
+          {{ tile('extra_laser', 'img_extra_laser', 'Laser detectie', 'fa-satellite-dish') }}
+          {{ tile('extra_tripwire', 'img_extra_tripwire', 'Tripwire', 'fa-grip-lines') }}
+          {{ tile('feat_hacker', 'img_extra_hacker', 'Hacker', 'fa-user-secret') }}
+          {{ tile('feat_glitch', 'img_extra_glitch', 'Glitch', 'fa-bolt') }}
+          {{ tile('extra_echo', 'img_extra_echo', 'Echo', 'fa-wave-square') }}
+        </div>
+        <div id="dropboxOpts" style="display:none;margin-top:18px">
+          <div class="grp-h"><i class="fas fa-box-open" style="color:var(--accent)"></i> Dropbox-instellingen</div>
+          <div class="two" style="margin-top:12px">
+            <div class="fld"><label>Per team tegelijk</label><select name="dropboxes_per_team" class="form-control"><option value="1">1</option><option value="2" selected>2 (standaard)</option><option value="3">3</option><option value="4">4</option><option value="5">5 (max)</option></select></div>
+            <div class="fld"><label>Voor iedereen</label><select name="dropboxes_global" class="form-control"><option value="0">Geen</option><option value="1" selected>1 (standaard)</option><option value="2">2</option><option value="3">3 (max)</option></select></div>
+            <div class="fld"><label>Wachten voor openen</label><select name="dropbox_wait_enabled" class="form-control" onchange="tog('dropboxWaitRow',this)"><option value="">Nee</option><option value="on">Ja</option></select></div>
+            <div class="fld" id="dropboxWaitRow" style="display:none"><label>Wachttijd (seconden)</label><input name="dropbox_wait_sec" type="number" min="5" max="120" value="20" class="form-control"></div>
+            <div class="fld"><label>Min. afstand (zonder speelveld)</label><input name="dropbox_min_m" type="number" min="50" max="5000" value="500" class="form-control"></div>
+            <div class="fld"><label>Max. afstand (zonder speelveld)</label><input name="dropbox_max_m" type="number" min="100" max="10000" value="1500" class="form-control"></div>
+          </div>
+          <div class="pts-note">Met een speelveld vallen de dropboxes binnen het veld. Zonder speelveld gelden de afstanden rond de spelers.</div>
+        </div>
       </div>
     </div>
 
-    <!-- Step 4: Extra -->
+    <!-- ===================== 4. STIJL & SFEER ===================== -->
     <div class="step" id="step4">
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title"><i class="fas fa-layer-group"></i> Spelstijl</div>
-        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Kies een stijl. Dit zet alvast extra's klaar; je kunt terug naar instellingen om zelf bij te sturen.</p>
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic"><i class="fas fa-layer-group"></i></div><div class="panel-t">Spelstijl {{ ibtn('Spelstijl', 'Een spelstijl zet in één keer een set extra\'s klaar. Je kunt daarna in stap 3 nog zelf bijsturen.') }}</div></div>
+        <p class="panel-sub">Kies de sfeer van het spel. Dit zet alvast extra's klaar.</p>
         <input type="hidden" name="game_style" id="gameStyleInput" value="classic">
-        <div class="style-grid">
-          <div class="style-card active" id="style-classic" onclick="selectGameStyle('classic')">
-            <div class="style-name"><i class="fas fa-eye-slash"></i> Classic</div>
-            <div class="style-desc">Rustige basis: alleen Offline knop. Goed voor jonge spelers of eerste test.</div>
-          </div>
-          <div class="style-card" id="style-adventure" onclick="selectGameStyle('adventure')">
-            <div class="style-name"><i class="fas fa-compass"></i> Adventure</div>
-            <div class="style-desc">Dropboxes, Echo en kleine verrassingen. Avontuur zonder chaos.</div>
-          </div>
-          <div class="style-card" id="style-battlefield" onclick="selectGameStyle('battlefield')">
-            <div class="style-name"><i class="fas fa-burst"></i> Battlefield</div>
-            <div class="style-desc">Alles aan: dropboxes, landmijnen, laser, tripwire, hacker, glitch en echo.</div>
-          </div>
-          <div class="style-card" id="style-stealth" onclick="selectGameStyle('stealth')">
-            <div class="style-name"><i class="fas fa-user-secret"></i> Shadow Ops</div>
-            <div class="style-desc">Sluipen, hacken, echo's en glitches. Minder vallen, meer slim spelen.</div>
-          </div>
+        <div class="picks">
+          <div class="pick sel" id="style-classic" onclick="selectGameStyle('classic')">
+            {% if img('img_style_classic') %}<div class="bg" style="background-image:url('{{ img('img_style_classic') }}')"></div>{% else %}<div class="ph"><i class="fas fa-eye-slash"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Classic</div><div class="pick-d">Rustige basis: alleen de offline-knop. Goed voor een eerste test.</div></div></div>
+          <div class="pick" id="style-adventure" onclick="selectGameStyle('adventure')">
+            {% if img('img_style_adventure') %}<div class="bg" style="background-image:url('{{ img('img_style_adventure') }}')"></div>{% else %}<div class="ph"><i class="fas fa-compass"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Adventure</div><div class="pick-d">Dropboxes, Echo en kleine verrassingen.</div></div></div>
+          <div class="pick" id="style-battlefield" onclick="selectGameStyle('battlefield')">
+            {% if img('img_style_battlefield') %}<div class="bg" style="background-image:url('{{ img('img_style_battlefield') }}')"></div>{% else %}<div class="ph"><i class="fas fa-burst"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Battlefield</div><div class="pick-d">Alles aan: dropboxes, landmijnen, laser, tripwire, hacker, glitch en echo.</div></div></div>
+          <div class="pick" id="style-stealth" onclick="selectGameStyle('stealth')">
+            {% if img('img_style_stealth') %}<div class="bg" style="background-image:url('{{ img('img_style_stealth') }}')"></div>{% else %}<div class="ph"><i class="fas fa-user-secret"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Shadow Ops</div><div class="pick-d">Sluipen, hacken, echo's en glitches.</div></div></div>
         </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title"><i class="fas fa-volume-high"></i> Geluid &amp; sfeer</div>
-        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Kies een thema met eigen geluidjes en uiterlijk, bijvoorbeeld een enge Halloween-sfeer. De beheerder kan thema's aanpassen.</p>
-        <select name="sound_theme" class="form-control">
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-volume-high"></i></div><div class="panel-t">Geluid &amp; sfeer {{ ibtn('Geluid & sfeer', 'Een thema bepaalt de geluidjes (start, hunter in de buurt, lootbox, ...) en het uiterlijk van het spel, bijvoorbeeld een enge Halloween-sfeer. De beheerder maakt en wijzigt thema\'s in het Admin Panel.') }}</div></div>
+        <p class="panel-sub">Kies het thema voor geluid en uiterlijk.</p>
+        <div class="picks three">
           {% for th in sound_themes %}
-          <option value="{{ th.id }}" {{ 'selected' if default_sound_theme and th.id == default_sound_theme.id }}>{{ th.name }}{{ ' (standaard)' if default_sound_theme and th.id == default_sound_theme.id }}</option>
+          <label class="pick small {{ 'sel' if default_sound_theme and th.id == default_sound_theme.id }}" style="--c:{{ th.accent or '#c4161c' }}" onclick="selTheme(this)">
+            <input type="radio" name="sound_theme" value="{{ th.id }}" style="display:none" {{ 'checked' if default_sound_theme and th.id == default_sound_theme.id }}>
+            <div class="ph" style="font-size:34px"><i class="fas {{ 'fa-ghost' if th.skin == 'halloween' else 'fa-music' }}"></i></div>
+            <div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t" style="font-size:15px">{{ th.name }}</div></div>
+          </label>
           {% endfor %}
-        </select>
-      </div>
-
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title"><i class="fas fa-id-badge"></i> Classes</div>
-        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Als classes aan staan krijgt iedere speler straks random een rol met een speciale kracht en cooldown. De keuze wordt nu opgeslagen; de volledige in-game knoppen en acties worden daarna verder uitgewerkt.</p>
-        <label class="extra-choice" style="margin-bottom:12px"><input type="checkbox" name="classes_enabled" id="classesEnabled"> Random classes inschakelen</label>
-        <div class="grid g2">
-          <div class="form-group">
-            <label class="form-label">Thema</label>
-            <select name="class_theme" class="form-control">
-              <option value="street">Street Ops</option>
-              <option value="space">Space Scouts</option>
-              <option value="forest">Boswachters</option>
-              <option value="spy">Spy Kids</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Cooldown speciale kracht</label>
-            <select name="class_cooldown_sec" class="form-control">
-              <option value="120">2 min</option>
-              <option value="180" selected>3 min</option>
-              <option value="300">5 min</option>
-              <option value="600">10 min</option>
-            </select>
-          </div>
         </div>
-        <div class="form-hint">Ideeen: Signal Scout gebruikt Echo, Codekraker hackt info, Bomexpert plaatst landmijnen, Laserwachter zet detectie, Spoorzoeker ziet richting, Glitcher verstoort een locatie.</div>
       </div>
 
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button type="button" class="btn btn-ghost" onclick="goStep(3)"><i class="fas fa-arrow-left"></i> Terug</button>
-        <button type="button" class="btn btn-primary btn-full btn-lg" onclick="goStep(5)">Samenvatting <i class="fas fa-arrow-right"></i></button>
+      <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--warn)"><i class="fas fa-id-badge"></i></div><div class="panel-t">Classes {{ ibtn('Classes', 'Als classes aan staan krijgt iedere speler willekeurig een rol met een speciale kracht en een cooldown, zoals Echo, Hack of een landmijn. Het gekozen thema bepaalt de sfeer van de namen.') }}</div></div>
+        <p class="panel-sub">Iedere speler krijgt een speciale kracht met cooldown.</p>
+        <div class="set" style="border-top:none;padding-top:0">
+          <div class="set-ic"><i class="fas fa-shuffle"></i></div>
+          <div class="set-tx"><div class="set-t">Random classes</div><div class="set-s">Elke speler krijgt een willekeurige class</div></div>
+          <label class="switch"><input type="checkbox" name="classes_enabled" id="classesEnabled"><span class="slider"></span></label>
+        </div>
+        <div class="fld-l" style="margin-top:6px">Class-thema</div>
+        <div class="picks three" style="margin-bottom:16px">
+          {% for k, name, icon in [('street','Street Ops','fa-city'),('space','Space Scouts','fa-user-astronaut'),('forest','Boswachters','fa-tree'),('spy','Spy Kids','fa-user-secret')] %}
+          <label class="pick small {{ 'sel' if loop.first }}" onclick="selClassTheme(this)">
+            <input type="radio" name="class_theme" value="{{ k }}" style="display:none" {{ 'checked' if loop.first }}>
+            {% if img('img_classtheme_' ~ k) %}<div class="bg" style="background-image:url('{{ img('img_classtheme_' ~ k) }}')"></div>{% else %}<div class="ph" style="font-size:34px"><i class="fas {{ icon }}"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div>
+            <div class="pick-body"><div class="pick-t" style="font-size:15px">{{ name }}</div></div>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="fld"><label>Cooldown speciale kracht</label>
+          <select name="class_cooldown_sec" class="form-control"><option value="120">2 min</option><option value="180" selected>3 min</option><option value="300">5 min</option><option value="600">10 min</option></select></div>
+        <details class="more"><summary><i class="fas fa-chevron-down"></i> Welke classes bestaan er?</summary>
+          <div class="cls-list">
+            {% for c in class_loadouts %}
+            <div class="cls"><div class="cls-img" {% if img('img_class_' ~ c.id) %}style="background-image:url('{{ img('img_class_' ~ c.id) }}')"{% endif %}>{% if not img('img_class_' ~ c.id) %}<i class="fas fa-id-badge"></i>{% endif %}</div>
+              <b>{{ c.name }}</b><span>{{ c.desc }}</span></div>
+            {% endfor %}
+          </div>
+        </details>
       </div>
     </div>
 
-    <!-- Step 5: Summary -->
+    <!-- ===================== 5. SAMENVATTING ===================== -->
     <div class="step" id="step5">
-      <div class="card">
-        <div class="card-title"><i class="fas fa-list-check"></i> Samenvatting - Controleer alles</div>
-        <div id="summaryContent" style="margin-bottom:24px"></div>
-        <div style="display:flex;gap:10px">
-          <button type="button" class="btn btn-ghost" onclick="goStep(4)"><i class="fas fa-arrow-left"></i> Aanpassen</button>
-          <button type="submit" class="btn btn-primary btn-full btn-lg" id="createBtn">
-            <i class="fas fa-play-circle"></i> Spel Aanmaken!
-          </button>
-        </div>
-      </div>
+      <div id="summaryContent"></div>
     </div>
   </form>
 </div>
+
+<div class="wz-bar"><div class="wz-bar-in">
+  <button type="button" class="btn btn-ghost" id="btnBack" onclick="goStep(currentStep-1)" style="display:none"><i class="fas fa-arrow-left"></i> Terug</button>
+  <button type="button" class="btn btn-primary btn-full" id="btnNext" onclick="nextStep()">Volgende <i class="fas fa-arrow-right"></i></button>
+  <button type="submit" form="gf" class="btn btn-primary btn-full" id="createBtn" style="display:none"><i class="fas fa-play-circle"></i> Spel aanmaken</button>
+</div></div>
 
 <script>
 let currentStep=1, currentDiff='medium', currentMulti=1.25;
@@ -551,25 +498,38 @@ function escHtml(v){
   return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
+const STEP_NAMES=['Basis','Moeilijkheid','Instellingen','Stijl & sfeer','Samenvatting'];
 function goStep(n){
+  if(n<1||n>5) return;
   document.getElementById('step'+currentStep).classList.remove('active');
   currentStep=n;
   document.getElementById('step'+n).classList.add('active');
-  // Update step indicators
-  for(let i=1;i<=5;i++){
-    const si=document.getElementById('si'+i);
-    si.className='step-item'+(i<=n?' done':'');
-  }
+  document.querySelectorAll('#prog i').forEach((b,i)=>b.classList.toggle('on',i<n));
+  document.getElementById('stepName').textContent=STEP_NAMES[n-1];
+  document.getElementById('stepOf').textContent='Stap '+n+' van 5';
+  document.getElementById('btnBack').style.display=n>1?'':'none';
+  document.getElementById('btnNext').style.display=n<5?'':'none';
+  document.getElementById('createBtn').style.display=n===5?'':'none';
   if(n===5) buildSummary();
   if(n===3) setTimeout(initPlayfieldMap, 80);
   window.scrollTo({top:0,behavior:'smooth'});
-  const cs=document.getElementById('customSettings');
-  if(cs) cs.style.opacity='1';
 }
+function nextStep(){
+  if(currentStep===1){
+    const nm=document.querySelector('[name=name]');
+    if(nm && !nm.value.trim()){ nm.focus(); showToast('Geef het spel eerst een naam.','warn'); return; }
+  }
+  goStep(currentStep+1);
+}
+function markPicks(name){
+  document.querySelectorAll(`input[name=${name}]`).forEach(r=>{const p=r.closest('.pick'); if(p) p.classList.toggle('sel', r.checked);});
+}
+function selTheme(el){const r=el.querySelector('input'); if(r){r.checked=true; markPicks('sound_theme');}}
+function selClassTheme(el){const r=el.querySelector('input'); if(r){r.checked=true; markPicks('class_theme');}}
 
 function selRole(inp){
-  document.getElementById('rh').className='role-pick'+(inp.value==='hunter'?' selected-hunter':'');
-  document.getElementById('rr').className='role-pick'+(inp.value==='runner'?' selected-runner':'');
+  document.getElementById('rh').classList.toggle('sel', inp.value==='hunter');
+  document.getElementById('rr').classList.toggle('sel', inp.value==='runner');
 }
 function selectRole(role, ev){
   if(ev) ev.preventDefault();
@@ -613,55 +573,54 @@ function applyPreset(d){
   tog('pauseOpts',document.getElementById('pauseAllw'));
   _settingBySelDiff = false;
 }
+const DIFF_MULTI={easy:[1.0,1.5],medium:[1.25,1.25],hard:[1.5,1.0]};
+function computeMulti(){
+  // Mirrors compute_multipliers() on the server: easier for hunters = hunters earn less, runners more.
+  const sel=document.getElementById('hunterIvSel')?.value;
+  const hi=sel==='custom'?parseInt(document.querySelector('[name=hunter_interval_custom]')?.value||600,10):parseInt(sel||600,10);
+  let h=1.25,r=1.25;
+  const easierH=s=>{h-=s;r+=s}, harderH=s=>{h+=s;r-=s};
+  if(document.getElementById('tgEn')?.checked) easierH(.05);
+  if(document.getElementById('runnerIvSel')?.value==='off') easierH(.05);
+  if(document.getElementById('offBtn')?.checked) harderH(.05);
+  if(document.getElementById('liveTrk')?.checked) harderH(.05);
+  if(document.getElementById('showDist')?.checked) harderH(.05);
+  if(document.getElementById('pauseAllw')?.checked) harderH(.05);
+  if(hi<=300) easierH(.05);
+  if(hi>=900) harderH(.05);
+  if(hi>=1200) harderH(.05);
+  const c=v=>Math.round(Math.max(.7,Math.min(2,v))*100)/100;
+  return [c(h),c(r)];
+}
+function showMulti(h,r,note){
+  currentMulti=r; window.currentHunterMulti=h;
+  ['multiH','multiH2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent='x'+h.toFixed(2)});
+  ['multiR','multiR2'].forEach(id=>{const el=document.getElementById(id); if(el) el.textContent='x'+r.toFixed(2)});
+  const d=document.getElementById('multiDesc'); if(d && note) d.textContent=note;
+}
 function selDiff(d){
   currentDiff=d;
   document.getElementById('diffInput').value=d;
-  ['easy','medium','hard','custom'].forEach(x=>{
-    document.getElementById('dc-'+x).className='diff-card'+(x===d?' sel-'+x:'');
-  });
-  const mults={easy:1.0,medium:1.25,hard:1.5,custom:1.25};
-  const descs={easy:'Makkelijkste modus - runners krijgen meer hulpmiddelen',medium:'Gebalanceerde modus - aanbevolen voor beginners',hard:'Uitdagende modus - hunters hebben groot voordeel',custom:'Multiplier automatisch berekend op basis van instellingen'};
-  const m=mults[d];
-  currentMulti=m||1.25;
+  ['easy','medium','hard','custom'].forEach(x=>document.getElementById('dc-'+x).classList.toggle('sel',x===d));
+  const notes={easy:'Makkelijk voor hunters: zij krijgen minder punten, de runners meer omdat ze het zwaarder hebben.',
+    medium:'Gebalanceerd: hunters en runners krijgen evenveel.',
+    hard:'Moeilijk voor hunters: zij krijgen meer punten, de runners minder omdat ze meer hulp hebben.',
+    custom:'Eigen regels: de punten volgen automatisch uit wat je instelt.'};
   applyPreset(d);
-  const disp=document.getElementById('multiDisp');
-  disp.textContent=m?`x${m.toFixed(2)}`:'xauto';
-  disp.style.color=d==='easy'?'var(--runner)':d==='hard'?'var(--danger)':d==='medium'?'var(--warn)':'var(--accent)';
-  document.getElementById('multiDesc').textContent=descs[d];
-  const small=document.getElementById('multiDispSmall');
-  if(small) small.textContent=m?`x${m.toFixed(2)}`:`x${currentMulti.toFixed(2)}`;
-  const explEl=document.getElementById('multiExplain');
-  if(explEl && m) explEl.textContent=`Runners ontvangen x${m.toFixed(2)} punten per meter`;
-  if(d==='custom') calcMulti();
+  if(DIFF_MULTI[d]) showMulti(DIFF_MULTI[d][0],DIFF_MULTI[d][1],notes[d]);
+  else { const [h,r]=computeMulti(); showMulti(h,r,notes.custom); }
 }
 
 function calcMulti(){
-  // If on a preset and user manually changes a setting, switch to custom
-  // But NOT when selDiff itself triggers this
+  // Changing a rule by hand turns a preset into a custom game
   if (currentDiff !== 'custom' && !_settingBySelDiff) {
-    _settingBySelDiff = false;  // ensure flag is reset
     currentDiff = 'custom';
     document.getElementById('diffInput').value = 'custom';
-    ['easy','medium','hard','custom'].forEach(x => {
-      document.getElementById('dc-'+x).className = 'diff-card' + (x==='custom' ? ' sel-custom' : '');
-    });
-    // Keep going so the multiplier is recalculated
+    ['easy','medium','hard','custom'].forEach(x => document.getElementById('dc-'+x).classList.toggle('sel', x==='custom'));
   }
-  let m=1.25;
-  if(!document.getElementById('tgEn')?.checked)      m+=0.05;
-  if(document.getElementById('offBtn')?.checked)   m-=0.05;
-  if(document.getElementById('liveTrk')?.checked)  m-=0.05;
-  if(document.getElementById('showDist')?.checked) m-=0.05;
-  if(document.getElementById('pauseAllw')?.checked)m-=0.05;
-  const sel=document.getElementById('hunterIvSel')?.value;
-  if(sel!=='custom'){const v=parseInt(sel||600);if(v>=900)m+=0.05;if(v>=1200)m+=0.05;}
-  const runnerOff=document.getElementById('runnerIvSel')?.value==='off';
-  if(runnerOff) m+=0.05;
-  m=Math.max(0.7,Math.min(2.0,Math.round(m*100)/100));
-  currentMulti=m;
-  [document.getElementById('multiDisp'),document.getElementById('multiDispSmall')].forEach(el=>{if(el)el.textContent=`x${m.toFixed(2)}`});
-  document.getElementById('multiDesc').textContent=`Custom - instellingen aangepast (x${m.toFixed(2)})`;document.getElementById('multiDisp').style.color='var(--accent)';
-  const explEl=document.getElementById('multiExplain');if(explEl)explEl.textContent=`Runners ontvangen x${m.toFixed(2)} punten per meter`;
+  if (_settingBySelDiff) return;
+  const [h,r]=computeMulti();
+  showMulti(h,r,'Eigen regels: de punten volgen automatisch uit wat je instelt.');
 }
 
 function tog(id,cb){
@@ -678,7 +637,7 @@ function selectGameStyle(style){
   document.getElementById('gameStyleInput').value=style;
   ['classic','adventure','battlefield','stealth'].forEach(s=>{
     const el=document.getElementById('style-'+s);
-    if(el) el.classList.toggle('active', s===style);
+    if(el) el.classList.toggle('sel', s===style);
   });
   const presets={
     classic:{dropboxes:false,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:false,classes:false},
@@ -748,6 +707,12 @@ function selText(name){
 function chkText(id){return document.getElementById(id)?.checked?'Aan':'Uit'}
 
 function setFormValue(name, value){
+  const all=document.querySelectorAll(`[name=${name}]`);
+  if(all.length && all[0].type==='radio'){
+    if(value===undefined||value===null) return;
+    all.forEach(r=>{r.checked=(r.value===String(value));});
+    markPicks(name); return;
+  }
   const el=document.querySelector(`[name=${name}]`);
   if(!el || value === undefined || value === null) return;
   if(el.type === 'checkbox') el.checked=!!value;
@@ -934,43 +899,52 @@ function drawPlayfield(saveProfile=true){
 document.querySelectorAll('[name=playfieldColorUi]').forEach(r=>r.addEventListener('change',drawPlayfield));
 
 function buildSummary(){
-  const role=document.querySelector('[name=role]:checked')?.value||'-';
-  const diff=currentDiff;
+  const role=document.querySelector('[name=role]:checked')?.value||'hunter';
   const diffNames={easy:'Makkelijk',medium:'Gemiddeld',hard:'Moeilijk',custom:'Custom'};
-  const hunterSel=document.getElementById('hunterIvSel');
-  const hunterTxt=hunterSel?.value==='custom'?document.querySelector('[name=hunter_interval_custom]')?.value+'s':hunterSel?.options[hunterSel.selectedIndex]?.text||'-';
-  const runnerSel=document.getElementById('runnerIvSel');
   const styleNames={classic:'Classic',adventure:'Adventure',battlefield:'Battlefield',stealth:'Shadow Ops'};
-  const style=styleNames[document.getElementById('gameStyleInput')?.value]||'Classic';
-  const dropMin=document.querySelector('[name=dropbox_min_m]')?.value||'500';
-  const dropMax=document.querySelector('[name=dropbox_max_m]')?.value||'1500';
-  const runnerTxt=runnerSel?.value==='off'?'Uitgeschakeld':runnerSel?.value==='custom'?document.querySelector('[name=runner_interval_custom]')?.value+'s':runnerSel?.options[runnerSel.selectedIndex]?.text||'-';
-
-  const rows=[
-    ['Spelnaam', document.querySelector('[name=name]')?.value||'-'],
-    ['Rol', role==='hunter'?'Hunter':'Runner'],
-    ['Duur', selText('duration')],
-    ['Voorsprong', selText('headstart')],
-    ['Moeilijkheid', diffNames[diff]||diff],
-    ['Puntenmultiplier', `x${currentMulti.toFixed(2)}`],
-    ['---',''],
-    ['Hunter interval', hunterTxt],
-    ['Target systeem', chkText('tgEn')],
-    ['---',''],
-    ['Runner afstand interval', runnerTxt],
-    ['Afstand tonen', chkText('showDist')],
-    ['Live afstand', chkText('liveTrk')],
-    ['Offline knop', chkText('offBtn')],
-    ['Pauze', chkText('pauseAllw')],
-    ['Speelveld', pfPoints.length>=3 ? `${pfPoints.length} punten (${getPlayfieldColor()})` : 'Niet ingesteld'],
-    ['Spelstijl', style],
-    ['Classes', document.getElementById('classesEnabled')?.checked ? 'Aan' : 'Uit'],
-    ['Lootbox afstand', `${dropMin}-${dropMax}m zonder speelveld`],
-  ];
-  document.getElementById('summaryContent').innerHTML=rows.map(([k,v])=>
-    k==='---'?'<div style="border-top:1px solid var(--border);margin:6px 0"></div>':
-    `<div class="summary-row"><span class="summary-key">${k}</span><span class="summary-val">${v}</span></div>`
-  ).join('');
+  const hunterSel=document.getElementById('hunterIvSel');
+  const hunterTxt=hunterSel?.value==='custom'?(document.querySelector('[name=hunter_interval_custom]')?.value||'?')+' sec':hunterSel?.options[hunterSel.selectedIndex]?.text||'-';
+  const runnerSel=document.getElementById('runnerIvSel');
+  const runnerTxt=runnerSel?.value==='off'?'Uitgeschakeld':runnerSel?.value==='custom'?(document.querySelector('[name=runner_interval_custom]')?.value||'?')+' sec':runnerSel?.options[runnerSel.selectedIndex]?.text||'-';
+  const on=id=>!!document.getElementById(id)?.checked;
+  const nm=n=>!!document.querySelector(`[name=${n}]`)?.checked;
+  const theme=document.querySelector('[name=sound_theme]:checked')?.closest('.pick')?.querySelector('.pick-t')?.textContent||'-';
+  const cTheme=document.querySelector('[name=class_theme]:checked')?.closest('.pick')?.querySelector('.pick-t')?.textContent||'-';
+  const chip=(label,icon,isOn)=>`<span class="chip ${isOn?'on':''}"><i class="fas ${isOn?'fa-check':'fa-xmark'}"></i> ${label}</span>`;
+  const extras=[['extra_dropboxes','Dropboxes'],['extra_landmine','Landmijn'],['extra_laser','Laser'],['extra_tripwire','Tripwire'],['feat_hacker','Hacker'],['feat_glitch','Glitch'],['extra_echo','Echo']];
+  const box=(k,v)=>`<div class="sum-box"><small>${k}</small><b>${v}</b></div>`;
+  const [h,r]=[window.currentHunterMulti||1.25,currentMulti];
+  const e=escHtml;
+  document.getElementById('summaryContent').innerHTML=`
+    <div class="sum-hero"><div class="ic"><i class="fas fa-${role==='hunter'?'crosshairs':'person-running'}"></i></div>
+      <div><h3>${e(document.querySelector('[name=name]')?.value||'Nieuw spel')}</h3>
+      <p>Jij speelt als ${role==='hunter'?'Hunter':'Runner'} · ${e(selText('duration'))} · voorsprong ${e(selText('headstart'))}</p></div></div>
+    <div class="sum-grid">
+      ${box('Moeilijkheid',diffNames[currentDiff]||currentDiff)}
+      ${box('Punten hunters','x'+h.toFixed(2))}
+      ${box('Punten runners','x'+r.toFixed(2))}
+      ${box('Spelstijl',styleNames[document.getElementById('gameStyleInput')?.value]||'Classic')}
+    </div>
+    <div class="panel">
+      <div class="sum-sec" style="margin-top:0">Regels</div>
+      <div class="chips">
+        ${chip('Target-systeem','',on('tgEn'))}${chip('Afstand tonen','',on('showDist'))}${chip('Live afstand','',on('liveTrk'))}
+        ${chip('Offline-knop','',on('offBtn'))}${chip('Pauze','',on('pauseAllw'))}${chip('Team-offline',"",document.querySelector('[name=team_mode]')?.value==='on')}
+      </div>
+      <div class="sum-grid" style="margin-top:12px">
+        ${box('Hunters zien runners',e(hunterTxt))}
+        ${box('Runners zien afstand',e(runnerTxt))}
+      </div>
+      <div class="sum-sec">Extra's</div>
+      <div class="chips">${extras.map(([n,l])=>chip(l,'',nm(n))).join('')}</div>
+      <div class="sum-sec">Speelveld en sfeer</div>
+      <div class="sum-grid">
+        ${box('Speelveld',pfPoints.length>=3?pfPoints.length+' punten':'Niet ingesteld')}
+        ${box('Geluid & sfeer',e(theme))}
+        ${box('Classes',nm('classes_enabled')?'Aan · '+e(cTheme):'Uit')}
+      </div>
+    </div>
+    <p class="pts-note" style="text-align:center">Klopt alles? Tik op <b>Spel aanmaken</b> hieronder. Je kunt daarna in de lobby nog dingen aanpassen.</p>`;
 }
 
 document.getElementById('gf').addEventListener('submit',function(){

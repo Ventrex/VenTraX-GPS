@@ -382,7 +382,13 @@ class Game(db.Model):
     creator_id          = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     status              = db.Column(db.String(20), default='lobby')  # lobby/active/finished
     difficulty          = db.Column(db.String(10), default='custom')
-    points_multiplier   = db.Column(db.Float, default=1.0)
+    points_multiplier   = db.Column(db.Float, default=1.0)     # kept for old rows; = runner multiplier on new games
+    hunter_multiplier   = db.Column(db.Float, nullable=True)   # points per metre/catch for hunters
+    runner_multiplier   = db.Column(db.Float, nullable=True)   # ... for runners (fair: harder for you = more points)
+
+    def multiplier_for(self, role):
+        m = self.hunter_multiplier if role == 'hunter' else self.runner_multiplier
+        return m if m is not None else (self.points_multiplier or 1.0)
 
     # Basic
     duration_minutes    = db.Column(db.Integer, default=120)
@@ -2096,6 +2102,7 @@ def inject_site():
         active_game = gp.game if gp else None
     ctx['active_game'] = active_game
     ctx['t'] = site_text
+    ctx['img'] = site_image
     try:
         ctx['nav_pages'] = CmsPage.query.filter_by(published=True, show_in_nav=True).order_by(CmsPage.sort_order, CmsPage.title).all()
         default_theme = get_default_sound_theme()
@@ -2145,6 +2152,33 @@ DIFFICULTY_PRESETS = {
                    offline_uses=1, max_offline=300, pause_allowed=False,
                    target_enabled=True, max_pause=300),
 }
+
+def compute_multipliers(diff, target_enabled=True, offline_button=True, live_tracking=False, show_distance=False,
+                        pause_allowed=False, runner_interval_off=False, hunter_interval_sec=600):
+    """Fair points for both sides -> (hunter_multiplier, runner_multiplier).
+    Whatever makes the game EASIER for hunters lowers the hunters' multiplier and raises the runners' (the
+    runners have it harder); whatever makes it easier for runners does the opposite."""
+    presets = {'easy': (1.0, 1.5), 'medium': (1.25, 1.25), 'hard': (1.5, 1.0)}
+    if diff in presets:
+        return presets[diff]
+    h = r = 1.25
+    def easier_for_hunters(step):
+        nonlocal h, r
+        h -= step; r += step
+    def harder_for_hunters(step):
+        nonlocal h, r
+        h += step; r -= step
+    if target_enabled:        easier_for_hunters(0.05)
+    if runner_interval_off:   easier_for_hunters(0.05)       # runners cannot see how far the hunters are
+    if offline_button:        harder_for_hunters(0.05)
+    if live_tracking:         harder_for_hunters(0.05)
+    if show_distance:         harder_for_hunters(0.05)
+    if pause_allowed:         harder_for_hunters(0.05)
+    if hunter_interval_sec <= 300:    easier_for_hunters(0.05)  # hunters see the runners often
+    if hunter_interval_sec >= 900:    harder_for_hunters(0.05)
+    if hunter_interval_sec >= 1200:   harder_for_hunters(0.05)
+    clamp = lambda v: round(max(0.7, min(2.0, v)), 2)
+    return clamp(h), clamp(r)
 
 # Photo mission categories
 PHOTO_MISSIONS = [
@@ -2767,17 +2801,12 @@ def new_game():
             ri_sec = int(ri_val)
         if diff in ('easy', 'medium'): ri_sec = p.get('runner_interval', ri_sec)
 
-        multi = p.get('multiplier', 1.0)
-        if diff == 'custom':
-            multi = 1.4
-            if f.get('offline_button') == 'on':  multi -= 0.05
-            if f.get('live_tracking')  == 'on':  multi -= 0.05
-            if f.get('show_distance')  == 'on':  multi -= 0.05
-            if f.get('pause_allowed')  == 'on':  multi -= 0.05
-            if ri_val == 'off':                  multi += 0.05
-            if hi_sec >= 900:                    multi += 0.05
-            if hi_sec >= 1200:                   multi += 0.05
-            multi = round(max(0.7, min(2.0, multi)), 2)
+        hunter_multi, runner_multi = compute_multipliers(
+            diff, target_enabled=f.get('target_enabled') == 'on', offline_button=f.get('offline_button') == 'on',
+            live_tracking=f.get('live_tracking') == 'on', show_distance=f.get('show_distance') == 'on',
+            pause_allowed=f.get('pause_allowed') == 'on', runner_interval_off=(ri_val == 'off'),
+            hunter_interval_sec=hi_sec)
+        multi = runner_multi
 
         def _bool(key): return p.get(key, f.get(key) == 'on') if diff != 'custom' else f.get(key) == 'on'
         def _int(key, default, lo, hi):
@@ -2812,6 +2841,8 @@ def new_game():
             creator_id        = current_user.id,
             difficulty        = diff,
             points_multiplier = multi,
+            hunter_multiplier = hunter_multi,
+            runner_multiplier = runner_multi,
             duration_minutes  = duration_minutes,
             headstart_minutes = headstart_minutes,
             hunter_interval_sec   = hi_sec,
@@ -2861,7 +2892,8 @@ def new_game():
                            profile_playfields=get_profile_playfields_for_user(current_user.id),
                            game_templates=get_game_templates_for_user(current_user.id),
                            sound_themes=SoundTheme.query.order_by(SoundTheme.name).all(),
-                           default_sound_theme=get_default_sound_theme())
+                           default_sound_theme=get_default_sound_theme(),
+                           class_loadouts=CLASS_LOADOUTS)
 
 # â”€â”€ Lobby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/api/profile/playfield', methods=['POST'])
@@ -3028,6 +3060,9 @@ def game_settings_dict(game):
         'feat_hacker': game.feat_hacker,
         'feat_glitch': game.feat_glitch,
         'feat_photo_missions': game.feat_photo_missions,
+        'hunter_multiplier': game.multiplier_for('hunter'),
+        'runner_multiplier': game.multiplier_for('runner'),
+        'difficulty': game.difficulty,
     }
 
 @app.route('/lobby/<code>/settings', methods=['POST'])
@@ -3070,12 +3105,22 @@ def lobby_settings(code):
     if 'feat_hacker'         in f: game.feat_hacker         = bool_val('feat_hacker', game.feat_hacker)
     if 'feat_glitch'         in f: game.feat_glitch         = bool_val('feat_glitch', game.feat_glitch)
     if 'feat_photo_missions' in f: game.feat_photo_missions = bool_val('feat_photo_missions', game.feat_photo_missions)
+    if any(k in f for k in ('hunter_interval_sec', 'runner_interval_sec', 'target_enabled', 'show_distance',
+                            'live_tracking', 'offline_button', 'pause_allowed')):
+        game.difficulty = 'custom'            # a changed rule makes it a custom game: points follow the rules
+        game.hunter_multiplier, game.runner_multiplier = compute_multipliers(
+            'custom', target_enabled=game.target_enabled, offline_button=game.offline_button,
+            live_tracking=game.live_tracking, show_distance=game.show_distance, pause_allowed=game.pause_allowed,
+            runner_interval_off=game.runner_interval_sec is None, hunter_interval_sec=game.hunter_interval_sec)
+        game.points_multiplier = game.runner_multiplier
     db.session.commit()
     hub.broadcast(code, 'settings_updated', {
         'duration': game.duration_minutes,
         'headstart': game.headstart_minutes,
         'hunter_interval': game.hunter_interval_sec,
         'runner_interval': game.runner_interval_sec,
+        'hunter_multiplier': game.multiplier_for('hunter'),
+        'runner_multiplier': game.multiplier_for('runner'),
     })
     return jsonify(success=True, settings=game_settings_dict(game))
 
@@ -3558,7 +3603,7 @@ def api_location(code):
     if me.last_lat and me.last_lon:
         dist = haversine(me.last_lat, me.last_lon, lat, lon)
         if 0 < dist < 500:  # sanity: max 500m per update
-            pts = calc_points(dist, speed_ms, game.points_multiplier)
+            pts = calc_points(dist, speed_ms, game.multiplier_for(me.role))
             # Double points if targeted
             if game.target_enabled:
                 t = (Target.query.filter_by(game_id=game.id, is_active=True)
@@ -3812,8 +3857,8 @@ def api_catch_runner(code):
     runner.is_caught = True; runner.caught_by = current_user.id
     runner.caught_at = datetime.utcnow()
     runner.real_name_revealed = True
-    me.points += 10 * game.points_multiplier
-    current_user.total_points += 10 * game.points_multiplier
+    me.points += 10 * game.multiplier_for('hunter')
+    current_user.total_points += 10 * game.multiplier_for('hunter')
     current_user.runners_caught += 1
     # Check speed badge (caught quickly)
     if game.started_at:
@@ -4020,7 +4065,7 @@ def approve_post(pid):
             gp = GamePlayer.query.filter_by(game_id=post.game_id,
                                              user_id=post.user_id).first()
             if gp:
-                pts = m['pts'] * (post.game.points_multiplier if post.game else 1)
+                pts = m['pts'] * (post.game.multiplier_for(gp.role) if post.game else 1)
                 gp.points += pts; post.points_awarded = pts
                 post.author.total_points += pts
     db.session.commit(); return jsonify(success=True)
@@ -5019,6 +5064,64 @@ def sanitize_cms_html(raw):
     p.close()
     return ''.join(p.out)
 
+# -- Admin-managed pictures (roles, difficulty, extras, styles, classes) -------------------------
+# key = SiteSetting key. The game screens show the picture when one is uploaded, else the built-in icon.
+IMAGE_SLOTS = [
+    ('Rollen', [('img_role_hunter', 'Hunter'), ('img_role_runner', 'Runner')]),
+    ('Moeilijkheid', [('diff_easy_img', 'Makkelijk'), ('diff_medium_img', 'Gemiddeld'),
+                      ('diff_hard_img', 'Moeilijk'), ('diff_custom_img', 'Custom')]),
+    ("Extra's", [('img_extra_dropboxes', 'Dropboxes'), ('img_extra_landmine', 'Landmijn'), ('img_extra_laser', 'Laser detectie'),
+                 ('img_extra_tripwire', 'Tripwire'), ('img_extra_hacker', 'Hacker'), ('img_extra_glitch', 'Glitch'),
+                 ('img_extra_echo', 'Echo')]),
+    ('Spelstijl', [('img_style_classic', 'Classic'), ('img_style_adventure', 'Adventure'),
+                   ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'),
+                   ('img_style_zone', 'Krimpende zone')]),
+    ("Class-thema's", [('img_classtheme_street', 'Street Ops'), ('img_classtheme_space', 'Space Scouts'),
+                       ('img_classtheme_forest', 'Boswachters'), ('img_classtheme_spy', 'Spy Kids')]),
+    ('Classes', [('img_class_signal_scout', 'Signal Scout'), ('img_class_codekraker', 'Codekraker'),
+                 ('img_class_bomexpert', 'Bomexpert'), ('img_class_laserwachter', 'Laserwachter'),
+                 ('img_class_saboteur', 'Saboteur'), ('img_class_glitcher', 'Glitcher'),
+                 ('img_class_spoorzoeker', 'Spoorzoeker')]),
+]
+IMAGE_KEYS = {k for _, items in IMAGE_SLOTS for k, _ in items}
+
+def site_image(key):
+    """URL of an admin-uploaded picture, or '' (then templates fall back to an icon)."""
+    name = _existing_bg(SiteSetting.get(key, '') or '')
+    return f'/backgrounds/{name}' if name else ''
+
+@app.route('/admin/images')
+@login_required
+@admin_required
+def admin_images():
+    groups = [(title, [{'key': k, 'label': label, 'url': site_image(k)} for k, label in items]) for title, items in IMAGE_SLOTS]
+    return render_template('admin_images.html', groups=groups)
+
+@app.route('/admin/images/<key>', methods=['POST'])
+@login_required
+@admin_required
+def admin_image_upload(key):
+    if key not in IMAGE_KEYS:
+        return jsonify(error='Onbekende afbeelding'), 404
+    f = request.files.get('file')
+    if not f or not f.filename or not allowed_file(f.filename):
+        return jsonify(error='Kies een png, jpg of webp afbeelding'), 400
+    try:
+        name = save_image(f, app.config['BG_FOLDER'], (1000, 1000))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    SiteSetting.set(key, name)
+    return jsonify(success=True, url=f'/backgrounds/{name}')
+
+@app.route('/admin/images/<key>/clear', methods=['POST'])
+@login_required
+@admin_required
+def admin_image_clear(key):
+    if key not in IMAGE_KEYS:
+        return jsonify(error='Onbekende afbeelding'), 404
+    SiteSetting.set(key, '')
+    return jsonify(success=True)
+
 # -- Editable pages & texts -----------------------------------------------------
 @app.route('/p/<slug>')
 def cms_page(slug):
@@ -5227,7 +5330,7 @@ def bot_catch(game, hunter, runner):
     runner.caught_by = hunter.user_id
     runner.caught_at = datetime.utcnow()
     runner.real_name_revealed = True
-    hunter.points = (hunter.points or 0) + 10 * (game.points_multiplier or 1)
+    hunter.points = (hunter.points or 0) + 10 * game.multiplier_for('hunter')
     db.session.commit()
     hub.broadcast(game.code, 'runner_caught', {
         'runner_id': runner.user_id, 'runner_codename': runner.codename, 'runner_username': runner.user.username,
@@ -5383,6 +5486,8 @@ def init_db():
         ensure_column('post', 'audio_filename', 'VARCHAR(256)')
         ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
         ensure_column('user', 'is_bot', 'BOOLEAN DEFAULT 0')
+        ensure_column('game', 'hunter_multiplier', 'FLOAT')
+        ensure_column('game', 'runner_multiplier', 'FLOAT')
         for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),
                          ('font_body', 'VARCHAR(40)'), ('radius', 'INTEGER'), ('bg_image', 'VARCHAR(200)'),
                          ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)'),
