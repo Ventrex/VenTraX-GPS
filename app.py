@@ -5940,6 +5940,10 @@ def init_db():
             db.session.add(Changelog(version='3.1.0', title='Bots, eigen lettertypes en rustigere typografie', type='feature',
                           body='- Bots: computerspelers (Runner of Hunter) om te testen, met regels: niet door water, bosjes half tempo, snelheid volgt de moeilijkheid\n- Eigen lettertypes per thema, ook horror-lettertypes of een eigen upload\n- Leesbare dropdowns en een rustiger, minder uitgerekt lettertype\n- Dashboard opnieuw vormgegeven'))
             db.session.commit()
+        if not Changelog.query.filter_by(version='3.2.0').first():
+            db.session.add(Changelog(version='3.2.0', title='Nieuw Spel vernieuwd, eerlijke punten, krimpende zone en missies', type='feature',
+                          body='- Spel startte soms direct af: opgelost (spelers uit de lobby werden als weggegaan gezien)\n- Hunter-in-de-buurt-geluid speelt 1x per nadering (100 m), opnieuw na 1 minuut buiten de straal\n- Nieuw Spel opnieuw opgezet met afbeeldingskaarten en uitleg-knoppen; afbeeldingen via Admin > Afbeeldingen\n- Eerlijke punten: hunters en runners hebben elk een eigen multiplier\n- Speelveld: verboden zones en lijnen, elk speelveld bewaard en te delen met een code\n- Krimpende zone (Fortnite-stijl) en missies voor runners als speelopties\n- Lobby: duidelijk overzicht en brede instellingen-popup'))
+            db.session.commit()
         # Seed game catalog if empty
         if GameCatalog.query.count() == 0:
             catalog = [
