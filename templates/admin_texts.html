@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Teksten – {{ site_name }}{% endblock %}
+{% block content %}
+<div class="container container-md" style="max-width:820px">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+    <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800"><i class="fas fa-pen-to-square" style="color:var(--accent)"></i> Teksten</h1>
+    <div style="display:flex;gap:8px"><a href="{{ url_for('admin_pages') }}" class="btn btn-ghost btn-sm"><i class="fas fa-file-lines"></i> Pagina's</a>
+    <a href="{{ url_for('admin') }}" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> Admin Panel</a></div>
+  </div>
+  <p style="color:var(--text2);margin-bottom:22px;line-height:1.6">Pas teksten op de site aan zonder code. Maak een veld leeg (of zet de oorspronkelijke tekst terug) om de standaardtekst te herstellen.</p>
+  <form method="POST">
+    {% for group, items in groups.items() %}
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title"><i class="fas fa-font"></i> {{ group }}</div>
+      {% for it in items %}
+      <div class="form-group">
+        <label class="form-label">{{ it.label }}{% if it.value != it.default %} <span style="color:var(--accent);text-transform:none;letter-spacing:0">· aangepast</span>{% endif %}</label>
+        {% if it.long %}
+        <textarea class="form-control" name="txt__{{ it.key }}" rows="3" placeholder="{{ it.default }}">{{ it.value }}</textarea>
+        {% else %}
+        <input class="form-control" name="txt__{{ it.key }}" value="{{ it.value }}" placeholder="{{ it.default }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <button class="btn btn-primary btn-lg"><i class="fas fa-floppy-disk"></i> Alles opslaan</button>
+  </form>
+</div>
+{% endblock %}

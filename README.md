@@ -27,6 +27,13 @@ Open `http://localhost:5001` in je browser. De eerste persoon die zich registree
 - Offline knop met maximale duur.
 - Pauze, speelveld, extra's, classes en lootboxes.
 
+## Thema's, geluiden en teksten (admin)
+
+- **Admin > Geluiden**: maak thema's (bijv. Halloween) en zet per gebeurtenis een of meer geluidjes (start, echte start, einde, lootbox, Hunter in de buurt, buiten de zone, offline, target, ...). Zonder upload speelt een ingebouwd geluid. Het standaardthema bepaalt ook het uiterlijk van de site; de spelmaker kan bij Nieuw Spel een ander thema kiezen.
+- **Admin > Pagina's** en **Teksten**: eigen pagina's (`/p/naam`) en teksten op home, menu en handleiding aanpassen zonder code.
+- Geüploade geluiden staan in `static/audio/themes` (volume-mount in `docker-compose.yml`).
+- Telefoons: eenmalige setup (locatie + geluid) en "installeer als app" (PWA) zodat toestemmingen onthouden worden.
+
 ## Lokaal draaien
 
 ```bash

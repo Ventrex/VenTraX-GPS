@@ -18,17 +18,16 @@
 <div class="container container-md">
   <div class="guide-hero page-enter">
     <div class="guide-kicker"><i class="fas fa-book"></i> Korte spelershandleiding</div>
-    <h1 style="font-family:var(--hfont);font-size:clamp(30px,5vw,46px);line-height:1.05;margin-bottom:12px">Zo speel je VenTrax</h1>
+    <h1 style="font-family:var(--hfont);font-size:clamp(30px,5vw,46px);line-height:1.05;margin-bottom:12px">{{ t('guide.title') }}</h1>
     <p style="color:var(--text2);font-size:15px;line-height:1.7;max-width:760px">
-      Houd het simpel: join de lobby, zet GPS aan, kies je rol en wacht op de start.
-      Tijdens het spel zie je live waar je bent, wat je moet doen en wanneer je extra informatie krijgt.
+      {{ t('guide.intro') }}
     </p>
   </div>
 
   <div class="guide-grid">
     <div class="guide-card">
-      <h2>1. Eerst in de lobby</h2>
-      <p>Open de spelcode of QR-code, kies je rol en zet GPS aan voordat je klaar bent.</p>
+      <h2>{{ t('guide.1_title') }}</h2>
+      <p>{{ t('guide.1_text') }}</p>
       <ul>
         <li>De maker start het spel vanuit de lobby.</li>
         <li>Als GPS uit staat, kun je niet meedoen.</li>
@@ -40,8 +39,8 @@
     </div>
 
     <div class="guide-card">
-      <h2>2. Tijdens het spel</h2>
-      <p>Blijf in beweging en kijk naar je kaart. Runners zien hun info onderin, Hunters zien hun targets links.</p>
+      <h2>{{ t('guide.2_title') }}</h2>
+      <p>{{ t('guide.2_text') }}</p>
       <ul>
         <li>Runners krijgen afstand, waarschuwingen en meldingen.</li>
         <li>Hunters zien runners op de kaart en kunnen acties gebruiken.</li>
@@ -53,8 +52,8 @@
     </div>
 
     <div class="guide-card">
-      <h2>3. Target of gepakt</h2>
-      <p>Wanneer een Hunter jou target, zie je meteen een waarschuwing. De Hunter ziet ook hoe lang dat target nog duurt.</p>
+      <h2>{{ t('guide.3_title') }}</h2>
+      <p>{{ t('guide.3_text') }}</p>
       <ul>
         <li>Als je target bent, kun je tijdelijk niet offline.</li>
         <li>De Hunter ziet zijn target-timer direct in beeld.</li>
@@ -66,8 +65,8 @@
     </div>
 
     <div class="guide-card">
-      <h2>4. Spel afgelopen</h2>
-      <p>Na afloop zie je het eindscherm met winst, punten en samenvatting. Daarna kun je terug naar het dashboard.</p>
+      <h2>{{ t('guide.4_title') }}</h2>
+      <p>{{ t('guide.4_text') }}</p>
       <ul>
         <li>De uitslag blijft nog even zichtbaar.</li>
         <li>Daarna ruimt het spel zichzelf op.</li>

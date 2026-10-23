@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nl" data-theme="dark">
+<html lang="nl" data-theme="dark" data-skin="{{ page_skin or 'classic' }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
@@ -7,6 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0a0a0f">
+<link rel="manifest" href="/manifest.webmanifest">
+<script src="/static/js/vxperm.js"></script>
+<script src="/static/js/vxsound.js"></script>
+<link rel="icon" type="image/png" href="/static/img/icon-192.png">
+<link rel="apple-touch-icon" href="/static/img/icon-192.png">
 <title>{% block title %}VenTrax{% endblock %}</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -53,6 +58,10 @@ button{font-family:inherit}
 .toast.info{border-left:3px solid var(--hunter)}.toast.warn{border-left:3px solid var(--warn)}
 @keyframes tIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
 @keyframes tOut{from{opacity:1}to{opacity:0;transform:translateY(-8px)}}
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%)}}
+/* Scary skin for the game screens */
+html[data-skin="halloween"]{--accent:#ff6a13;--accent-glow:#ff6a1366;--bg:#06040a;--bg2:#0f0a14;--bg3:#18101f;--bg4:#221729;--border:#2c1d35;--text2:#a595b5;--runner:#7ee081;--hunter:#a78bfa}
+html[data-skin="halloween"] .btn-primary{background:linear-gradient(135deg,#ff6a13,#c2410c)}
 /* Leaflet attribution hide */
 .leaflet-control-attribution{display:none!important}
 </style>

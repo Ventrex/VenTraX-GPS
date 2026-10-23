@@ -8,6 +8,7 @@ services:
       - ./static/uploads:/app/static/uploads
       - ./static/backgrounds:/app/static/backgrounds
       - ./static/qr:/app/static/qr
+      - ./static/audio:/app/static/audio
       - ./logs:/app/logs
     env_file:
       - .env

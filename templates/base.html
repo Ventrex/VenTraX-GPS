@@ -1,11 +1,18 @@
 <!DOCTYPE html>
-<html lang="nl" data-theme="dark">
+<html lang="nl" data-theme="dark" data-skin="{{ page_skin or site_skin or 'classic' }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-title" content="{{ site_name }}">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<script src="/static/js/vxperm.js"></script>
+<script src="/static/js/vxsound.js"></script>
+<link rel="icon" type="image/png" href="/static/img/icon-192.png">
+<link rel="apple-touch-icon" href="/static/img/icon-192.png">
 <title>{% block title %}{{ site_name }}{% endblock %}</title>
 
 <!-- Fonts: load async to never block rendering -->
@@ -220,9 +227,131 @@ footer a{color:var(--text2)}
   .g2,.g3,.g4{grid-template-columns:1fr}
   .container{padding:18px 12px}
 }
+
+/* =====================================================================
+   MODERN LAYER (v3) - refines the base styles above
+   ===================================================================== */
+:root{
+  --accent-2:color-mix(in srgb,var(--accent) 70%,#7c3aed);
+  --glass:rgba(17,17,24,.62);
+  --ring:0 0 0 1px rgba(255,255,255,.04) inset;
+  --sh:0 10px 40px rgba(0,0,0,.45);
+  --sh2:0 2px 14px rgba(0,0,0,.28);
+}
+[data-theme="light"]{--glass:rgba(255,255,255,.7)}
+body{font-feature-settings:"ss01","cv11";-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;line-height:1.5}
+::selection{background:var(--accent);color:#fff}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+h1,h2,h3{letter-spacing:-.02em}
+
+/* nav: floating glass bar */
+.nav{height:64px;background:var(--glass);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);border-bottom:1px solid rgba(255,255,255,.06);padding:0 clamp(12px,3vw,28px)}
+[data-theme="light"] .nav{background:var(--glass);border-bottom-color:rgba(0,0,0,.06)}
+.nav-brand img{height:38px;filter:drop-shadow(0 2px 8px var(--accent-glow))}
+.nl{border-radius:999px;padding:7px 14px;font-weight:600;letter-spacing:.01em}
+.nl.active{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.nl:hover{background:var(--bg3)}
+.dd-menu,.user-dd{background:var(--bg2);border-color:rgba(255,255,255,.08);border-radius:16px;padding:7px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+.dd-item{border-radius:10px;padding:10px 12px}
+.avatar{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent-glow)}
+.mobile-menu{top:64px;background:var(--bg2);border-radius:0 0 20px 20px}
+
+/* cards + buttons */
+.card{background:linear-gradient(180deg,color-mix(in srgb,var(--bg2) 92%,#fff 8%),var(--bg2));border:1px solid rgba(255,255,255,.07);border-radius:calc(var(--r) + 4px);box-shadow:var(--sh2),var(--ring)}
+[data-theme="light"] .card{border-color:var(--border)}
+.btn{border-radius:999px;font-weight:700;letter-spacing:.01em;padding:11px 22px}
+.btn-lg{padding:14px 28px;font-size:15px}
+.btn-sm{border-radius:999px;padding:7px 14px}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 6px 22px var(--accent-glow)}
+.btn-primary:hover{box-shadow:0 8px 30px var(--accent-glow);transform:translateY(-1px)}
+.btn-ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.1);backdrop-filter:blur(8px)}
+[data-theme="light"] .btn-ghost{background:#fff}
+.form-control{border-radius:12px;background:rgba(255,255,255,.035);padding:12px 14px}
+[data-theme="light"] .form-control{background:#fff}
+.sec-title{font-size:20px;margin-bottom:18px}
+.sec-title i{width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px;background:color-mix(in srgb,var(--accent) 14%,transparent);font-size:15px}
+.table tr:hover td{background:rgba(255,255,255,.025)}
+footer{background:transparent;border-top:1px solid rgba(255,255,255,.06);padding:28px 20px 36px}
+.toast{border-radius:14px;backdrop-filter:blur(14px);background:var(--glass)}
+
+/* animated mesh behind everything */
+.site-bg::before{content:'';position:absolute;inset:-20%;background:
+  radial-gradient(40% 35% at 15% 10%,color-mix(in srgb,var(--accent) 22%,transparent),transparent 70%),
+  radial-gradient(35% 30% at 85% 20%,rgba(124,58,237,.16),transparent 70%),
+  radial-gradient(40% 40% at 50% 100%,rgba(59,130,246,.10),transparent 70%);
+  animation:meshMove 28s ease-in-out infinite alternate;z-index:1;pointer-events:none}
+@keyframes meshMove{to{transform:translate3d(3%,2%,0) scale(1.06)}}
+
+/* mobile: app-like bottom tab bar for logged-in users */
+.tabbar{display:none}
+@media(max-width:768px){
+  body.has-tabbar{padding-bottom:calc(68px + env(safe-area-inset-bottom))}
+  .tabbar{display:flex;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:790;background:var(--glass);backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);border:1px solid rgba(255,255,255,.09);border-radius:22px;padding:6px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .tabbar a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 2px;border-radius:16px;color:var(--text2);font-size:10.5px;font-weight:600;text-decoration:none}
+  .tabbar a i{font-size:17px}
+  .tabbar a.active{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+  .tabbar a.cta{color:#fff;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:0 6px 18px var(--accent-glow)}
+  .toast-wrap{bottom:84px;right:12px;left:12px}
+  .toast{max-width:none}
+}
+
+/* first-run setup sheet */
+.setup-overlay{display:none;position:fixed;inset:0;z-index:9900;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:flex-end;justify-content:center;padding:16px}
+.setup-overlay.open{display:flex}
+@media(min-width:600px){.setup-overlay{align-items:center}}
+.setup-sheet{width:100%;max-width:460px;background:var(--bg2);border:1px solid rgba(255,255,255,.09);border-radius:26px;padding:26px 22px;box-shadow:0 30px 80px rgba(0,0,0,.6);animation:fadeUp .3s var(--tr);max-height:92vh;overflow:auto}
+.setup-sheet h3{font-family:var(--hfont);font-size:22px;margin-bottom:6px}
+.setup-sheet p.lead{color:var(--text2);font-size:14px;line-height:1.6;margin-bottom:16px}
+.setup-step{display:flex;gap:12px;align-items:center;padding:13px;border:1px solid var(--border);border-radius:16px;margin-bottom:10px;background:rgba(255,255,255,.025)}
+.setup-step .ic{width:42px;height:42px;border-radius:12px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.setup-step .tx{flex:1;min-width:0}
+.setup-step .tx b{display:block;font-size:14px}.setup-step .tx span{font-size:12px;color:var(--text2)}
+.setup-step.done{border-color:rgba(16,185,129,.4)}.setup-step.done .ic{background:rgba(16,185,129,.15);color:var(--runner)}
+
+/* =====================================================================
+   HALLOWEEN SKIN  (html[data-skin="halloween"])
+   ===================================================================== */
+html[data-skin="halloween"]{
+  --accent:#ff6a13;--accent-glow:#ff6a1366;--accent-2:#a21caf;
+  --bg:#06040a;--bg2:#0f0a14;--bg3:#18101f;--bg4:#221729;--border:#2c1d35;
+  --text:#f3ecf7;--text2:#a595b5;--runner:#7ee081;--hunter:#a78bfa;
+  --glass:rgba(12,7,17,.66);
+}
+html[data-skin="halloween"] .nav-brand .faye,
+html[data-skin="halloween"] .hero-title .accent{color:var(--accent)}
+html[data-skin="halloween"] body{background:var(--bg)}
+html[data-skin="halloween"] .site-bg::before{background:
+  radial-gradient(45% 40% at 20% 8%,rgba(255,106,19,.20),transparent 70%),
+  radial-gradient(40% 35% at 85% 25%,rgba(162,28,175,.22),transparent 70%),
+  radial-gradient(60% 40% at 50% 105%,rgba(255,60,0,.14),transparent 70%)}
+/* creeping fog */
+html[data-skin="halloween"] .particles::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+   radial-gradient(60% 18% at 20% 85%,rgba(200,180,230,.10),transparent 70%),
+   radial-gradient(55% 16% at 80% 92%,rgba(200,180,230,.08),transparent 70%);
+  animation:fogDrift 22s ease-in-out infinite alternate}
+@keyframes fogDrift{from{transform:translateX(-4%)}to{transform:translateX(4%)}}
+/* dark vignette */
+html[data-skin="halloween"] body::after{content:'';position:fixed;inset:0;z-index:1;pointer-events:none;box-shadow:inset 0 0 160px 40px rgba(0,0,0,.75)}
+html[data-skin="halloween"] .particle{background:#ff8a3d;opacity:.28;filter:blur(1px);box-shadow:0 0 12px 2px #ff6a13aa}
+html[data-skin="halloween"] .hero-title{text-shadow:0 0 28px rgba(255,106,19,.35)}
+html[data-skin="halloween"] .hero-logo{animation:eerie 6s ease-in-out infinite}
+html[data-skin="halloween"] .game-tile:hover,
+html[data-skin="halloween"] .card:hover{border-color:color-mix(in srgb,var(--accent) 60%,transparent)}
+html[data-skin="halloween"] .btn-primary{background:linear-gradient(135deg,#ff6a13,#c2410c)}
+html[data-skin="halloween"] .flicker{animation:flicker 5s linear infinite}
+@keyframes flicker{0%,18%,22%,25%,53%,57%,100%{opacity:1;text-shadow:0 0 22px rgba(255,106,19,.55)}20%,24%,55%{opacity:.55;text-shadow:none}}
+@keyframes eerie{0%,100%{filter:drop-shadow(0 0 14px #ff6a1366)}50%{filter:drop-shadow(0 0 30px #a21caf99)}}
+.hw-only{display:none}
+html[data-skin="halloween"] .hw-only{display:inline-flex}
+html[data-skin="halloween"] .hw-hide{display:none}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+}
 </style>
 </head>
-<body>
+{% set show_tabbar = current_user.is_authenticated and request.endpoint not in ('lobby', 'join_team') %}
+<body class="{{ 'has-tabbar' if show_tabbar else '' }}">
 <div class="site-bg"></div>
 <div class="particles" aria-hidden="true">
   <div class="particle" style="width:5px;height:5px;left:12%;animation-duration:18s;animation-delay:0s"></div>
@@ -248,19 +377,23 @@ footer a{color:var(--text2)}
   </a>
 
   <div class="nav-links">
-    <a href="{{ url_for('index') }}" class="nl {% if request.endpoint=='index' %}active{% endif %}"><i class="fas fa-home"></i> Home</a>
-    <a href="{{ url_for('handleiding') }}" class="nl {% if request.endpoint=='handleiding' %}active{% endif %}"><i class="fas fa-book"></i> Handleiding</a>
+    <a href="{{ url_for('index') }}" class="nl {% if request.endpoint=='index' %}active{% endif %}"><i class="fas fa-home"></i> {{ t('nav.home') }}</a>
+    <a href="{{ url_for('handleiding') }}" class="nl {% if request.endpoint=='handleiding' %}active{% endif %}"><i class="fas fa-book"></i> {{ t('nav.guide') }}</a>
+    {% for np in nav_pages %}<a href="{{ url_for('cms_page', slug=np.slug) }}" class="nl {% if request.view_args and request.view_args.get('slug')==np.slug %}active{% endif %}">{{ np.title }}</a>{% endfor %}
     {% if current_user.is_authenticated %}
-    <a href="{{ url_for('dashboard') }}" class="nl {% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-grip"></i> Dashboard</a>
-    <a href="{{ url_for('news') }}" class="nl {% if request.endpoint in ('news','news_submit') %}active{% endif %}"><i class="fas fa-newspaper"></i> Nieuws</a>
+    <a href="{{ url_for('dashboard') }}" class="nl {% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-grip"></i> {{ t('nav.dashboard') }}</a>
+    <a href="{{ url_for('news') }}" class="nl {% if request.endpoint in ('news','news_submit') %}active{% endif %}"><i class="fas fa-newspaper"></i> {{ t('nav.news') }}</a>
     {% if current_user.is_admin %}
     <div class="dd">
-      <a href="{{ url_for('admin') }}" class="nl {% if request.endpoint in ('admin','admin_todo','admin_log','admin_reports','admin_photos','admin_changelog') %}active{% endif %}">
+      <a href="{{ url_for('admin') }}" class="nl {% if request.endpoint in ('admin','admin_todo','admin_log','admin_reports','admin_photos','admin_changelog','admin_sounds','admin_pages','admin_texts') %}active{% endif %}">
       <i class="fas fa-shield-halved"></i> Admin
       {% if pending_news %}<span style="background:var(--accent);color:#fff;border-radius:8px;font-size:10px;padding:1px 5px">{{ pending_news }}</span>{% endif %}
       </a>
       <div class="dd-menu">
         <a href="{{ url_for('admin') }}" class="dd-item"><i class="fas fa-shield-halved"></i> Admin Panel</a>
+        <a href="{{ url_for('admin_sounds') }}" class="dd-item"><i class="fas fa-volume-high"></i> Geluiden &amp; thema's</a>
+        <a href="{{ url_for('admin_pages') }}" class="dd-item"><i class="fas fa-file-lines"></i> Pagina's</a>
+        <a href="{{ url_for('admin_texts') }}" class="dd-item"><i class="fas fa-pen-to-square"></i> Teksten</a>
         <a href="{{ url_for('admin_todo') }}" class="dd-item"><i class="fas fa-list-check"></i> Admin TODO</a>
         <a href="{{ url_for('admin_log') }}" class="dd-item"><i class="fas fa-list"></i> Activiteitenlog</a>
         <a href="{{ url_for('admin_reports') }}" class="dd-item"><i class="fas fa-flag"></i> Meldingen</a>
@@ -306,7 +439,11 @@ footer a{color:var(--text2)}
   <a href="{{ url_for('join') }}?scan=1" class="nl"><i class="fas fa-qrcode"></i> QR Scannen</a>
   <a href="{{ url_for('news') }}" class="nl"><i class="fas fa-newspaper"></i> Nieuws</a>
   <a href="{{ url_for('account') }}" class="nl"><i class="fas fa-user"></i> Profiel</a>
-  {% if current_user.is_admin %}<a href="{{ url_for('admin') }}" class="nl"><i class="fas fa-shield-halved"></i> Admin</a>{% endif %}
+  {% if current_user.is_admin %}<a href="{{ url_for('admin') }}" class="nl"><i class="fas fa-shield-halved"></i> Admin</a>
+  <a href="{{ url_for('admin_sounds') }}" class="nl"><i class="fas fa-volume-high"></i> Geluiden</a>
+  <a href="{{ url_for('admin_pages') }}" class="nl"><i class="fas fa-file-lines"></i> Pagina's</a>
+  <a href="{{ url_for('admin_texts') }}" class="nl"><i class="fas fa-pen-to-square"></i> Teksten</a>{% endif %}
+  {% for np in nav_pages %}<a href="{{ url_for('cms_page', slug=np.slug) }}" class="nl">{{ np.title }}</a>{% endfor %}
   <div style="border-top:1px solid var(--border);margin:6px 0"></div>
   <a href="{{ url_for('logout') }}" class="nl" style="color:var(--danger)"><i class="fas fa-arrow-right-from-bracket"></i> Uitloggen</a>
   {% else %}
@@ -314,6 +451,16 @@ footer a{color:var(--text2)}
   <a href="{{ url_for('register') }}" class="nl"><i class="fas fa-user-plus"></i> Registreren</a>
   {% endif %}
 </div>
+
+{% if show_tabbar %}
+<nav class="tabbar" aria-label="Snelmenu">
+  <a href="{{ url_for('index') }}" class="{% if request.endpoint=='index' %}active{% endif %}"><i class="fas fa-home"></i>Home</a>
+  <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-grip"></i>Dashboard</a>
+  <a href="{{ url_for('join') }}" class="cta"><i class="fas fa-door-open"></i>Join</a>
+  <a href="{{ url_for('news') }}" class="{% if request.endpoint in ('news','news_submit') %}active{% endif %}"><i class="fas fa-newspaper"></i>Nieuws</a>
+  <a href="{{ url_for('account') }}" class="{% if request.endpoint=='account' %}active{% endif %}"><i class="fas fa-user"></i>Profiel</a>
+</nav>
+{% endif %}
 
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
@@ -342,10 +489,12 @@ footer a{color:var(--text2)}
 <main class="page-enter">{% block content %}{% endblock %}</main>
 
 <footer>
-  <p>&copy; {{ current_year }} <strong style="color:var(--accent)">Ven</strong><strong>Faye</strong>
+  {% if t('footer.text') %}<p style="margin-bottom:8px">{{ t('footer.text') }}</p>{% endif %}
+  <p>&copy; {{ current_year }} <strong style="color:var(--accent)">Ven</strong><strong>Trax</strong>
   &nbsp;·&nbsp;<a href="{{ url_for('news') }}">Nieuws</a>
   &nbsp;·&nbsp;<a href="{{ url_for('gps_help') }}">GPS Help</a>
-  &nbsp;·&nbsp;<a href="{{ url_for('gps_test') }}">GPS Test</a></p>
+  &nbsp;·&nbsp;<a href="{{ url_for('gps_test') }}">GPS Test</a>
+  {% for np in nav_pages %}&nbsp;·&nbsp;<a href="{{ url_for('cms_page', slug=np.slug) }}">{{ np.title }}</a>{% endfor %}</p>
 </footer>
 
 <div class="toast-wrap" id="toastWrap"></div>
@@ -359,10 +508,38 @@ footer a{color:var(--text2)}
   </div>
 </div>
 
+{% if current_user.is_authenticated and request.endpoint not in ('lobby', 'join_team', 'game_dashboard') %}
+<!-- One-time setup: asks for location + sound ONCE on this phone, then never again -->
+<div class="setup-overlay" id="vxSetup" role="dialog" aria-modal="true" aria-labelledby="vxSetupTitle">
+  <div class="setup-sheet">
+    <h3 id="vxSetupTitle"><span class="hw-only"><i class="fas fa-ghost" style="color:var(--accent);margin-right:8px"></i></span>Eenmalig instellen</h3>
+    <p class="lead">Doe dit één keer op deze telefoon. Daarna krijg je dit scherm en de locatie-popup <strong>niet meer</strong> te zien.</p>
+    <div class="setup-step" id="stepGeo">
+      <div class="ic"><i class="fas fa-location-dot"></i></div>
+      <div class="tx"><b>Locatie</b><span id="geoTxt">Nodig om het spel te spelen.</span></div>
+      <button class="btn btn-primary btn-sm" id="btnGeo" onclick="vxSetupGeo()">Toestaan</button>
+    </div>
+    <div class="setup-step" id="stepSnd">
+      <div class="ic"><i class="fas fa-volume-high"></i></div>
+      <div class="tx"><b>Geluid</b><span id="sndTxt">Zet je telefoon niet op stil.</span></div>
+      <button class="btn btn-ghost btn-sm" id="btnSnd" onclick="vxSetupSound()">Test</button>
+    </div>
+    <div class="setup-step" id="stepApp">
+      <div class="ic"><i class="fas fa-mobile-screen"></i></div>
+      <div class="tx"><b>Installeer als app</b><span id="appTxt">Je telefoon onthoudt je keuzes dan beter.</span></div>
+      <button class="btn btn-ghost btn-sm" id="btnApp" onclick="vxSetupInstall()">Installeren</button>
+    </div>
+    <div id="geoDenied" class="alert alert-warning" style="display:none;margin-top:6px"></div>
+    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="vxSetupClose()">Klaar</button>
+  </div>
+</div>
+{% endif %}
+
 <script>
 // Theme
-function applyTheme(t){document.documentElement.setAttribute('data-theme',t);document.getElementById('themeIcon').className=t==='dark'?'fas fa-moon':'fas fa-sun'}
 function toggleTheme(){const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';localStorage.setItem('vf_theme',t);applyTheme(t)}
+// Scary skin is always dark; light mode would wash it out.
+function applyTheme(t){ if(document.documentElement.getAttribute('data-skin')==='halloween') t='dark'; document.documentElement.setAttribute('data-theme',t);document.getElementById('themeIcon').className=t==='dark'?'fas fa-moon':'fas fa-sun'}
 applyTheme(localStorage.getItem('vf_theme')||'dark');
 
 // Mobile nav
@@ -390,6 +567,55 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeTip()});
 function fmtTime(s){s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=s%60;return[h,m,sec].map(v=>String(v).padStart(2,'0')).join(':')}
 function fmtMM(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
 function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m`}
+
+{% if current_user.is_authenticated and request.endpoint not in ('lobby', 'join_team', 'game_dashboard') %}
+// ---- One-time setup (location + sound + install), never shown again on this phone ----
+(function(){
+  const sheet = document.getElementById('vxSetup');
+  if (!sheet || !window.VXPerm) return;
+  const $ = id => document.getElementById(id);
+  let geoOk = false;
+  function markStep(id, ok){ $(id).classList.toggle('done', !!ok); }
+  window.vxSetupClose = function(){ VXPerm.markDone(); sheet.classList.remove('open'); };
+  window.vxSetupGeo = async function(){
+    const b = $('btnGeo'); b.disabled = true; b.innerHTML = '<span class="spinner"></span>';
+    const r = await VXPerm.requestGeo();
+    b.disabled = false;
+    if (r === 'denied') {
+      $('geoDenied').style.display = 'block';
+      $('geoDenied').innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>Locatie is geweigerd. Tik op het slotje naast het webadres, kies <b>Locatie → Toestaan</b> en probeer opnieuw.</span>';
+      b.textContent = 'Opnieuw'; return;
+    }
+    geoOk = true; $('geoDenied').style.display = 'none';
+    markStep('stepGeo', true); b.style.display = 'none'; $('geoTxt').textContent = 'Klaar. Dit wordt onthouden.';
+  };
+  window.vxSetupSound = function(){
+    VXSound.unlock();
+    VXSound.init({}).then(() => { VXSound.play('hunter_near'); });
+    markStep('stepSnd', true); $('sndTxt').textContent = 'Hoor je iets? Dan staat het goed.';
+    $('btnSnd').textContent = 'Nog een keer';
+  };
+  window.vxSetupInstall = async function(){
+    if (VXPerm.canInstall()) { const ok = await VXPerm.install(); if (ok) { markStep('stepApp', true); $('btnApp').style.display='none'; } return; }
+    if (VXPerm.isIOS()) { $('appTxt').innerHTML = 'Tik op <b>Delen</b> <i class="fas fa-arrow-up-from-bracket"></i> en kies <b>Zet op beginscherm</b>.'; return; }
+    $('appTxt').textContent = 'Open het browsermenu (⋮) en kies "App installeren" of "Toevoegen aan startscherm".';
+  };
+  (async function(){
+    if (VXPerm.setupDone()) return;
+    const st = await VXPerm.geoState();
+    if (VXPerm.isStandalone()) { $('stepApp').style.display = 'none'; }
+    if (st === 'granted') {              // nothing to ask: remember and stay silent
+      if (VXPerm.isStandalone() || VXPerm.installDismissed()) { VXPerm.markDone(); return; }
+      markStep('stepGeo', true); $('btnGeo').style.display = 'none'; $('geoTxt').textContent = 'Al toegestaan.';
+    }
+    if (st === 'denied') {
+      $('geoDenied').style.display = 'block';
+      $('geoDenied').innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>Locatie staat geblokkeerd voor deze site. Tik op het slotje naast het webadres en kies <b>Locatie → Toestaan</b>.</span>';
+    }
+    setTimeout(() => sheet.classList.add('open'), 900);
+  })();
+})();
+{% endif %}
 </script>
 {% block scripts %}{% endblock %}
 </body>

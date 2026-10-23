@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Geluiden &amp; thema's – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.snd-layout{display:grid;grid-template-columns:260px 1fr;gap:20px;align-items:start}
+@media(max-width:860px){.snd-layout{grid-template-columns:1fr}}
+.th-list{display:flex;flex-direction:column;gap:8px}
+.th-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg2);color:var(--text);text-decoration:none!important}
+.th-item:hover{border-color:var(--accent);opacity:1}
+.th-item.active{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--bg2))}
+.th-item b{font-size:14px;display:block}.th-item small{color:var(--text2);font-size:11px}
+.pill{font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;background:var(--accent);color:#fff;letter-spacing:.04em}
+.pill.soft{background:var(--bg4);color:var(--text2)}
+.grp-title{font-family:var(--hfont);font-size:15px;font-weight:800;margin:22px 0 10px;color:var(--text2);text-transform:uppercase;letter-spacing:.08em}
+.ev{border:1px solid var(--border);border-radius:16px;padding:14px 16px;margin-bottom:10px;background:var(--bg2)}
+.ev-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.ev-head .tx{flex:1;min-width:200px}
+.ev-head b{font-size:14px}.ev-head span{display:block;font-size:12px;color:var(--text2);margin-top:2px;line-height:1.5}
+.clip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;background:var(--bg3);border-radius:12px}
+.clip audio{height:34px;max-width:100%;flex:1;min-width:160px}
+.clip .nm{font-size:12px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clip input[type=range]{width:90px;accent-color:var(--accent)}
+.drop{border:2px dashed var(--border);border-radius:12px;padding:10px 12px;font-size:12px;color:var(--text2);text-align:center;cursor:pointer;transition:all .2s;margin-top:10px}
+.drop:hover,.drop.over{border-color:var(--accent);color:var(--text);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.drop input{display:none}
+.synth-tag{font-size:11px;color:var(--text2);margin-top:8px}
+.synth-tag button{background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;font-weight:700;padding:0;margin-left:6px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.progress{height:4px;border-radius:2px;background:var(--bg4);overflow:hidden;margin-top:8px;display:none}
+.progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+    <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800"><i class="fas fa-volume-high" style="color:var(--accent)"></i> Geluiden &amp; thema's</h1>
+    <a href="{{ url_for('admin') }}" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> Admin Panel</a>
+  </div>
+  <p style="color:var(--text2);margin-bottom:22px;max-width:780px;line-height:1.6">
+    Een <b>thema</b> is een set geluidjes plus een uiterlijk (bijv. <i>Halloween</i>). Kies per gebeurtenis een of meer geluidjes;
+    bij meerdere wordt er een willekeurige gespeeld. Waar je niets uploadt speelt (als je dat aan laat staan) een ingebouwd
+    geluid, dus een nieuw thema werkt meteen. Het <b>standaardthema</b> bepaalt ook het uiterlijk van de hele site.
+  </p>
+
+  <div class="snd-layout">
+    <!-- Theme list -->
+    <div>
+      <div class="th-list">
+        {% for t in themes %}
+        <a class="th-item {% if selected and t.id == selected.id %}active{% endif %}" href="{{ url_for('admin_sounds', theme=t.id) }}">
+          <i class="fas {{ 'fa-ghost' if t.skin == 'halloween' else 'fa-music' }}" style="color:var(--accent);width:18px;text-align:center"></i>
+          <div style="flex:1;min-width:0"><b>{{ t.name }}</b><small>{{ t.clips|length }} geluid{{ 'en' if t.clips|length != 1 }}</small></div>
+          {% if t.is_default %}<span class="pill">STANDAARD</span>{% endif %}
+        </a>
+        {% endfor %}
+      </div>
+      <form method="POST" action="{{ url_for('admin_sound_theme_new') }}" class="card" style="margin-top:14px;padding:14px">
+        <div class="card-title" style="font-size:14px;margin-bottom:10px"><i class="fas fa-plus"></i> Nieuw thema</div>
+        <div class="form-group" style="margin-bottom:10px"><input class="form-control" name="name" placeholder="Bijv. Zombie Apocalypse" required maxlength="80"></div>
+        <div class="form-group" style="margin-bottom:10px">
+          <select class="form-control" name="skin">{% for k, label in skins %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select>
+        </div>
+        <button class="btn btn-primary btn-sm btn-full">Aanmaken</button>
+      </form>
+    </div>
+
+    <!-- Selected theme -->
+    {% if selected %}
+    <div>
+      <form method="POST" action="{{ url_for('admin_sound_theme_save', tid=selected.id) }}" class="card">
+        <div class="card-title"><i class="fas fa-sliders"></i> Thema: {{ selected.name }}
+          {% if selected.is_default %}<span class="pill" style="margin-left:6px">STANDAARD</span>{% endif %}</div>
+        <div class="fgrid">
+          <div class="form-group"><label class="form-label">Naam</label><input class="form-control" name="name" value="{{ selected.name }}" maxlength="80"></div>
+          <div class="form-group"><label class="form-label">Uiterlijk</label>
+            <select class="form-control" name="skin">{% for k, label in skins %}<option value="{{ k }}" {{ 'selected' if selected.skin == k }}>{{ label }}</option>{% endfor %}</select></div>
+          <div class="form-group"><label class="form-label">Hoofdvolume ({{ selected.volume }}%)</label>
+            <input class="form-control" type="range" name="volume" min="0" max="100" value="{{ selected.volume }}" oninput="this.previousElementSibling.textContent='Hoofdvolume ('+this.value+'%)'"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Omschrijving</label><input class="form-control" name="description" value="{{ selected.description or '' }}" maxlength="300"></div>
+        <div class="fgrid">
+          <div class="form-group"><label class="form-label">"Hunter in de buurt" vanaf (m)</label><input class="form-control" type="number" name="near_m" value="{{ selected.near_m }}" min="10" max="2000"></div>
+          <div class="form-group"><label class="form-label">"Hunter heel dichtbij" vanaf (m)</label><input class="form-control" type="number" name="close_m" value="{{ selected.close_m }}" min="5" max="1000"></div>
+          <div class="form-group"><label class="form-label">Sfeergeluid elke (sec, min)</label><input class="form-control" type="number" name="ambient_min" value="{{ selected.ambient_min }}" min="10" max="1800"></div>
+          <div class="form-group"><label class="form-label">... tot (sec, max)</label><input class="form-control" type="number" name="ambient_max" value="{{ selected.ambient_max }}" min="15" max="3600"></div>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px;margin:4px 0 14px"><span class="switch"><input type="checkbox" name="synth" {{ 'checked' if selected.synth }}><span class="slider"></span></span> Ingebouwde geluiden gebruiken waar nog niets is geüpload</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary"><i class="fas fa-floppy-disk"></i> Opslaan</button>
+        </div>
+      </form>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0">
+        {% if not selected.is_default %}
+        <form method="POST" action="{{ url_for('admin_sound_theme_default', tid=selected.id) }}"
+              onsubmit="return confirm('Dit thema (en dit uiterlijk) voor de hele site en nieuwe spellen gebruiken?')">
+          <button class="btn btn-ghost btn-sm"><i class="fas fa-star"></i> Maak standaardthema voor de hele site</button>
+        </form>
+        {% endif %}
+        <form method="POST" action="{{ url_for('admin_sound_theme_delete', tid=selected.id) }}"
+              onsubmit="return confirm('Thema en alle geluidjes verwijderen?')">
+          <button class="btn btn-ghost btn-sm" style="color:var(--danger)"><i class="fas fa-trash"></i> Thema verwijderen</button>
+        </form>
+      </div>
+
+      <!-- Events -->
+      {% for group, events in groups.items() %}
+      <div class="grp-title">{{ group }}</div>
+      {% for ev in events %}
+      <div class="ev" id="ev-{{ ev.key }}" data-event="{{ ev.key }}">
+        <div class="ev-head">
+          <div class="tx"><b>{{ ev.label }}</b><span>{{ ev.desc }}</span></div>
+          <button type="button" class="btn btn-ghost btn-xs" onclick="testEvent('{{ ev.key }}')"><i class="fas fa-play"></i> Test</button>
+        </div>
+        <div class="clips">
+          {% for c in selected.clips if c.event == ev.key %}
+          <div class="clip" data-id="{{ c.id }}">
+            <audio controls preload="none" src="/audio/themes/{{ c.filename }}"></audio>
+            <span class="nm" title="{{ c.label }}">{{ c.label }}</span>
+            <i class="fas fa-volume-low" style="color:var(--text2);font-size:12px"></i>
+            <input type="range" min="0" max="100" value="{{ c.volume }}" title="Volume van dit geluidje" onchange="saveClipVol({{ c.id }}, this.value)">
+            <button type="button" class="btn btn-ghost btn-xs" style="color:var(--danger)" onclick="delClip({{ c.id }}, this)"><i class="fas fa-trash"></i></button>
+          </div>
+          {% endfor %}
+        </div>
+        <label class="drop" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="dropFiles(event,'{{ ev.key }}')">
+          <i class="fas fa-cloud-arrow-up"></i> Geluid toevoegen (mp3, ogg, wav, m4a – max 8 MB)
+          <input type="file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.aac" multiple onchange="uploadFiles('{{ ev.key }}', this.files); this.value=''">
+        </label>
+        <div class="progress"><i></i></div>
+        <div class="synth-tag" {% if selected.clips|selectattr('event','equalto',ev.key)|list|length %}style="display:none"{% endif %}>
+          <i class="fas fa-wave-square"></i> Geen eigen geluid: {{ 'het ingebouwde geluid speelt' if selected.synth else 'stil' }}.
+        </div>
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if selected %}
+<script>
+const THEME_ID = {{ selected.id }};
+const THEME_PAYLOAD = {{ payload|tojson }};
+
+// Test an event with exactly what players will hear (uploaded clip, else built-in sound)
+function testEvent(ev) {
+  VXSound.unlock();
+  const t = JSON.parse(JSON.stringify(THEME_PAYLOAD));
+  // include clips added since the page loaded
+  t.events = {};
+  document.querySelectorAll('.ev').forEach(box => {
+    const key = box.dataset.event, list = [];
+    box.querySelectorAll('.clip').forEach(c => {
+      list.push({url: c.querySelector('audio').getAttribute('src'), volume: parseInt(c.querySelector('input[type=range]').value, 10)});
+    });
+    if (list.length) t.events[key] = list;
+  });
+  VXSound.init({theme: t}).then(() => { VXSound.stopAll(); VXSound.play(ev); });
+}
+
+function uploadFiles(ev, files) {
+  const box = document.getElementById('ev-' + ev);
+  const bar = box.querySelector('.progress'), fill = bar.querySelector('i');
+  const list = Array.from(files);
+  if (!list.length) return;
+  bar.style.display = 'block'; fill.style.width = '0';
+  let done = 0;
+  const next = () => {
+    if (!list.length) { bar.style.display = 'none'; return; }
+    const f = list.shift();
+    const fd = new FormData(); fd.append('event', ev); fd.append('file', f);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/admin/sounds/theme/' + THEME_ID + '/upload');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) fill.style.width = Math.round(e.loaded / e.total * 100) + '%'; };
+    xhr.onload = () => {
+      let d = {}; try { d = JSON.parse(xhr.responseText); } catch (e) {}
+      if (xhr.status === 200 && d.success) { addClip(box, d); done++; }
+      else showToast((f.name + ': ' + (d.error || 'uploaden mislukt (bestand te groot?)')), 'error', 6000);
+      next();
+    };
+    xhr.onerror = () => { showToast(f.name + ': netwerkfout', 'error'); next(); };
+    xhr.send(fd);
+  };
+  next();
+}
+function dropFiles(e, ev) { e.preventDefault(); e.currentTarget.classList.remove('over'); uploadFiles(ev, e.dataTransfer.files); }
+
+function addClip(box, d) {
+  const el = document.createElement('div');
+  el.className = 'clip'; el.dataset.id = d.id;
+  el.innerHTML = '<audio controls preload="none"></audio><span class="nm"></span>' +
+    '<i class="fas fa-volume-low" style="color:var(--text2);font-size:12px"></i>' +
+    '<input type="range" min="0" max="100" title="Volume van dit geluidje">' +
+    '<button type="button" class="btn btn-ghost btn-xs" style="color:var(--danger)"><i class="fas fa-trash"></i></button>';
+  el.querySelector('audio').src = d.url;
+  el.querySelector('.nm').textContent = d.label; el.querySelector('.nm').title = d.label;
+  const r = el.querySelector('input'); r.value = d.volume; r.onchange = () => saveClipVol(d.id, r.value);
+  el.querySelector('button').onclick = ev => delClip(d.id, ev.currentTarget);
+  box.querySelector('.clips').appendChild(el);
+  const tag = box.querySelector('.synth-tag'); if (tag) tag.style.display = 'none';
+  showToast('Geluid toegevoegd', 'success', 2500);
+}
+function saveClipVol(id, v) {
+  fetch('/admin/sounds/clip/' + id + '/save', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({volume: parseInt(v, 10)})})
+    .then(r => r.json()).then(d => { if (d.success) showToast('Volume opgeslagen', 'success', 1500); });
+}
+function delClip(id, btn) {
+  if (!confirm('Dit geluid verwijderen?')) return;
+  fetch('/admin/sounds/clip/' + id + '/delete', {method: 'POST'}).then(r => r.json()).then(d => {
+    if (!d.success) return;
+    const clip = btn.closest('.clip'), box = btn.closest('.ev');
+    clip.remove();
+    if (!box.querySelector('.clip')) { const tag = box.querySelector('.synth-tag'); if (tag) tag.style.display = ''; }
+  });
+}
+</script>
+{% endif %}
+{% endblock %}

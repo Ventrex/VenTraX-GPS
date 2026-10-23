@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title if page else 'Pagina niet gevonden' }} – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.cms{max-width:760px;margin:0 auto}
+.cms h1{font-family:var(--hfont);font-size:clamp(28px,5vw,42px);line-height:1.1;margin-bottom:18px}
+.cms-body{font-size:16px;line-height:1.75;color:var(--text)}
+.cms-body h2{font-family:var(--hfont);font-size:24px;margin:30px 0 10px}
+.cms-body h3{font-family:var(--hfont);font-size:19px;margin:24px 0 8px}
+.cms-body p,.cms-body ul,.cms-body ol,.cms-body blockquote,.cms-body table{margin-bottom:16px}
+.cms-body ul,.cms-body ol{padding-left:22px}
+.cms-body a{text-decoration:underline}
+.cms-body img{border-radius:16px;margin:18px 0;max-width:100%;height:auto}
+.cms-body blockquote{border-left:3px solid var(--accent);padding:4px 0 4px 16px;color:var(--text2)}
+.cms-body table{width:100%;border-collapse:collapse}.cms-body td,.cms-body th{border:1px solid var(--border);padding:8px 10px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="cms">
+  {% if page %}
+    {% if not page.published %}<div class="alert alert-warning"><i class="fas fa-eye-slash"></i> Concept – alleen zichtbaar voor admins.</div>{% endif %}
+    <h1>{{ page.title }}</h1>
+    <div class="cms-body">{{ page.body|safe }}</div>
+    {% if current_user.is_authenticated and current_user.is_admin %}
+    <div style="margin-top:30px"><a class="btn btn-ghost btn-sm" href="{{ url_for('admin_pages', edit=page.id) }}"><i class="fas fa-pen"></i> Pagina bewerken</a></div>
+    {% endif %}
+  {% else %}
+    <h1>Pagina niet gevonden</h1>
+    <p style="color:var(--text2)">Deze pagina bestaat niet (meer).</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary" style="margin-top:16px">Naar home</a>
+  {% endif %}
+  </div>
+</div>
+{% endblock %}

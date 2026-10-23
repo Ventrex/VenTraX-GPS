@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Pagina's beheren – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.pg-layout{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+@media(max-width:860px){.pg-layout{grid-template-columns:1fr}}
+.pg-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--bg2);color:var(--text);text-decoration:none!important;margin-bottom:8px}
+.pg-item.active,.pg-item:hover{border-color:var(--accent);opacity:1}
+.pg-item small{color:var(--text2);font-size:11px;display:block}
+.tb{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.tb button{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:7px 11px;font-size:13px;cursor:pointer;font-weight:700}
+.tb button:hover{border-color:var(--accent)}
+#body{min-height:340px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.6}
+.preview{border:1px dashed var(--border);border-radius:14px;padding:16px;margin-top:14px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+    <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800"><i class="fas fa-file-lines" style="color:var(--accent)"></i> Pagina's</h1>
+    <div style="display:flex;gap:8px"><a href="{{ url_for('admin_texts') }}" class="btn btn-ghost btn-sm"><i class="fas fa-pen-to-square"></i> Teksten</a>
+    <a href="{{ url_for('admin') }}" class="btn btn-ghost btn-sm"><i class="fas fa-arrow-left"></i> Admin Panel</a></div>
+  </div>
+  <p style="color:var(--text2);margin-bottom:22px;max-width:760px;line-height:1.6">Maak eigen pagina's (bijv. Regels, Over ons, Halloween-evenement). Ze komen op <code class="code">/p/naam</code> en kunnen in het menu en de footer komen. Teksten op bestaande pagina's (home, handleiding, menu) pas je aan bij <a href="{{ url_for('admin_texts') }}">Teksten</a>.</p>
+
+  <div class="pg-layout">
+    <div>
+      <a class="btn btn-primary btn-full" style="margin-bottom:12px" href="{{ url_for('admin_pages', new=1) }}"><i class="fas fa-plus"></i> Nieuwe pagina</a>
+      {% for p in pages %}
+      <a class="pg-item {% if editing and editing.id == p.id %}active{% endif %}" href="{{ url_for('admin_pages', edit=p.id) }}">
+        <i class="fas fa-file-lines" style="color:var(--accent)"></i>
+        <div style="flex:1;min-width:0"><b style="font-size:14px">{{ p.title }}</b><small>/p/{{ p.slug }}{% if not p.published %} · concept{% endif %}{% if p.show_in_nav %} · in menu{% endif %}</small></div>
+      </a>
+      {% else %}
+      <div style="color:var(--text2);font-size:13px">Nog geen pagina's.</div>
+      {% endfor %}
+    </div>
+
+    {% if editing or new %}
+    <form method="POST" action="{{ url_for('admin_page_save') }}" class="card">
+      <input type="hidden" name="id" value="{{ editing.id if editing else '' }}">
+      <div class="card-title"><i class="fas fa-pen"></i> {{ 'Pagina bewerken' if editing else 'Nieuwe pagina' }}</div>
+      <div class="form-group"><label class="form-label">Titel</label><input class="form-control" name="title" value="{{ editing.title if editing else '' }}" required maxlength="120"></div>
+      {% if not editing %}<div class="form-group"><label class="form-label">Webadres (optioneel)</label><input class="form-control" name="slug" placeholder="bijv. regels" maxlength="60"></div>{% endif %}
+      <div class="form-group">
+        <label class="form-label">Inhoud</label>
+        <div class="tb">
+          <button type="button" onclick="wrap('<h2>','</h2>')">Kop</button>
+          <button type="button" onclick="wrap('<h3>','</h3>')">Subkop</button>
+          <button type="button" onclick="wrap('<strong>','</strong>')"><b>B</b></button>
+          <button type="button" onclick="wrap('<em>','</em>')"><i>I</i></button>
+          <button type="button" onclick="wrap('<ul>\n  <li>','</li>\n</ul>')">Lijst</button>
+          <button type="button" onclick="addLink()">Link</button>
+          <button type="button" onclick="document.getElementById('imgIn').click()">Afbeelding</button>
+          <input type="file" id="imgIn" accept="image/*" style="display:none" onchange="uploadImg(this)">
+        </div>
+        <textarea class="form-control" id="body" name="body" oninput="renderPreview()">{{ editing.body if editing and editing.body else '' }}</textarea>
+        <div class="form-hint">Je schrijft gewone HTML (kop, vet, lijst, link, afbeelding). Onveilige code wordt automatisch verwijderd.</div>
+      </div>
+      <div class="grid g2" style="gap:12px">
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="switch"><input type="checkbox" name="published" {{ 'checked' if (not editing) or editing.published }}><span class="slider"></span></span> Gepubliceerd</label>
+        <label style="display:flex;align-items:center;gap:10px;font-size:13px"><span class="switch"><input type="checkbox" name="show_in_nav" {{ 'checked' if editing and editing.show_in_nav }}><span class="slider"></span></span> Tonen in menu &amp; footer</label>
+      </div>
+      <div class="form-group" style="margin-top:12px;max-width:200px"><label class="form-label">Volgorde</label><input class="form-control" type="number" name="sort_order" value="{{ editing.sort_order if editing else 0 }}"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <button class="btn btn-primary"><i class="fas fa-floppy-disk"></i> Opslaan</button>
+        {% if editing %}<a class="btn btn-ghost" href="{{ url_for('cms_page', slug=editing.slug) }}" target="_blank"><i class="fas fa-arrow-up-right-from-square"></i> Bekijken</a>{% endif %}
+      </div>
+      <div class="preview cms-body" id="preview"></div>
+    </form>
+    {% if editing %}
+    <form method="POST" action="{{ url_for('admin_page_delete', pid=editing.id) }}" onsubmit="return confirm('Pagina verwijderen?')" style="grid-column:2">
+      <button class="btn btn-ghost btn-sm" style="color:var(--danger)"><i class="fas fa-trash"></i> Pagina verwijderen</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const ta = document.getElementById('body');
+function wrap(a, b) {
+  if (!ta) return;
+  const s = ta.selectionStart, e = ta.selectionEnd, sel = ta.value.slice(s, e) || 'tekst';
+  ta.setRangeText(a + sel + b, s, e, 'select'); ta.focus(); renderPreview();
+}
+function addLink() { const u = prompt('Link (https://...)'); if (u) wrap('<a href="' + u.replace(/"/g, '') + '">', '</a>'); }
+function uploadImg(inp) {
+  const f = inp.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  fetch('/admin/pages/upload_image', {method: 'POST', body: fd}).then(r => r.json()).then(d => {
+    if (d.success) wrap('<img src="' + d.url + '" alt="', '">'); else showToast(d.error || 'Uploaden mislukt', 'error');
+  }).catch(() => showToast('Uploaden mislukt', 'error')); inp.value = '';
+}
+// Live preview: parsed with the browser's own parser inside an inert template (scripts never run)
+function renderPreview() {
+  const pv = document.getElementById('preview'); if (!pv || !ta) return;
+  const tpl = document.createElement('template'); tpl.innerHTML = ta.value;
+  tpl.content.querySelectorAll('script,iframe,object,embed,style').forEach(n => n.remove());
+  tpl.content.querySelectorAll('*').forEach(n => Array.from(n.attributes).forEach(a => { if (/^on/i.test(a.name)) n.removeAttribute(a.name); }));
+  pv.innerHTML = ''; pv.appendChild(tpl.content);
+}
+renderPreview();
+</script>
+{% endblock %}

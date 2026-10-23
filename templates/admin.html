@@ -35,6 +35,9 @@
     <button class="tab-btn" onclick="showTab('catalog',this)"><i class="fas fa-th-large"></i> Spelen</button>
     <button class="tab-btn" onclick="showTab('users',this)"><i class="fas fa-users"></i> Gebruikers ({{ users|length }})</button>
     <button class="tab-btn" onclick="showTab('games',this)"><i class="fas fa-gamepad"></i> Spellen ({{ games|length }})</button>
+    <a class="tab-btn" href="{{ url_for('admin_sounds') }}" style="text-decoration:none"><i class="fas fa-volume-high"></i> Geluiden</a>
+    <a class="tab-btn" href="{{ url_for('admin_pages') }}" style="text-decoration:none"><i class="fas fa-file-lines"></i> Pagina's</a>
+    <a class="tab-btn" href="{{ url_for('admin_texts') }}" style="text-decoration:none"><i class="fas fa-pen-to-square"></i> Teksten</a>
     <a class="tab-btn" href="{{ url_for('admin_todo') }}" style="text-decoration:none"><i class="fas fa-list-check"></i> TODO</a>
   </div>
 
