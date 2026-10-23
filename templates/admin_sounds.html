@@ -97,9 +97,23 @@
               <button type="button" class="btn btn-ghost btn-xs" onclick="document.getElementById('bgPick').value='#0a0a0f'">Donkerblauw</button>
             </div></div>
           <div class="form-group"><label class="form-label">Lettertype titels</label>
-            <select class="form-control" name="font_head">{% for f in head_fonts %}<option {{ 'selected' if ui.font_head == f }}>{{ f }}</option>{% endfor %}</select></div>
+            <select class="form-control" name="font_head" id="fhSel" onchange="previewFont()">
+              {% for group, fonts in head_font_groups %}<optgroup label="{{ group }}">{% for f in fonts %}<option {{ 'selected' if ui.font_head == f }}>{{ f }}</option>{% endfor %}</optgroup>{% endfor %}
+            </select></div>
           <div class="form-group"><label class="form-label">Lettertype tekst</label>
-            <select class="form-control" name="font_body">{% for f in body_fonts %}<option {{ 'selected' if ui.font_body == f }}>{{ f }}</option>{% endfor %}</select></div>
+            <select class="form-control" name="font_body" id="fbSel" onchange="previewFont()">{% for f in body_fonts %}<option {{ 'selected' if ui.font_body == f }}>{{ f }}</option>{% endfor %}</select></div>
+          <div class="form-group" style="grid-column:1/-1">
+            <div id="fontPrev" style="padding:16px 18px;border:1px dashed var(--border);border-radius:14px">
+              <div id="fhPrev" style="font-size:28px;font-weight:700;margin-bottom:4px">Ze komen jou halen</div>
+              <div id="fbPrev" style="font-size:14px;color:var(--text2)">Zo ziet de gewone tekst eruit op de site.</div>
+            </div>
+          </div>
+          <div class="form-group"><label class="form-label">Eigen font titels (upload)</label>
+            <input class="form-control" type="file" name="font_head_upload" accept=".woff2,.woff,.ttf,.otf">
+            <div class="form-hint">{% if selected.font_head_file %}<b>Eigen font actief.</b> <label><input type="checkbox" name="clear_font_head_upload" value="1"> Verwijderen</label>{% else %}.woff2, .woff, .ttf of .otf, max 3 MB. Overschrijft de keuze hierboven.{% endif %}</div></div>
+          <div class="form-group"><label class="form-label">Eigen font tekst (upload)</label>
+            <input class="form-control" type="file" name="font_body_upload" accept=".woff2,.woff,.ttf,.otf">
+            <div class="form-hint">{% if selected.font_body_file %}<b>Eigen font actief.</b> <label><input type="checkbox" name="clear_font_body_upload" value="1"> Verwijderen</label>{% else %}Alleen nodig als je ook de gewone tekst wilt veranderen.{% endif %}</div></div>
           <div class="form-group"><label class="form-label">Hoekradius ({{ ui.radius }}px)</label>
             <input class="form-control" type="range" name="radius" min="0" max="24" value="{{ ui.radius }}" oninput="this.previousElementSibling.textContent='Hoekradius ('+this.value+'px)'"></div>
           <div class="form-group"><label class="form-label">Achtergrond donkerder ({{ ui.bg_overlay }}%)</label>
@@ -201,6 +215,15 @@
 {% if selected %}
 <script>
 const THEME_ID = {{ selected.id }};
+function previewFont() {
+  const h = document.getElementById('fhSel').value, b = document.getElementById('fbSel').value;
+  const l = document.createElement('link'); l.rel = 'stylesheet';
+  l.href = 'https://fonts.googleapis.com/css2?family=' + h.replace(/ /g, '+') + '&family=' + b.replace(/ /g, '+') + '&display=swap';
+  document.head.appendChild(l);
+  document.getElementById('fhPrev').style.fontFamily = "'" + h + "', sans-serif";
+  document.getElementById('fbPrev').style.fontFamily = "'" + b + "', sans-serif";
+}
+previewFont();
 const THEME_PAYLOAD = {{ payload|tojson }};
 
 // Test an event with exactly what players will hear (uploaded clip, else built-in sound)

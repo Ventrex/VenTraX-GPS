@@ -9,6 +9,7 @@ services:
       - ./static/backgrounds:/app/static/backgrounds
       - ./static/qr:/app/static/qr
       - ./static/audio:/app/static/audio
+      - ./static/fonts:/app/static/fonts
       - ./logs:/app/logs
     env_file:
       - .env

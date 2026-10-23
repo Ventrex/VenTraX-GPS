@@ -1,39 +1,55 @@
 {% extends "base.html" %}
 {% block title %}Dashboard – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.dash-hi{font-size:clamp(26px,4vw,34px);line-height:1.15}
+.stat-card{padding:18px 20px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:0 3px 3px 0;background:var(--stat,var(--accent))}
+.stat-card .stat-num{font-size:30px;color:var(--text)!important;margin-bottom:8px}
+.stat-card .stat-label{margin-top:0;font-size:11px;letter-spacing:.08em;display:flex;align-items:center;gap:7px}
+.stat-card .stat-label i{color:var(--stat,var(--accent))}
+.act{padding:22px;display:flex;flex-direction:column;gap:6px;transition:transform .2s,border-color .2s,box-shadow .2s}
+.act:hover{transform:translateY(-3px);box-shadow:0 14px 40px rgba(0,0,0,.45);opacity:1}
+.act-ic{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:10px;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+.act-t{font-family:var(--hfont);font-size:18px;font-weight:700;letter-spacing:-.02em}
+.act-d{color:var(--text2);font-size:13.5px;line-height:1.55;flex:1}
+.act .btn{align-self:flex-start;margin-top:14px}
+</style>
+{% endblock %}
 {% block content %}
 <div class="container">
   <div style="margin-bottom:28px">
-    <h1 style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800">
+    <h1 class="dash-hi" style="font-family:var(--hfont);font-weight:700">
       Hoi, <span style="color:var(--accent)">{{ current_user.username }}</span> 👋
     </h1>
     <p style="color:var(--text2);margin-top:4px">Welkom terug bij {{ site_name }}. Klaar voor de jacht?</p>
   </div>
 
   <div class="grid g4" style="margin-bottom:28px">
-    <div class="card stat-card"><div class="stat-num">{{ current_user.total_games }}</div><div class="stat-label"><i class="fas fa-gamepad"></i> Spellen</div></div>
-    <div class="card stat-card"><div class="stat-num" style="color:var(--hunter)">{{ current_user.hunter_wins }}</div><div class="stat-label"><i class="fas fa-crosshairs"></i> Hunter Wins</div></div>
-    <div class="card stat-card"><div class="stat-num" style="color:var(--runner)">{{ current_user.runner_wins }}</div><div class="stat-label"><i class="fas fa-person-running"></i> Runner Wins</div></div>
-    <div class="card stat-card"><div class="stat-num" style="color:var(--warn)">{{ '%.2f'|format(current_user.total_points or 0) }}</div><div class="stat-label"><i class="fas fa-star"></i> Punten</div></div>
+    <div class="card stat-card" style="--stat:var(--accent)"><div class="stat-num">{{ current_user.total_games }}</div><div class="stat-label"><i class="fas fa-gamepad"></i> Spellen</div></div>
+    <div class="card stat-card" style="--stat:var(--hunter)"><div class="stat-num">{{ current_user.hunter_wins }}</div><div class="stat-label"><i class="fas fa-crosshairs"></i> Hunter Wins</div></div>
+    <div class="card stat-card" style="--stat:var(--runner)"><div class="stat-num">{{ current_user.runner_wins }}</div><div class="stat-label"><i class="fas fa-person-running"></i> Runner Wins</div></div>
+    <div class="card stat-card" style="--stat:var(--warn)"><div class="stat-num">{{ '%.2f'|format(current_user.total_points or 0) }}</div><div class="stat-label"><i class="fas fa-star"></i> Punten</div></div>
   </div>
 
   <div class="grid g3" style="margin-bottom:28px">
-    <a href="{{ url_for('new_game') }}" class="card card-hover" style="text-decoration:none!important;display:block;border-color:rgba(225,29,72,.3)">
-      <div style="font-size:44px;margin-bottom:14px;line-height:1"><i class="fas fa-plus-circle" style="color:var(--accent)"></i></div>
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700">Nieuw Spel</div>
-      <div style="color:var(--text2);font-size:14px;margin-top:6px;line-height:1.5">Maak een spel en deel de code met vrienden</div>
-      <div class="btn btn-primary btn-sm" style="margin-top:16px"><i class="fas fa-arrow-right"></i> Aanmaken</div>
+    <a href="{{ url_for('new_game') }}" class="card act" style="text-decoration:none!important;color:inherit;--c:var(--accent)">
+      <div class="act-ic"><i class="fas fa-plus"></i></div>
+      <div class="act-t">Nieuw Spel</div>
+      <div class="act-d">Maak een spel en deel de code met vrienden</div>
+      <div class="btn btn-primary btn-sm"><i class="fas fa-arrow-right"></i> Aanmaken</div>
     </a>
-    <a href="{{ url_for('join') }}" class="card card-hover" style="text-decoration:none!important;display:block;border-color:rgba(59,130,246,.3)">
-      <div style="font-size:44px;margin-bottom:14px;line-height:1"><i class="fas fa-door-open" style="color:var(--hunter)"></i></div>
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700">Join Spel</div>
-      <div style="color:var(--text2);font-size:14px;margin-top:6px;line-height:1.5">Voer de 6-letterige code in van de spelmaker</div>
-      <div class="btn btn-hunter btn-sm" style="margin-top:16px"><i class="fas fa-arrow-right"></i> Joinen</div>
+    <a href="{{ url_for('join') }}" class="card act" style="text-decoration:none!important;color:inherit;--c:var(--hunter)">
+      <div class="act-ic"><i class="fas fa-door-open"></i></div>
+      <div class="act-t">Join Spel</div>
+      <div class="act-d">Voer de 6-letterige code in van de spelmaker</div>
+      <div class="btn btn-hunter btn-sm"><i class="fas fa-arrow-right"></i> Joinen</div>
     </a>
-    <a href="{{ url_for('join') }}?scan=1" class="card card-hover" style="text-decoration:none!important;display:block;border-color:rgba(245,158,11,.3)">
-      <div style="font-size:44px;margin-bottom:14px;line-height:1"><i class="fas fa-qrcode" style="color:var(--warn)"></i></div>
-      <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:700">QR Scannen</div>
-      <div style="color:var(--text2);font-size:14px;margin-top:6px;line-height:1.5">Open direct je camera om een spel te joinen</div>
-      <div class="btn btn-warn btn-sm" style="margin-top:16px"><i class="fas fa-camera"></i> Camera openen</div>
+    <a href="{{ url_for('join') }}?scan=1" class="card act" style="text-decoration:none!important;color:inherit;--c:var(--warn)">
+      <div class="act-ic"><i class="fas fa-qrcode"></i></div>
+      <div class="act-t">QR Scannen</div>
+      <div class="act-d">Open direct je camera om een spel te joinen</div>
+      <div class="btn btn-warn btn-sm"><i class="fas fa-camera"></i> Camera openen</div>
     </a>
   </div>
 

@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends gcc libffi-dev 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-RUN mkdir -p /app/instance /app/static/uploads /app/static/backgrounds /app/static/qr /app/static/audio/themes /app/logs
+RUN mkdir -p /app/instance /app/static/uploads /app/static/backgrounds /app/static/qr /app/static/audio/themes /app/static/fonts /app/logs
 ENV DATABASE_URL=sqlite:////app/instance/venfaye.db
 ENV SECRET_KEY=change-me
 ENV PORT=5000

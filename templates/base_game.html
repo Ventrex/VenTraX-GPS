@@ -17,9 +17,12 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" onload="this.onload=null;this.rel='stylesheet'">
 <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"></noscript>
+{% if site_font_url %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" onload="this.onload=null;this.rel='stylesheet'">
-<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap"></noscript>
+<link rel="preload" as="style" href="{{ site_font_url }}" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="{{ site_font_url }}"></noscript>
+{% endif %}
+{% if site_font_faces %}<style>{{ site_font_faces|safe }}</style>{% endif %}
 {% block extra_head %}{% endblock %}
 <style>
 :root{
@@ -31,9 +34,11 @@
   --text:#f0f0f8;--text2:#8888aa;
   --hunter:#3b82f6;--runner:#10b981;--warn:#f59e0b;--danger:#ef4444;
   --r:12px;--r2:8px;--tr:.2s cubic-bezier(.4,0,.2,1);
-  --hfont:'Syne',sans-serif;--bfont:'DM Sans',sans-serif;
+  --hfont:'{{ site_font or 'Space Grotesk' }}',sans-serif;--bfont:'{{ site_font_body or 'DM Sans' }}',sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{color-scheme:dark;font-synthesis:none}
+select,select option{background-color:var(--bg2);color:var(--text)}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--bfont)}
 button{font-family:inherit}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 18px;border-radius:var(--r2);font-size:14px;font-weight:600;font-family:inherit;border:none;cursor:pointer;transition:all var(--tr);text-decoration:none;line-height:1;white-space:nowrap}
