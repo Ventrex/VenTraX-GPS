@@ -19,3 +19,7 @@ logs/*.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Uploaded theme sounds (live in a volume, not in git)
+static/audio/themes/*
+!static/audio/themes/.gitkeep
