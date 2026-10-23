@@ -63,3 +63,17 @@ def test_empty_life_bar_means_out(appmodule, client, monkeypatch):
     assert d["eliminated"] and d["zone_pressure"]["pct"] == 100
     with appmodule.app.app_context():
         assert appmodule.GamePlayer.query.filter_by(user_id=uid).first().is_caught
+
+
+def test_a_new_game_never_inherits_state_of_a_deleted_game_with_the_same_id(appmodule, client):
+    uid = setup(appmodule, client)
+    with appmodule.app.app_context():
+        g = appmodule.Game.query.filter_by(code="LIV123").first()
+        gid = g.id
+        appmodule.SiteSetting.set(appmodule._zone_state_key(gid), json.dumps({str(uid): {"seconds": 12, "outside": True}}))
+        appmodule.db.session.delete(g); appmodule.db.session.commit()
+        assert appmodule.SiteSetting.get(appmodule._zone_state_key(gid)) is None
+        # and a stale leftover is also cleaned when a game is created
+        appmodule.SiteSetting.set(appmodule._zone_state_key(gid), "{}")
+        appmodule.purge_game_state(gid); appmodule.db.session.commit()
+        assert appmodule.SiteSetting.get(appmodule._zone_state_key(gid)) is None

@@ -593,7 +593,7 @@ function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m
   };
   window.vxSetupSound = function(){
     VXSound.unlock();
-    VXSound.init({}).then(() => { VXSound.play('hunter_near'); });
+    VXSound.init({hint: false}).then(() => { VXSound.play('hunter_near'); });
     markStep('stepSnd', true); $('sndTxt').textContent = 'Hoor je iets? Dan staat het goed.';
     $('btnSnd').textContent = 'Nog een keer';
   };

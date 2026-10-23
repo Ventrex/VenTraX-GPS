@@ -146,10 +146,10 @@ details.more summary::-webkit-details-marker{display:none}
 {% block content %}
 <div class="wz">
   <h1 class="wz-title">Nieuw spel</h1>
-  <p class="wz-sub">In 5 korte stappen klaar om te spelen.</p>
+  <p class="wz-sub">In 6 korte stappen klaar om te spelen.</p>
 
-  <div class="wz-prog" id="prog"><i class="on"></i><i></i><i></i><i></i><i></i></div>
-  <div class="wz-step"><b id="stepName">Basis</b><span id="stepOf">Stap 1 van 5</span></div>
+  <div class="wz-prog" id="prog"><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="wz-step"><b id="stepName">Basis</b><span id="stepOf">Stap 1 van 6</span></div>
 
   <form method="POST" id="gf">
 
@@ -219,6 +219,38 @@ details.more summary::-webkit-details-marker{display:none}
     <!-- ===================== 2. MOEILIJKHEID ===================== -->
     <div class="step" id="step2">
       <div class="panel">
+        <div class="panel-h"><div class="panel-ic"><i class="fas fa-layer-group"></i></div><div class="panel-t">Kies je spelstijl {{ ibtn('Spelstijl', 'De spelstijl bepaalt wat er in het spel zit: lootboxen, een krimpende zone, missies. De volgende stappen laten alleen de keuzes zien die bij jouw stijl horen. Wil je alles zelf mixen, zet dan “Zelf alles aanpassen” aan.') }}</div></div>
+        <p class="panel-sub">Kies eerst wat voor spel het wordt. Daarna krijg je alleen de vragen die erbij horen.</p>
+        <input type="hidden" name="game_style" id="gameStyleInput" value="classic">
+        <div class="picks">
+          <div class="pick sel" id="style-classic" onclick="selectGameStyle('classic')">
+            {% if img('img_style_classic') %}<div class="bg" style="background-image:url('{{ img('img_style_classic') }}')"></div>{% else %}<div class="ph"><i class="fas fa-eye-slash"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Classic</div><div class="pick-d">Jachtseizoen: hunters jagen op runners. Geen lootboxen, geen krimpende zone, geen missies. Gewoon rennen en verstoppen.</div></div></div>
+          <div class="pick" id="style-adventure" onclick="selectGameStyle('adventure')">
+            {% if img('img_style_adventure') %}<div class="bg" style="background-image:url('{{ img('img_style_adventure') }}')"></div>{% else %}<div class="ph"><i class="fas fa-compass"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Adventure</div><div class="pick-d">Lootboxen liggen verspreid over de kaart. Pak ze voor punten en voordelen. Het speelveld blijft even groot.</div></div></div>
+          <div class="pick" id="style-battlefield" onclick="selectGameStyle('battlefield')">
+            {% if img('img_style_battlefield') %}<div class="bg" style="background-image:url('{{ img('img_style_battlefield') }}')"></div>{% else %}<div class="ph"><i class="fas fa-burst"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Battlefield</div><div class="pick-d">Het speelveld wordt steeds kleiner, net als bij Fortnite. Iedereen krijgt een melding met het nieuwe centrum.</div></div></div>
+          <div class="pick" id="style-stealth" onclick="selectGameStyle('stealth')">
+            {% if img('img_style_stealth') %}<div class="bg" style="background-image:url('{{ img('img_style_stealth') }}')"></div>{% else %}<div class="ph"><i class="fas fa-user-secret"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Shadow Ops</div><div class="pick-d">Alles tegelijk: krimpende zone, missies voor runners (zodat ze blijven lopen) en lootboxen.</div></div></div>
+          <div class="pick" id="style-survival" onclick="selectGameStyle('survival')">
+            {% if img('img_style_survival') %}<div class="bg" style="background-image:url('{{ img('img_style_survival') }}')"></div>{% else %}<div class="ph"><i class="fas fa-skull-crossbones"></i></div>{% endif %}
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Survival</div><div class="pick-d">Krimpende zone en lootboxen. Zoek spullen en blijf binnen de lijn.</div></div></div>
+        </div>
+        <div class="set" style="margin-top:14px">
+          <div class="set-ic"><i class="fas fa-sliders"></i></div>
+          <div class="set-tx"><div class="set-t">Zelf alles aanpassen</div><div class="set-s">Toon in de volgende stappen alle opties, ook die niet bij de stijl horen</div></div>
+          <label class="switch"><input type="checkbox" id="advancedOn" onchange="applyStyleVisibility()"><span class="slider"></span></label>
+        </div>
+        <div class="pts-note" id="styleSummary"></div>
+      </div>
+    </div>
+
+    <!-- ===================== 3. MOEILIJKHEID ===================== -->
+    <div class="step" id="step3">
+      <div class="panel">
         <div class="panel-h"><div class="panel-ic" style="--c:var(--warn)"><i class="fas fa-gauge-high"></i></div><div class="panel-t">Moeilijkheid {{ ibtn('Moeilijkheid en punten', 'Kies hoe moeilijk het spel is voor de hunters. Is het makkelijker voor de hunters, dan krijgen zij minder punten en de runners meer (want die hebben het zwaarder). Is het moeilijker voor de hunters, dan krijgen zij meer punten en de runners minder.') }}</div></div>
         <p class="panel-sub">Kies een preset. Wat het makkelijker maakt voor de ene kant, levert de andere kant meer punten op.</p>
         <input type="hidden" name="difficulty" id="diffInput" value="medium">
@@ -257,7 +289,7 @@ details.more summary::-webkit-details-marker{display:none}
     </div>
 
     <!-- ===================== 3. INSTELLINGEN + SPEELVELD ===================== -->
-    <div class="step" id="step3">
+    <div class="step" id="step4">
       <div class="pts" style="margin-bottom:14px">
         <div class="pts-c h"><small><i class="fas fa-crosshairs"></i> Hunters</small><b id="multiH2">x1.25</b></div>
         <div class="pts-c r"><small><i class="fas fa-person-running"></i> Runners</small><b id="multiR2">x1.25</b></div>
@@ -401,10 +433,10 @@ details.more summary::-webkit-details-marker{display:none}
         <button type="button" class="btn btn-primary btn-sm" onclick="saveNamedProfilePlayfield()"><i class="fas fa-floppy-disk"></i> Nu opslaan</button>
       </div>
 
-      <div class="panel">
-        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-box-open"></i></div><div class="panel-t">Extra's {{ ibtn("Extra's", 'Kies welke extra\'s in dit spel meedoen. Een spelstijl in de volgende stap zet er alvast een paar klaar.') }}</div></div>
+      <div class="panel" id="extrasPanel" data-feat="loot">
+        <div class="panel-h"><div class="panel-ic" style="--c:var(--hunter)"><i class="fas fa-box-open"></i></div><div class="panel-t">Lootboxen &amp; extra's {{ ibtn("Extra's", 'Lootboxen (dropboxes) liggen verspreid over de kaart. Onder “Zelf alles aanpassen” kun je ook landmijnen, lasers en andere extra\'s aan zetten.') }}</div></div>
         <p class="panel-sub">Tik om aan of uit te zetten.</p>
-        <div class="tiles">
+        <div class="tiles" id="extraTiles">
           {{ tile('extra_dropboxes', 'img_extra_dropboxes', 'Dropboxes', 'fa-box-open', 'onchange="tog(\'dropboxOpts\',this)"') }}
           {{ tile('extra_landmine', 'img_extra_landmine', 'Landmijn', 'fa-bomb') }}
           {{ tile('extra_laser', 'img_extra_laser', 'Laser detectie', 'fa-satellite-dish') }}
@@ -429,28 +461,8 @@ details.more summary::-webkit-details-marker{display:none}
     </div>
 
     <!-- ===================== 4. STIJL & SFEER ===================== -->
-    <div class="step" id="step4">
-      <div class="panel">
-        <div class="panel-h"><div class="panel-ic"><i class="fas fa-layer-group"></i></div><div class="panel-t">Spelstijl {{ ibtn('Spelstijl', 'Een spelstijl zet in één keer een set extra\'s klaar. Je kunt daarna in stap 3 nog zelf bijsturen.') }}</div></div>
-        <p class="panel-sub">Kies de sfeer van het spel. Dit zet alvast extra's klaar.</p>
-        <input type="hidden" name="game_style" id="gameStyleInput" value="classic">
-        <div class="picks">
-          <div class="pick sel" id="style-classic" onclick="selectGameStyle('classic')">
-            {% if img('img_style_classic') %}<div class="bg" style="background-image:url('{{ img('img_style_classic') }}')"></div>{% else %}<div class="ph"><i class="fas fa-eye-slash"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Classic</div><div class="pick-d">Rustige basis: alleen de offline-knop. Goed voor een eerste test.</div></div></div>
-          <div class="pick" id="style-adventure" onclick="selectGameStyle('adventure')">
-            {% if img('img_style_adventure') %}<div class="bg" style="background-image:url('{{ img('img_style_adventure') }}')"></div>{% else %}<div class="ph"><i class="fas fa-compass"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Adventure</div><div class="pick-d">Dropboxes, Echo en kleine verrassingen.</div></div></div>
-          <div class="pick" id="style-battlefield" onclick="selectGameStyle('battlefield')">
-            {% if img('img_style_battlefield') %}<div class="bg" style="background-image:url('{{ img('img_style_battlefield') }}')"></div>{% else %}<div class="ph"><i class="fas fa-burst"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Battlefield</div><div class="pick-d">Alles aan: dropboxes, landmijnen, laser, tripwire, hacker, glitch en echo.</div></div></div>
-          <div class="pick" id="style-stealth" onclick="selectGameStyle('stealth')">
-            {% if img('img_style_stealth') %}<div class="bg" style="background-image:url('{{ img('img_style_stealth') }}')"></div>{% else %}<div class="ph"><i class="fas fa-user-secret"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Shadow Ops</div><div class="pick-d">Sluipen, hacken, echo's en glitches.</div></div></div>
-        </div>
-      </div>
-
-      <div class="panel">
+    <div class="step" id="step5">
+      <div class="panel" id="missionsPanel" data-feat="missions">
         <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-flag"></i></div><div class="panel-t">Missies voor runners {{ ibtn('Missies', 'Zodat runners niet de hele tijd op dezelfde plek blijven zitten: er verschijnt een missiepunt op de kaart. Wie als runner de cirkel bereikt en daar de ingestelde tijd blijft, krijgt bonuspunten. Daarna verschijnt de volgende missie ergens anders. Een verlopen missie verhuist ook. Lootboxen blijven zoals ze zijn.') }}</div></div>
         <p class="panel-sub">Een missiepunt trekt de runners over de kaart. Bonuspunten voor wie hem haalt.</p>
         {% if img('img_style_missions') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_missions') }}')"></div></div>{% endif %}
@@ -470,7 +482,7 @@ details.more summary::-webkit-details-marker{display:none}
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="zonePanel" data-feat="zone">
         <div class="panel-h"><div class="panel-ic" style="--c:#ef4444"><i class="fas fa-circle-dot"></i></div><div class="panel-t">Krimpende zone {{ ibtn('Krimpende zone', 'Net als bij Fortnite wordt het speelveld steeds kleiner. Iedereen krijgt vooraf een melding met een aftelling en het nieuwe centrum (ook op de kaart). Wie buiten de nieuwe zone staat loopt af. Dit werkt het mooist met een getekend speelveld; zonder speelveld maakt VenTrax een cirkel van 600 m rond de spelers.') }}</div></div>
         <p class="panel-sub">Het speelveld wordt tijdens het spel kleiner. Je kunt dit aan- en uitzetten.</p>
         {% if img('img_style_zone') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_zone') }}')"></div></div>{% endif %}
@@ -539,7 +551,7 @@ details.more summary::-webkit-details-marker{display:none}
     </div>
 
     <!-- ===================== 5. SAMENVATTING ===================== -->
-    <div class="step" id="step5">
+    <div class="step" id="step6">
       <div id="summaryContent"></div>
     </div>
   </form>
@@ -560,20 +572,20 @@ function escHtml(v){
   return String(v ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 }
 
-const STEP_NAMES=['Basis','Moeilijkheid','Instellingen','Stijl & sfeer','Samenvatting'];
+const STEP_NAMES=['Basis','Spelstijl','Moeilijkheid','Instellingen',"Extra's & sfeer",'Samenvatting'];
 function goStep(n){
-  if(n<1||n>5) return;
+  if(n<1||n>6) return;
   document.getElementById('step'+currentStep).classList.remove('active');
   currentStep=n;
   document.getElementById('step'+n).classList.add('active');
   document.querySelectorAll('#prog i').forEach((b,i)=>b.classList.toggle('on',i<n));
   document.getElementById('stepName').textContent=STEP_NAMES[n-1];
-  document.getElementById('stepOf').textContent='Stap '+n+' van 5';
+  document.getElementById('stepOf').textContent='Stap '+n+' van 6';
   document.getElementById('btnBack').style.display=n>1?'':'none';
-  document.getElementById('btnNext').style.display=n<5?'':'none';
-  document.getElementById('createBtn').style.display=n===5?'':'none';
-  if(n===5) buildSummary();
-  if(n===3) setTimeout(initPlayfieldMap, 80);
+  document.getElementById('btnNext').style.display=n<6?'':'none';
+  document.getElementById('createBtn').style.display=n===6?'':'none';
+  if(n===6) buildSummary();
+  if(n===4) setTimeout(initPlayfieldMap, 80);
   window.scrollTo({top:0,behavior:'smooth'});
 }
 function nextStep(){
@@ -695,32 +707,52 @@ function setNamedCheck(name, on){
   const el=document.querySelector(`[name=${name}]`);
   if(el) el.checked=!!on;
 }
-function selectGameStyle(style){
+// What each style contains. The steps after it only show the questions that belong to the style.
+const STYLE_INFO={
+  classic:{name:'Classic',loot:false,zone:false,missions:false,text:'Jachtseizoen: alleen hunters tegen runners. Er komen geen lootboxen, krimpende zone of missies in het spel.'},
+  adventure:{name:'Adventure',loot:true,zone:false,missions:false,text:'Met lootboxen. Je stelt ze in bij “Lootboxen & extra\'s”.'},
+  battlefield:{name:'Battlefield',loot:false,zone:true,missions:false,text:'Met een krimpende zone. Je stelt die in bij “Extra\'s & sfeer”. Hij werkt het best met een getekend speelveld.'},
+  stealth:{name:'Shadow Ops',loot:true,zone:true,missions:true,text:'Met krimpende zone, missies voor runners en lootboxen.'},
+  survival:{name:'Survival',loot:true,zone:true,missions:false,text:'Met krimpende zone en lootboxen.'}
+};
+function selectGameStyle(style, opts){
+  opts=opts||{};
+  if(!STYLE_INFO[style]) style='classic';
   document.getElementById('gameStyleInput').value=style;
-  ['classic','adventure','battlefield','stealth'].forEach(s=>{
+  Object.keys(STYLE_INFO).forEach(s=>{
     const el=document.getElementById('style-'+s);
     if(el) el.classList.toggle('sel', s===style);
   });
-  const presets={
-    classic:{dropboxes:false,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:false,classes:false,missions:false},
-    adventure:{dropboxes:true,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:true,classes:true,missions:true},
-    battlefield:{dropboxes:true,landmine:true,laser:true,tripwire:true,hacker:true,glitch:true,echo:true,classes:true,missions:true},
-    stealth:{dropboxes:true,landmine:false,laser:false,tripwire:true,hacker:true,glitch:true,echo:true,classes:true,missions:true}
+  if(opts.preset!==false){
+    const st=STYLE_INFO[style];
+    // The style decides the big features; the small extras (landmine, laser, ...) start off.
+    setNamedCheck('extra_dropboxes',st.loot);
+    ['extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'].forEach(n=>setNamedCheck(n,false));
+    const cls=document.getElementById('classesEnabled'); if(cls) cls.checked=false;
+    const ms=document.getElementById('missionsOn'); if(ms){ ms.checked=st.missions; tog('missionOpts',ms); }
+    const sh=document.getElementById('shrinkOn'); if(sh){ sh.checked=st.zone; tog('shrinkOpts',sh); }
+    const drop=document.querySelector('[name=extra_dropboxes]'); if(drop) tog('dropboxOpts', drop);
+    if(typeof renderShrinkPlan==='function') renderShrinkPlan();
+  }
+  applyStyleVisibility();
+}
+// Show a panel when the style has that feature, "alles aanpassen" is on, or the option is switched on anyway.
+function applyStyleVisibility(){
+  const st=STYLE_INFO[document.getElementById('gameStyleInput').value]||STYLE_INFO.classic;
+  const adv=!!document.getElementById('advancedOn')?.checked;
+  const isOn=n=>!!document.querySelector('[name='+n+']')?.checked;
+  const vis={
+    extrasPanel: st.loot||adv||['extra_dropboxes','extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'].some(isOn),
+    missionsPanel: st.missions||adv||isOn('missions'),
+    zonePanel: st.zone||adv||isOn('shrinking_zone')
   };
-  const p=presets[style]||presets.classic;
-  setNamedCheck('extra_dropboxes',p.dropboxes);
-  setNamedCheck('extra_landmine',p.landmine);
-  setNamedCheck('extra_laser',p.laser);
-  setNamedCheck('extra_tripwire',p.tripwire);
-  setNamedCheck('feat_hacker',p.hacker);
-  setNamedCheck('feat_glitch',p.glitch);
-  setNamedCheck('extra_echo',p.echo);
-  const cls=document.getElementById('classesEnabled');
-  if(cls) cls.checked=!!p.classes;
-  const ms=document.getElementById('missionsOn'); if(ms){ ms.checked=!!p.missions; tog('missionOpts',ms); }
-  const drop=document.querySelector('[name=extra_dropboxes]');
-  if(drop) tog('dropboxOpts', drop);
-  showToast(`Spelstijl gekozen: ${style==='classic'?'Classic':style==='adventure'?'Adventure':style==='battlefield'?'Battlefield':'Shadow Ops'}`,'info');
+  Object.keys(vis).forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display=vis[id]?'':'none'; });
+  // inside the extras: only lootboxes unless everything is unlocked (or a small extra is already on)
+  document.querySelectorAll('#extraTiles .tile').forEach(t=>{
+    const inp=t.querySelector('input'); const isLoot=inp.name==='extra_dropboxes';
+    t.style.display=(isLoot||adv||inp.checked)?'':'none';
+  });
+  const sum=document.getElementById('styleSummary'); if(sum) sum.innerHTML='<b>'+st.name+'</b>: '+st.text;
 }
 
 function checkCustom(selId, rowId){
@@ -760,6 +792,7 @@ tog('targetOpts',document.getElementById('tgEn'));
 tog('offlineOpts',document.getElementById('offBtn'));
 tog('pauseOpts',document.getElementById('pauseAllw'));
 selDiff('medium');
+setTimeout(()=>applyStyleVisibility(),0);
 
 // Live planning of the shrinking zone, so the maker sees what 30% / 8 min really does over the game
 function pfFieldRadiusM(){
@@ -851,7 +884,7 @@ function applyGameTemplate(idx){
   setFormValue('shrinking_zone', e.shrinking_zone); setFormValue('zone_first_min', e.zone_first_min); setFormValue('zone_interval_min', e.zone_interval_min);
   setFormValue('zone_shrink_pct', e.zone_shrink_pct); setFormValue('zone_min_m', e.zone_min_m);
   tog('shrinkOpts', document.getElementById('shrinkOn'));
-  if(e.game_style) selectGameStyle(e.game_style);
+  if(e.game_style) selectGameStyle(e.game_style,{preset:false});
   if(t.playfield && t.playfield.points) loadPlayfieldData(t.playfield);
   ['targetOpts','offlineOpts','pauseOpts','dropboxOpts'].forEach(id=>{
     const map={targetOpts:'target_enabled',offlineOpts:'offline_button',pauseOpts:'pause_allowed',dropboxOpts:'extra_dropboxes'};
@@ -1112,7 +1145,7 @@ document.querySelectorAll('[name=playfieldColorUi]').forEach(r=>r.addEventListen
 function buildSummary(){
   const role=document.querySelector('[name=role]:checked')?.value||'hunter';
   const diffNames={easy:'Makkelijk',medium:'Gemiddeld',hard:'Moeilijk',custom:'Custom'};
-  const styleNames={classic:'Classic',adventure:'Adventure',battlefield:'Battlefield',stealth:'Shadow Ops'};
+  const styleNames={classic:'Classic',adventure:'Adventure',battlefield:'Battlefield',stealth:'Shadow Ops',survival:'Survival'};
   const hunterSel=document.getElementById('hunterIvSel');
   const hunterTxt=hunterSel?.value==='custom'?(document.querySelector('[name=hunter_interval_custom]')?.value||'?')+' sec':hunterSel?.options[hunterSel.selectedIndex]?.text||'-';
   const runnerSel=document.getElementById('runnerIvSel');

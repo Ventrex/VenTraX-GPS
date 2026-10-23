@@ -708,6 +708,13 @@ ALLOWED_SOUND_EXT = {'mp3', 'ogg', 'wav', 'm4a', 'aac', 'webm'}
 SOUND_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio', 'themes')
 
 
+from sqlalchemy import event as _sa_event
+
+@_sa_event.listens_for(Game, 'after_delete')
+def _purge_state_of_deleted_game(mapper, connection, target):
+    connection.execute(SiteSetting.__table__.delete().where(SiteSetting.__table__.c.key.in_(game_state_keys(target.id))))
+
+
 class SoundTheme(db.Model):
     """A named set of sounds (and an optional look) that a game can use."""
     id          = db.Column(db.Integer, primary_key=True)
@@ -1025,6 +1032,17 @@ def _zone_state_key(game_id):
 
 def _pause_state_key(game_id):
     return f'pause_state:{game_id}'
+
+_GAME_STATE_PREFIXES = ('playfield', 'game_extras', 'game_lootboxes', 'game_classes', 'game_effects', 'runner_location_snapshots',
+                        'game_end_result', 'zone_state', 'pause_state', 'missions', 'zone_shrink')
+
+def game_state_keys(game_id):
+    return [f'{p}:{game_id}' for p in _GAME_STATE_PREFIXES]
+
+def purge_game_state(game_id):
+    """Per-game settings (zone state, life bars, missions ...) are stored under the game id. SQLite hands out the
+    id of a deleted game again, so a new game must never inherit what an old game left behind."""
+    SiteSetting.query.filter(SiteSetting.key.in_(game_state_keys(game_id))).delete(synchronize_session=False)
 
 def get_game_pause_state(game):
     try:
@@ -1499,6 +1517,8 @@ def update_zone_pressure(game, player, outside_distance_m, forbidden=False):
         seconds = min(limit_sec, seconds + delta)
     else:
         seconds = max(0.0, seconds - delta * limit_sec / ZONE_LIFE_RECOVER_SEC)
+        if seconds < 1.0:
+            seconds = 0.0                                   # a sliver is not worth a bar
     item.update({
         'seconds': seconds,
         'last_ts': now_ts,
@@ -2950,6 +2970,7 @@ def new_game():
             bike_allowed          = f.get('bike_allowed') == 'on',
         )
         db.session.add(game); db.session.flush()
+        purge_game_state(game.id)
         codename = assign_codename(f.get('role', 'hunter'), game.id)
         db.session.add(GamePlayer(
             game_id=game.id, user_id=current_user.id,
@@ -3384,6 +3405,7 @@ def api_start_game(code):
                 for p in g2.players.all():
                     p.user.total_games += 1
                     p.last_seen = g2.started_at        # everybody counts as present at the start
+                SiteSetting.set(_zone_state_key(g2.id), '{}')    # everybody starts with a full life bar
                 db.session.commit()
                 hub.broadcast(code, 'game_started', {
                     'code': code,
@@ -5215,7 +5237,7 @@ IMAGE_SLOTS = [
                  ('img_extra_tripwire', 'Tripwire'), ('img_extra_hacker', 'Hacker'), ('img_extra_glitch', 'Glitch'),
                  ('img_extra_echo', 'Echo')]),
     ('Spelstijl', [('img_style_classic', 'Classic'), ('img_style_adventure', 'Adventure'),
-                   ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'),
+                   ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'), ('img_style_survival', 'Survival'),
                    ('img_style_zone', 'Krimpende zone'), ('img_style_missions', 'Missies')]),
     ("Class-thema's", [('img_classtheme_street', 'Street Ops'), ('img_classtheme_space', 'Space Scouts'),
                        ('img_classtheme_forest', 'Boswachters'), ('img_classtheme_spy', 'Spy Kids')]),
