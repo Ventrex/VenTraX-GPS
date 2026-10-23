@@ -33,9 +33,11 @@
 :root {
   --accent:  {{ site_accent or '#e11d48' }};
   --accent-glow: {{ site_accent or '#e11d48' }}44;
-  --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--bg4:#22222e;
-  --border:#2a2a38;
-  --text:#f0f0f8;--text2:#8888aa;
+  --bg:{{ site_bg_color or '#000000' }};--bg2:#0b0b0e;--bg3:#131317;--bg4:#1c1c21;
+  --border:#26262c;
+  --bg2:color-mix(in srgb,var(--bg) 95%,#fff);--bg3:color-mix(in srgb,var(--bg) 91%,#fff);--bg4:color-mix(in srgb,var(--bg) 86%,#fff);
+  --border:color-mix(in srgb,color-mix(in srgb,var(--bg) 87%,#fff) 88%,var(--accent));
+  --text:#f2f0f2;--text2:#948a92;
   --hunter:#3b82f6;--runner:#10b981;--warn:#f59e0b;--danger:#ef4444;
   --r:{{ site_border_radius or '12' }}px;
   --r2:calc({{ site_border_radius or '12' }}px * .66);
@@ -233,7 +235,7 @@ footer a{color:var(--text2)}
    ===================================================================== */
 :root{
   --accent-2:color-mix(in srgb,var(--accent) 70%,#7c3aed);
-  --glass:rgba(17,17,24,.62);
+  --glass:color-mix(in srgb,var(--bg) 72%,transparent);
   --ring:0 0 0 1px rgba(255,255,255,.04) inset;
   --sh:0 10px 40px rgba(0,0,0,.45);
   --sh2:0 2px 14px rgba(0,0,0,.28);
@@ -257,7 +259,7 @@ h1,h2,h3{letter-spacing:-.02em}
 .mobile-menu{top:64px;background:var(--bg2);border-radius:0 0 20px 20px}
 
 /* cards + buttons */
-.card{background:linear-gradient(180deg,color-mix(in srgb,var(--bg2) 92%,#fff 8%),var(--bg2));border:1px solid rgba(255,255,255,.07);border-radius:calc(var(--r) + 4px);box-shadow:var(--sh2),var(--ring)}
+.card{background:linear-gradient(180deg,color-mix(in srgb,var(--bg2) 97%,#fff 3%),var(--bg2));border:1px solid rgba(255,255,255,.07);border-radius:calc(var(--r) + 4px);box-shadow:var(--sh2),var(--ring)}
 [data-theme="light"] .card{border-color:var(--border)}
 .btn{border-radius:999px;font-weight:700;letter-spacing:.01em;padding:11px 22px}
 .btn-lg{padding:14px 28px;font-size:15px}
@@ -309,29 +311,10 @@ footer{background:transparent;border-top:1px solid rgba(255,255,255,.06);padding
 .setup-step.done{border-color:rgba(16,185,129,.4)}.setup-step.done .ic{background:rgba(16,185,129,.15);color:var(--runner)}
 
 
-/* CLASSIC SKIN: OLED black + dark red (dark mode only; light mode keeps its own palette) */
-html[data-skin="classic"][data-theme="dark"]{
-  --accent:#c4161c;--accent-glow:#c4161c55;--accent-2:#7f1016;
-  --bg:#000;--bg2:#08080a;--bg3:#101013;--bg4:#18181c;--border:#22161a;
-  --text:#f2f0f0;--text2:#8f8588;--glass:rgba(0,0,0,.72);
-}
-html[data-skin="classic"][data-theme="dark"] body{background:#000}
-html[data-skin="classic"][data-theme="dark"] .site-bg{background:#000}
-html[data-skin="classic"][data-theme="dark"] .site-bg::before{background:
-  radial-gradient(45% 35% at 15% 0%,rgba(196,22,28,.16),transparent 70%),
-  radial-gradient(40% 30% at 90% 100%,rgba(127,16,22,.14),transparent 70%)}
-html[data-skin="classic"][data-theme="dark"] .card{background:var(--bg2)}
-html[data-skin="classic"][data-theme="dark"] .btn-primary{background:linear-gradient(135deg,#c4161c,#7f1016)}
-
 /* =====================================================================
    HALLOWEEN SKIN  (html[data-skin="halloween"])
    ===================================================================== */
-html[data-skin="halloween"]{
-  --accent:#ff6a13;--accent-glow:#ff6a1366;--accent-2:#a21caf;
-  --bg:#06040a;--bg2:#0f0a14;--bg3:#18101f;--bg4:#221729;--border:#2c1d35;
-  --text:#f3ecf7;--text2:#a595b5;--runner:#7ee081;--hunter:#a78bfa;
-  --glass:rgba(12,7,17,.66);
-}
+html[data-skin="halloween"]{--accent-2:#a21caf;--runner:#7ee081;--hunter:#a78bfa}
 html[data-skin="halloween"] .nav-brand .faye,
 html[data-skin="halloween"] .hero-title .accent{color:var(--accent)}
 html[data-skin="halloween"] body{background:var(--bg)}
@@ -399,23 +382,10 @@ html[data-skin="halloween"] .hw-hide{display:none}
     <a href="{{ url_for('dashboard') }}" class="nl {% if request.endpoint=='dashboard' %}active{% endif %}"><i class="fas fa-grip"></i> {{ t('nav.dashboard') }}</a>
     <a href="{{ url_for('news') }}" class="nl {% if request.endpoint in ('news','news_submit') %}active{% endif %}"><i class="fas fa-newspaper"></i> {{ t('nav.news') }}</a>
     {% if current_user.is_admin %}
-    <div class="dd">
-      <a href="{{ url_for('admin') }}" class="nl {% if request.endpoint in ('admin','admin_todo','admin_log','admin_reports','admin_photos','admin_changelog','admin_sounds','admin_pages','admin_texts') %}active{% endif %}">
+    <a href="{{ url_for('admin') }}" class="nl {% if request.endpoint and request.endpoint.startswith('admin') %}active{% endif %}">
       <i class="fas fa-shield-halved"></i> Admin
       {% if pending_news %}<span style="background:var(--accent);color:#fff;border-radius:8px;font-size:10px;padding:1px 5px">{{ pending_news }}</span>{% endif %}
-      </a>
-      <div class="dd-menu">
-        <a href="{{ url_for('admin') }}" class="dd-item"><i class="fas fa-shield-halved"></i> Admin Panel</a>
-        <a href="{{ url_for('admin_sounds') }}" class="dd-item"><i class="fas fa-volume-high"></i> Geluiden &amp; thema's</a>
-        <a href="{{ url_for('admin_pages') }}" class="dd-item"><i class="fas fa-file-lines"></i> Pagina's</a>
-        <a href="{{ url_for('admin_texts') }}" class="dd-item"><i class="fas fa-pen-to-square"></i> Teksten</a>
-        <a href="{{ url_for('admin_todo') }}" class="dd-item"><i class="fas fa-list-check"></i> Admin TODO</a>
-        <a href="{{ url_for('admin_log') }}" class="dd-item"><i class="fas fa-list"></i> Activiteitenlog</a>
-        <a href="{{ url_for('admin_reports') }}" class="dd-item"><i class="fas fa-flag"></i> Meldingen</a>
-        <a href="{{ url_for('admin_photos') }}" class="dd-item"><i class="fas fa-images"></i> Foto goedkeuren</a>
-        <a href="{{ url_for('admin_changelog') }}" class="dd-item"><i class="fas fa-code-branch"></i> Changelog beheren</a>
-      </div>
-    </div>
+    </a>
     {% endif %}
     {% endif %}
   </div>
@@ -454,10 +424,7 @@ html[data-skin="halloween"] .hw-hide{display:none}
   <a href="{{ url_for('join') }}?scan=1" class="nl"><i class="fas fa-qrcode"></i> QR Scannen</a>
   <a href="{{ url_for('news') }}" class="nl"><i class="fas fa-newspaper"></i> Nieuws</a>
   <a href="{{ url_for('account') }}" class="nl"><i class="fas fa-user"></i> Profiel</a>
-  {% if current_user.is_admin %}<a href="{{ url_for('admin') }}" class="nl"><i class="fas fa-shield-halved"></i> Admin</a>
-  <a href="{{ url_for('admin_sounds') }}" class="nl"><i class="fas fa-volume-high"></i> Geluiden</a>
-  <a href="{{ url_for('admin_pages') }}" class="nl"><i class="fas fa-file-lines"></i> Pagina's</a>
-  <a href="{{ url_for('admin_texts') }}" class="nl"><i class="fas fa-pen-to-square"></i> Teksten</a>{% endif %}
+  {% if current_user.is_admin %}<a href="{{ url_for('admin') }}" class="nl"><i class="fas fa-shield-halved"></i> Admin</a>{% endif %}
   {% for np in nav_pages %}<a href="{{ url_for('cms_page', slug=np.slug) }}" class="nl">{{ np.title }}</a>{% endfor %}
   <div style="border-top:1px solid var(--border);margin:6px 0"></div>
   <a href="{{ url_for('logout') }}" class="nl" style="color:var(--danger)"><i class="fas fa-arrow-right-from-bracket"></i> Uitloggen</a>

@@ -24,183 +24,12 @@
   <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800;margin-bottom:6px">
     <i class="fas fa-shield-halved" style="color:var(--accent)"></i> Admin Panel
   </h1>
-  <p style="color:var(--text2);margin-bottom:28px">Volledig beheer van {{ site_name }}</p>
+  <p style="color:var(--text2);margin-bottom:20px">Volledig beheer van {{ site_name }}</p>
 
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="showTab('site',this)"><i class="fas fa-palette"></i> Site & Thema</button>
-    <button class="tab-btn" onclick="showTab('news',this)">
-      <i class="fas fa-newspaper"></i> Nieuws
-      {% if pending_news > 0 %}<span style="background:var(--accent);color:#fff;border-radius:10px;font-size:10px;padding:1px 7px;margin-left:4px">{{ pending_news }}</span>{% endif %}
-    </button>
-    <button class="tab-btn" onclick="showTab('catalog',this)"><i class="fas fa-th-large"></i> Spelen</button>
-    <button class="tab-btn" onclick="showTab('users',this)"><i class="fas fa-users"></i> Gebruikers ({{ users|length }})</button>
-    <button class="tab-btn" onclick="showTab('games',this)"><i class="fas fa-gamepad"></i> Spellen ({{ games|length }})</button>
-    <a class="tab-btn" href="{{ url_for('admin_sounds') }}" style="text-decoration:none"><i class="fas fa-volume-high"></i> Geluiden</a>
-    <a class="tab-btn" href="{{ url_for('admin_pages') }}" style="text-decoration:none"><i class="fas fa-file-lines"></i> Pagina's</a>
-    <a class="tab-btn" href="{{ url_for('admin_texts') }}" style="text-decoration:none"><i class="fas fa-pen-to-square"></i> Teksten</a>
-    <a class="tab-btn" href="{{ url_for('admin_todo') }}" style="text-decoration:none"><i class="fas fa-list-check"></i> TODO</a>
-  </div>
-
-  <!-- ── Tab: Site & Thema ─────────────────────────────── -->
-  <div class="tab-pane active" id="tab-site">
-    <form method="POST" action="/admin/settings" enctype="multipart/form-data">
-      <div class="grid g2" style="gap:20px;align-items:start">
-
-        <!-- Branding -->
-        <div class="card">
-          <div class="card-title"><i class="fas fa-tag"></i> Branding</div>
-          <div class="form-group">
-            <label class="form-label">Site Naam</label>
-            <input name="site_name" class="form-control" value="{{ settings.get('site_name','VenTrax') }}">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Tagline</label>
-            <input name="site_tagline" class="form-control" value="{{ settings.get('site_tagline','') }}" placeholder="Het ultieme real-time jachtspel">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Accent Kleur</label>
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-              <input type="color" name="site_accent" id="accentPick" value="{{ settings.get('site_accent','#e11d48') }}"
-                     style="width:50px;height:38px;padding:2px;border:1px solid var(--border);border-radius:6px;background:var(--bg3);cursor:pointer"
-                     oninput="document.getElementById('accentVal').textContent=this.value">
-              <span id="accentVal" style="font-family:monospace;font-size:14px">{{ settings.get('site_accent','#e11d48') }}</span>
-              <!-- Presets -->
-              <div style="display:flex;gap:6px;flex-wrap:wrap">
-                {% for c in ['#e11d48','#7c3aed','#2563eb','#059669','#d97706','#dc2626','#0891b2'] %}
-                <div onclick="document.getElementById('accentPick').value='{{ c }}';document.getElementById('accentVal').textContent='{{ c }}'"
-                     style="width:28px;height:28px;border-radius:50%;background:{{ c }};cursor:pointer;border:2px solid var(--border);transition:transform .2s"
-                     onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'"></div>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Hoek Radius (px)</label>
-            <input type="range" name="site_border_radius" min="0" max="24" value="{{ settings.get('site_border_radius','12') }}"
-                   oninput="document.getElementById('radiusVal').textContent=this.value+'px'" style="width:100%;accent-color:var(--accent)">
-            <div class="form-hint">Huidig: <span id="radiusVal">{{ settings.get('site_border_radius','12') }}px</span></div>
-          </div>
-        </div>
-
-        <!-- Typography -->
-        <div class="card">
-          <div class="card-title"><i class="fas fa-font"></i> Typografie (Lettertype)</div>
-          <div class="form-group">
-            <label class="form-label">Hoofdlettertype (titels)</label>
-            <select name="site_font" class="form-control" id="hfontSel" onchange="updateFontPreview()">
-              {% for f in ['Syne','Orbitron','Bebas Neue','Rajdhani','Exo 2','Oxanium','Press Start 2P','Cinzel','Playfair Display','Montserrat'] %}
-              <option value="{{ f }}" {{ 'selected' if settings.get('site_font','Syne')==f }}>{{ f }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Broodtekst lettertype</label>
-            <select name="site_font_body" class="form-control" id="bfontSel" onchange="updateFontPreview()">
-              {% for f in ['DM Sans','Inter','Nunito','Source Sans 3','Roboto','Open Sans','Lato','Jost','Outfit','Quicksand'] %}
-              <option value="{{ f }}" {{ 'selected' if settings.get('site_font_body','DM Sans')==f }}>{{ f }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div style="padding:16px;background:var(--bg3);border-radius:var(--r2);margin-top:4px">
-            <div id="hfontPrev" style="font-size:24px;font-weight:800;margin-bottom:6px">VenTrax Titel</div>
-            <div id="bfontPrev" style="font-size:14px;color:var(--text2);line-height:1.6">Dit is hoe de broodtekst eruit ziet op de website.</div>
-          </div>
-        </div>
-
-        <!-- Logo -->
-        <div class="card">
-          <div class="card-title"><i class="fas fa-image"></i> Logo</div>
-          {% if settings.get('site_logo') %}
-          <div style="margin-bottom:14px;background:var(--bg3);border-radius:8px;padding:14px;text-align:center">
-            <img src="/backgrounds/{{ settings.site_logo }}" style="max-height:80px;object-fit:contain;margin:0 auto" alt="Logo">
-          </div>
-          {% endif %}
-          <div class="upload-zone" id="logoZone">
-            <input type="file" name="site_logo" accept="image/*" onchange="previewUp(this,'logoP','logoZone')">
-            <i class="fas fa-cloud-upload-alt" style="font-size:28px;color:var(--accent);display:block;margin-bottom:8px"></i>
-            <div style="font-weight:600;margin-bottom:4px">Klik om logo te uploaden</div>
-            <div style="font-size:12px;color:var(--text2)">PNG transparant aanbevolen · max 400×200</div>
-            <img id="logoP" style="display:none;margin:10px auto 0;max-height:60px" alt="">
-          </div>
-          {% if settings.get('site_logo') %}
-          <button type="submit" name="clear_logo" value="1" class="btn btn-danger btn-sm" style="margin-top:10px" formnovalidate>
-            <i class="fas fa-trash"></i> Logo verwijderen
-          </button>
-          {% endif %}
-        </div>
-
-        <!-- Background -->
-        <div class="card">
-          <div class="card-title"><i class="fas fa-panorama"></i> Achtergrond</div>
-          {% if settings.get('site_bg') %}
-          <div style="margin-bottom:12px;border-radius:8px;overflow:hidden;height:120px;position:relative">
-            <img src="/backgrounds/{{ settings.site_bg }}" style="width:100%;height:100%;object-fit:cover">
-            <div style="position:absolute;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px">Huidige achtergrond</div>
-          </div>
-          {% endif %}
-          <div class="upload-zone" id="bgZone">
-            <input type="file" name="site_bg" accept="image/*" onchange="previewUp(this,'bgP','bgZone')">
-            <i class="fas fa-mountain-sun" style="font-size:28px;color:var(--accent);display:block;margin-bottom:8px"></i>
-            <div style="font-weight:600;margin-bottom:4px">Upload achtergrond</div>
-            <div style="font-size:12px;color:var(--text2)">Beste: 2560×1440px · JPG/PNG/WEBP</div>
-            <img id="bgP" style="display:none;margin:10px auto 0;max-height:100px;width:100%;object-fit:cover;border-radius:6px" alt="">
-          </div>
-          <div class="form-group" style="margin-top:12px">
-            <label class="form-label">Overlay transparantie</label>
-            <input type="range" name="site_bg_overlay" min="0.3" max="0.95" step="0.05"
-                   value="{{ settings.get('site_bg_overlay','0.82') }}"
-                   oninput="document.getElementById('overlayVal').textContent=Math.round(this.value*100)+'%'"
-                   style="width:100%;accent-color:var(--accent)">
-            <div class="form-hint">Huidig: <span id="overlayVal">{{ (settings.get('site_bg_overlay','0.82')|float * 100)|round|int }}%</span></div>
-          </div>
-          {% if settings.get('site_bg') %}
-          <button type="submit" name="clear_bg" value="1" class="btn btn-danger btn-sm" style="margin-top:8px" formnovalidate>
-            <i class="fas fa-trash"></i> Achtergrond verwijderen
-          </button>
-          {% endif %}
-        </div>
-
-        <!-- Difficulty logos -->
-        <div class="card" style="grid-column:1/-1">
-          <div class="card-title"><i class="fas fa-sliders"></i> Moeilijkheid Afbeeldingen</div>
-          <div class="grid g2" style="gap:14px">
-            {% for field,label in [('diff_easy_img','Logo Makkelijk spel'),('diff_medium_img','Logo Gemiddeld spel'),('diff_hard_img','Logo Moeilijk spel'),('diff_custom_img','Logo Custom spel')] %}
-            <div class="form-group">
-              <label class="form-label">{{ label }}</label>
-              {% if settings.get(field) %}
-              <div style="height:100px;border-radius:8px;overflow:hidden;background:var(--bg3);margin-bottom:8px">
-                <img src="/backgrounds/{{ settings.get(field) }}" style="width:100%;height:100%;object-fit:cover" alt="{{ label }}">
-              </div>
-              {% endif %}
-              <div class="upload-zone" id="{{ field }}Zone">
-                <input type="file" name="{{ field }}" accept="image/*" onchange="previewUp(this,'{{ field }}P','{{ field }}Zone')">
-                <i class="fas fa-cloud-upload-alt" style="font-size:24px;color:var(--accent);display:block;margin-bottom:6px"></i>
-                <div style="font-weight:600;margin-bottom:4px">{{ label }} uploaden</div>
-                <div style="font-size:12px;color:var(--text2)">PNG/JPG/WEBP, brede afbeelding werkt het mooist</div>
-                <img id="{{ field }}P" style="display:none;margin:10px auto 0;max-height:80px;width:100%;object-fit:cover;border-radius:6px" alt="">
-              </div>
-              {% if settings.get(field) %}
-              <button type="submit" name="clear_{{ field }}" value="1" class="btn btn-danger btn-sm" style="margin-top:8px" formnovalidate>
-                <i class="fas fa-trash"></i> Verwijderen
-              </button>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-        </div>
-
-      </div>
-
-      <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
-        <button type="submit" class="btn btn-primary btn-lg"><i class="fas fa-save"></i> Alle Instellingen Opslaan</button>
-        <button type="button" class="btn btn-ghost" onclick="cleanup()"><i class="fas fa-broom"></i> Spellen Opruimen</button>
-        <span id="cleanupMsg" style="font-size:13px;color:var(--text2);align-self:center"></span>
-      </div>
-    </form>
-  </div>
+  {% include '_admin_nav.html' %}
 
   <!-- ── Tab: News moderation ─────────────────────────── -->
-  <div class="tab-pane" id="tab-news" style="display:none">
+  <div class="tab-pane" id="tab-news" style="display:{{ 'block' if active_tab == 'news' else 'none' }}">
     {% set pending = articles if articles is defined else [] %}
     {% set all_news = [] %}
     <div class="card">
@@ -215,7 +44,7 @@
     </div>
   </div>
 
-  <div class="tab-pane" id="tab-catalog" style="display:none">
+  <div class="tab-pane" id="tab-catalog" style="display:{{ 'block' if active_tab == 'catalog' else 'none' }}">
     <div class="card" style="margin-bottom:16px">
       <div class="card-title"><i class="fas fa-th-large"></i> Spelen op de homepage</div>
       <p style="color:var(--text2);font-size:13px;line-height:1.6;margin:0">
@@ -290,7 +119,7 @@
   </div>
 
   <!-- ── Tab: Users ───────────────────────────────────── -->
-  <div class="tab-pane" id="tab-users" style="display:none">
+  <div class="tab-pane" id="tab-users" style="display:{{ 'block' if active_tab == 'users' else 'none' }}">
     <div class="card">
       <div class="card-title"><i class="fas fa-users"></i> Gebruikersbeheer</div>
       <div style="overflow-x:auto">
@@ -324,7 +153,8 @@
   </div>
 
   <!-- ── Tab: Games ───────────────────────────────────── -->
-  <div class="tab-pane" id="tab-games" style="display:none">
+  <div class="tab-pane" id="tab-games" style="display:{{ 'block' if active_tab == 'games' else 'none' }}">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px"><button type="button" class="btn btn-ghost btn-sm" onclick="cleanup()"><i class="fas fa-broom"></i> Spellen opruimen</button><span id="cleanupMsg" style="font-size:13px;color:var(--text2)"></span></div>
     <div class="card">
       <div class="card-title"><i class="fas fa-gamepad"></i> Spellenbeheer</div>
       {% if not games %}<div style="color:var(--text2);text-align:center;padding:30px">Nog geen spellen</div>
@@ -378,28 +208,6 @@
 </div>
 
 <script>
-function showTab(t,btn){
-  document.querySelectorAll('.tab-pane').forEach(e=>e.style.display='none');
-  document.querySelectorAll('.tab-btn').forEach(e=>e.classList.remove('active'));
-  document.getElementById('tab-'+t).style.display='block';
-  btn.classList.add('active');
-  history.replaceState(null,'','#'+t);
-}
-function previewUp(inp,prevId,zoneId){
-  const f=inp.files[0];if(!f)return;
-  const r=new FileReader();r.onload=e=>{const img=document.getElementById(prevId);img.src=e.target.result;img.style.display='block';};r.readAsDataURL(f);
-}
-function updateFontPreview(){
-  const hf=document.getElementById('hfontSel').value;
-  const bf=document.getElementById('bfontSel').value;
-  const link=document.createElement('link');
-  link.rel='stylesheet';
-  link.href=`https://fonts.googleapis.com/css2?family=${hf.replace(/ /g,'+')}:wght@700;800&family=${bf.replace(/ /g,'+')}:wght@400;500&display=swap`;
-  document.head.appendChild(link);
-  document.getElementById('hfontPrev').style.fontFamily=`'${hf}', sans-serif`;
-  document.getElementById('bfontPrev').style.fontFamily=`'${bf}', sans-serif`;
-}
-
 let editUid=null;
 function editUser(id,un,em,admin,pts,hw,rw){
   editUid=id;
@@ -422,12 +230,5 @@ function saveUser(){
 function delUser(id,name){if(!confirm(`Gebruiker "${name}" verwijderen?`))return;fetch(`/admin/user/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){document.getElementById('urow-'+id).remove();showToast('Verwijderd','success')}else showToast(d.error,'error')})}
 function delGame(id,name){if(!confirm(`Spel "${name}" verwijderen?`))return;fetch(`/admin/game/${id}/delete`,{method:'POST'}).then(r=>r.json()).then(d=>{if(d.success){showToast('Verwijderd','success');setTimeout(()=>location.reload(),800)}})}
 function cleanup(){fetch('/admin/cleanup',{method:'POST'}).then(r=>r.json()).then(d=>{document.getElementById('cleanupMsg').textContent=`${d.deleted} spel(len) verwijderd`;showToast(`${d.deleted} opgeruimd`,'success')})}
-document.addEventListener('DOMContentLoaded',()=>{
-  const tab=(location.hash||'').replace('#','');
-  if(tab){
-    const btn=[...document.querySelectorAll('.tab-btn')].find(b=>b.getAttribute('onclick')?.includes(`'${tab}'`));
-    if(btn && document.getElementById('tab-'+tab)) showTab(tab,btn);
-  }
-});
 </script>
 {% endblock %}

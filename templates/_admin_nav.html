@@ -1,0 +1,32 @@
+{# Shared Admin Panel navigation: every admin screen lives here. #}
+{% set ep = request.endpoint %}
+{% set tab = request.args.get('tab') or ('news' if ep == 'admin' else '') %}
+{% set items = [
+  ('admin_sounds', {}, 'fa-palette', "Thema's & geluiden", ep == 'admin_sounds'),
+  ('admin_pages', {}, 'fa-file-lines', "Pagina's", ep == 'admin_pages'),
+  ('admin_texts', {}, 'fa-pen-to-square', 'Teksten', ep == 'admin_texts'),
+  ('admin', {'tab': 'news'}, 'fa-newspaper', 'Nieuws', ep == 'admin' and tab == 'news'),
+  ('admin', {'tab': 'catalog'}, 'fa-th-large', 'Spelen', ep == 'admin' and tab == 'catalog'),
+  ('admin', {'tab': 'users'}, 'fa-users', 'Gebruikers', ep == 'admin' and tab == 'users'),
+  ('admin', {'tab': 'games'}, 'fa-gamepad', 'Spellen', ep == 'admin' and tab == 'games'),
+  ('admin_reports', {}, 'fa-flag', 'Meldingen', ep == 'admin_reports'),
+  ('admin_photos', {}, 'fa-images', "Foto's", ep == 'admin_photos'),
+  ('admin_log', {}, 'fa-list', 'Log', ep == 'admin_log'),
+  ('admin_changelog', {}, 'fa-code-branch', 'Changelog', ep == 'admin_changelog'),
+  ('admin_todo', {}, 'fa-list-check', 'TODO', ep == 'admin_todo'),
+] %}
+<style>
+.adm-nav{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:0 0 24px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.adm-nav::-webkit-scrollbar{display:none}
+.adm-nav a{padding:11px 16px;border-bottom:2px solid transparent;color:var(--text2);font-size:14px;font-weight:600;white-space:nowrap;margin-bottom:-1px;display:inline-flex;align-items:center;gap:7px;text-decoration:none!important;transition:color var(--tr)}
+.adm-nav a:hover{color:var(--text);opacity:1}
+.adm-nav a.active{color:var(--accent);border-bottom-color:var(--accent)}
+.adm-nav .cnt{background:var(--accent);color:#fff;border-radius:10px;font-size:10px;padding:1px 7px}
+</style>
+<nav class="adm-nav" aria-label="Admin">
+  {% for endpoint, args, icon, label, active in items %}
+  <a href="{{ url_for(endpoint, **args) }}" class="{{ 'active' if active }}"><i class="fas {{ icon }}"></i> {{ label }}
+    {% if label == 'Nieuws' and pending_news %}<span class="cnt">{{ pending_news }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>
