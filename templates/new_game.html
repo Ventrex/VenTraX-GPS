@@ -228,16 +228,16 @@ details.more summary::-webkit-details-marker{display:none}
             <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Classic</div><div class="pick-d">Jachtseizoen: hunters jagen op runners. Geen lootboxen, geen krimpende zone, geen missies. Gewoon rennen en verstoppen.</div></div></div>
           <div class="pick" id="style-adventure" onclick="selectGameStyle('adventure')">
             {% if img('img_style_adventure') %}<div class="bg" style="background-image:url('{{ img('img_style_adventure') }}')"></div>{% else %}<div class="ph"><i class="fas fa-compass"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Adventure</div><div class="pick-d">Lootboxen liggen verspreid over de kaart. Pak ze voor punten en voordelen. Het speelveld blijft even groot.</div></div></div>
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Adventure</div><div class="pick-d">Lootboxen liggen verspreid over de kaart en je hebt Echo. Het speelveld blijft even groot.</div></div></div>
           <div class="pick" id="style-battlefield" onclick="selectGameStyle('battlefield')">
             {% if img('img_style_battlefield') %}<div class="bg" style="background-image:url('{{ img('img_style_battlefield') }}')"></div>{% else %}<div class="ph"><i class="fas fa-burst"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Battlefield</div><div class="pick-d">Het speelveld wordt steeds kleiner, net als bij Fortnite. Iedereen krijgt een melding met het nieuwe centrum.</div></div></div>
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Battlefield</div><div class="pick-d">Het speelveld wordt steeds kleiner, net als bij Fortnite, met vallen: landmijn, laser en tripwire.</div></div></div>
           <div class="pick" id="style-stealth" onclick="selectGameStyle('stealth')">
             {% if img('img_style_stealth') %}<div class="bg" style="background-image:url('{{ img('img_style_stealth') }}')"></div>{% else %}<div class="ph"><i class="fas fa-user-secret"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Shadow Ops</div><div class="pick-d">Alles tegelijk: krimpende zone, missies voor runners (zodat ze blijven lopen) en lootboxen.</div></div></div>
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Shadow Ops</div><div class="pick-d">Krimpende zone, missies voor runners (zodat ze blijven lopen), lootboxen en sluipextra's: tripwire, hacker, glitch en echo.</div></div></div>
           <div class="pick" id="style-survival" onclick="selectGameStyle('survival')">
             {% if img('img_style_survival') %}<div class="bg" style="background-image:url('{{ img('img_style_survival') }}')"></div>{% else %}<div class="ph"><i class="fas fa-skull-crossbones"></i></div>{% endif %}
-            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Survival</div><div class="pick-d">Krimpende zone en lootboxen. Zoek spullen en blijf binnen de lijn.</div></div></div>
+            <div class="pick-ck"><i class="fas fa-check"></i></div><div class="pick-body"><div class="pick-t">Survival</div><div class="pick-d">Krimpende zone, lootboxen en vallen (landmijn, laser). Zoek spullen en blijf binnen de lijn.</div></div></div>
         </div>
         <div class="set" style="margin-top:14px">
           <div class="set-ic"><i class="fas fa-sliders"></i></div>
@@ -709,12 +709,13 @@ function setNamedCheck(name, on){
 }
 // What each style contains. The steps after it only show the questions that belong to the style.
 const STYLE_INFO={
-  classic:{name:'Classic',loot:false,zone:false,missions:false,text:'Jachtseizoen: alleen hunters tegen runners. Er komen geen lootboxen, krimpende zone of missies in het spel.'},
-  adventure:{name:'Adventure',loot:true,zone:false,missions:false,text:'Met lootboxen. Je stelt ze in bij “Lootboxen & extra\'s”.'},
-  battlefield:{name:'Battlefield',loot:false,zone:true,missions:false,text:'Met een krimpende zone. Je stelt die in bij “Extra\'s & sfeer”. Hij werkt het best met een getekend speelveld.'},
-  stealth:{name:'Shadow Ops',loot:true,zone:true,missions:true,text:'Met krimpende zone, missies voor runners en lootboxen.'},
-  survival:{name:'Survival',loot:true,zone:true,missions:false,text:'Met krimpende zone en lootboxen.'}
+  classic:{name:'Classic',loot:false,zone:false,missions:false,extras:[],text:'Jachtseizoen: alleen hunters tegen runners. Er komen geen lootboxen, krimpende zone, missies of extra\'s in het spel.'},
+  adventure:{name:'Adventure',loot:true,zone:false,missions:false,extras:['extra_echo'],text:'Met lootboxen en Echo. Je stelt het in bij “Lootboxen & extra\'s”.'},
+  battlefield:{name:'Battlefield',loot:false,zone:true,missions:false,extras:['extra_landmine','extra_laser','extra_tripwire'],text:'Met krimpende zone en vallen (landmijn, laser, tripwire). De zone werkt het best met een getekend speelveld.'},
+  stealth:{name:'Shadow Ops',loot:true,zone:true,missions:true,extras:['extra_tripwire','feat_hacker','feat_glitch','extra_echo'],text:'Krimpende zone, missies voor runners, lootboxen en sluipextra\'s: tripwire, hacker, glitch en echo.'},
+  survival:{name:'Survival',loot:true,zone:true,missions:false,extras:['extra_landmine','extra_laser'],text:'Krimpende zone, lootboxen en vallen (landmijn, laser).'}
 };
+const ALL_EXTRAS=['extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'];
 function selectGameStyle(style, opts){
   opts=opts||{};
   if(!STYLE_INFO[style]) style='classic';
@@ -725,9 +726,9 @@ function selectGameStyle(style, opts){
   });
   if(opts.preset!==false){
     const st=STYLE_INFO[style];
-    // The style decides the big features; the small extras (landmine, laser, ...) start off.
+    // The style decides which features and extras are on; "Zelf alles aanpassen" lets you change everything.
     setNamedCheck('extra_dropboxes',st.loot);
-    ['extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'].forEach(n=>setNamedCheck(n,false));
+    ALL_EXTRAS.forEach(n=>setNamedCheck(n,st.extras.includes(n)));
     const cls=document.getElementById('classesEnabled'); if(cls) cls.checked=false;
     const ms=document.getElementById('missionsOn'); if(ms){ ms.checked=st.missions; tog('missionOpts',ms); }
     const sh=document.getElementById('shrinkOn'); if(sh){ sh.checked=st.zone; tog('shrinkOpts',sh); }
@@ -742,7 +743,7 @@ function applyStyleVisibility(){
   const adv=!!document.getElementById('advancedOn')?.checked;
   const isOn=n=>!!document.querySelector('[name='+n+']')?.checked;
   const vis={
-    extrasPanel: st.loot||adv||['extra_dropboxes','extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'].some(isOn),
+    extrasPanel: st.loot||st.extras.length>0||adv||['extra_dropboxes',...ALL_EXTRAS].some(isOn),
     missionsPanel: st.missions||adv||isOn('missions'),
     zonePanel: st.zone||adv||isOn('shrinking_zone')
   };
@@ -750,7 +751,7 @@ function applyStyleVisibility(){
   // inside the extras: only lootboxes unless everything is unlocked (or a small extra is already on)
   document.querySelectorAll('#extraTiles .tile').forEach(t=>{
     const inp=t.querySelector('input'); const isLoot=inp.name==='extra_dropboxes';
-    t.style.display=(isLoot||adv||inp.checked)?'':'none';
+    t.style.display=((isLoot&&(st.loot||inp.checked))||st.extras.includes(inp.name)||adv||inp.checked)?'':'none';
   });
   const sum=document.getElementById('styleSummary'); if(sum) sum.innerHTML='<b>'+st.name+'</b>: '+st.text;
 }
