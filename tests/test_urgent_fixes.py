@@ -89,3 +89,80 @@ def test_hunter_near_sound_plays_once_and_rearms_after_a_minute_outside(tmp_path
     assert out["after5min"] == 3
     assert out["close"] == 4 and out["closeAgain"] == 4
     assert out["events"][0] == "hunter_near" and out["events"][3] == "hunter_close"
+
+
+# ---- fair points ----------------------------------------------------------------------------
+def test_fair_points_follow_who_has_it_easier(appmodule):
+    cm = appmodule.compute_multipliers
+    assert cm("easy") == (1.0, 1.5)       # easy for hunters: hunters earn less, runners (harder) earn more
+    assert cm("medium") == (1.25, 1.25)
+    assert cm("hard") == (1.5, 1.0)
+    base = cm("custom", target_enabled=False, offline_button=False)
+    assert base == (1.25, 1.25)
+    h, r = cm("custom", target_enabled=True, offline_button=False)            # target helps the hunters
+    assert h < 1.25 < r
+    h, r = cm("custom", target_enabled=False, offline_button=True)            # offline button helps the runners
+    assert h > 1.25 > r
+    h, r = cm("custom", target_enabled=False, offline_button=False, hunter_interval_sec=1200)   # hunters see little
+    assert h > 1.25 > r and round(h - 1.25, 2) == round(1.25 - r, 2)
+    h, r = cm("custom", target_enabled=True, offline_button=True, live_tracking=True, show_distance=True,
+              pause_allowed=True, hunter_interval_sec=1800)
+    assert 0.7 <= h <= 2.0 and 0.7 <= r <= 2.0
+
+
+def test_game_pays_each_role_its_own_multiplier(appmodule):
+    with appmodule.app.app_context():
+        g = appmodule.Game(name="x", code="MULT01", creator_id=1, hunter_multiplier=1.0, runner_multiplier=1.5)
+        assert g.multiplier_for("hunter") == 1.0 and g.multiplier_for("runner") == 1.5
+        old = appmodule.Game(name="old", code="MULT02", creator_id=1, points_multiplier=1.25)   # created before this update
+        assert old.multiplier_for("hunter") == old.multiplier_for("runner") == 1.25
+
+
+def _login(client, appmodule, name="maker2"):
+    uid = make_user(appmodule, username=name, email=f"{name}@example.com")
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(uid); sess["_fresh"] = True
+    return uid
+
+
+def test_new_game_page_renders_with_admin_images_and_info_buttons(appmodule, client):
+    _login(client, appmodule)
+    html = client.get("/new_game").get_data(as_text=True)
+    for must in ("wz-bar", "ibtn", "Geluid &amp; sfeer", "Class-thema", "multiH", "Krimp" if False else "Spelstijl"):
+        assert must in html, must
+    with appmodule.app.app_context():
+        appmodule.SiteSetting.set("img_role_hunter", "does-not-exist.png")       # missing file -> icon, no broken image
+    assert "does-not-exist" not in client.get("/new_game").get_data(as_text=True)
+
+
+def test_creating_a_game_stores_fair_multipliers(appmodule, client):
+    _login(client, appmodule)
+    base = {"name": "Eerlijk", "role": "hunter", "duration": "60", "headstart": "5", "hunter_interval": "600",
+            "runner_interval": "600", "target_duration": "300", "target_cooldown": "600", "max_offline": "300"}
+    r = client.post("/new_game", data={**base, "difficulty": "easy"})
+    assert r.status_code == 302
+    with appmodule.app.app_context():
+        g = appmodule.Game.query.filter_by(name="Eerlijk").first()
+        assert (g.hunter_multiplier, g.runner_multiplier) == (1.0, 1.5)
+        db = appmodule.db
+        db.session.delete(appmodule.GamePlayer.query.filter_by(game_id=g.id).first()); db.session.delete(g); db.session.commit()
+    r = client.post("/new_game", data={**base, "name": "Eigen", "difficulty": "custom", "target_enabled": "on", "offline_button": "on"})
+    with appmodule.app.app_context():
+        g = appmodule.Game.query.filter_by(name="Eigen").first()
+        assert (g.hunter_multiplier, g.runner_multiplier) == (1.25, 1.25)   # target (+) and offline button (-) cancel out
+
+
+def test_admin_images_upload_and_clear(appmodule, client):
+    uid = _login(client, appmodule, "beheer2")
+    with appmodule.app.app_context():
+        appmodule.db.session.get(appmodule.User, uid).is_admin = True; appmodule.db.session.commit()
+    assert client.get("/admin/images").status_code == 200
+    import io
+    from PIL import Image
+    buf = io.BytesIO(); Image.new("RGB", (40, 30), "red").save(buf, "PNG"); buf.seek(0)
+    r = client.post("/admin/images/img_extra_landmine", data={"file": (buf, "mijn.png")}, content_type="multipart/form-data")
+    assert r.status_code == 200 and r.get_json()["url"].startswith("/backgrounds/")
+    assert r.get_json()["url"] in client.get("/new_game").get_data(as_text=True)
+    assert client.post("/admin/images/nope", data={}).status_code == 404
+    assert client.post("/admin/images/img_extra_landmine/clear").get_json()["success"]
+    assert "/backgrounds/" not in client.get("/new_game").get_data(as_text=True).split("tiles")[1].split("dropboxOpts")[0]
