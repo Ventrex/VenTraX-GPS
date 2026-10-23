@@ -3,6 +3,7 @@
 {% set tab = request.args.get('tab') or ('news' if ep == 'admin' else '') %}
 {% set items = [
   ('admin_sounds', {}, 'fa-palette', "Thema's & geluiden", ep == 'admin_sounds'),
+  ('admin_personas', {}, 'fa-masks-theater', 'Personages', ep == 'admin_personas'),
   ('admin_images', {}, 'fa-photo-film', 'Afbeeldingen', ep == 'admin_images'),
   ('admin_pages', {}, 'fa-file-lines', "Pagina's", ep == 'admin_pages'),
   ('admin_texts', {}, 'fa-pen-to-square', 'Teksten', ep == 'admin_texts'),

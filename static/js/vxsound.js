@@ -40,7 +40,7 @@
     var c = ensureCtx();
     if (!c) { unlocked = true; flush(); return; }
     var go = function () {
-      unlocked = true;
+      unlocked = true; hideTapHint();
       // a silent blip makes iOS Safari treat the context as user-started
       try { var o = c.createOscillator(), g = c.createGain(); g.gain.value = 0; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.01); } catch (e) {}
       flush();
@@ -57,8 +57,22 @@
   });
   // Sounds asked for before the first tap / before the theme loaded wait a few seconds, then are dropped
   // (a "hunter is near" sound that arrives 2 minutes late is worse than none).
-  function later(fn) { pending.push({fn: fn, at: now()}); if (pending.length > 12) pending.shift(); }
-  function flush() { var q = pending; pending = []; q.forEach(function (p) { if (now() - p.at < 8000) p.fn(); }); }
+  function later(fn) {
+    pending.push({fn: fn, at: now()}); if (pending.length > 12) pending.shift();
+    if (!unlocked) showTapHint();
+  }
+  // A new page starts "locked" again (browser rule). Tell the player once, instead of staying silent.
+  var hintEl = null;
+  function showTapHint() {
+    if (hintEl || !document.body || muted) return;
+    hintEl = document.createElement('div');
+    hintEl.setAttribute('role', 'button');
+    hintEl.textContent = '\uD83D\uDD0A Tik op het scherm voor geluid';
+    hintEl.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:99999;background:rgba(0,0,0,.82);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:9px 16px;font:600 13px system-ui,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.5)';
+    document.body.appendChild(hintEl);
+  }
+  function hideTapHint() { if (hintEl) { hintEl.remove(); hintEl = null; } }
+  function flush() { var q = pending; pending = []; q.forEach(function (p) { if (now() - p.at < 20000) p.fn(); }); }
 
   // ---------- loading ----------
   function loadBuffer(url) {

@@ -484,6 +484,7 @@ class GamePlayer(db.Model):
     last_speed_ms    = db.Column(db.Float,    nullable=True)  # m/s from GPS
     last_seen        = db.Column(db.DateTime, nullable=True)
     joined_at        = db.Column(db.DateTime, default=datetime.utcnow)
+    persona_id       = db.Column(db.Integer, nullable=True)     # chosen ThemePersona (looks only, no effect on play)
 
     # Offline system
     offline_uses_left  = db.Column(db.Integer, default=1)
@@ -745,6 +746,18 @@ class SoundClip(db.Model):
     label       = db.Column(db.String(120), nullable=True)        # original filename, for display
     volume      = db.Column(db.Integer, default=100)              # 0-100, relative to the theme volume
     theme = db.relationship('SoundTheme', back_populates='clips')
+
+
+class ThemePersona(db.Model):
+    """A character a player can pick in the lobby (per theme and role), e.g. a horror hunter or runner."""
+    id        = db.Column(db.Integer, primary_key=True)
+    theme_id  = db.Column(db.Integer, db.ForeignKey('sound_theme.id'), nullable=False)
+    role      = db.Column(db.String(10), nullable=False)          # hunter / runner
+    name      = db.Column(db.String(60), nullable=False)
+    blurb     = db.Column(db.String(160), nullable=True)
+    icon      = db.Column(db.String(40), nullable=True)           # Font Awesome icon when there is no picture
+    image     = db.Column(db.String(200), nullable=True)          # file in the backgrounds folder
+    sort_order = db.Column(db.Integer, default=0)
 
 
 class CmsPage(db.Model):
@@ -3110,6 +3123,7 @@ def api_lobby_state(code):
             'is_ready':  p.is_ready,
             'is_creator': p.user_id == game.creator_id,
             'is_bot': bool(p.user.is_bot),
+            'persona': persona_of(p),
         })
     return jsonify(
         players=players,
@@ -3296,6 +3310,7 @@ def api_switch_role(code):
     new_role = request.get_json().get('role')
     if new_role not in ('hunter', 'runner'): return jsonify(error='Ongeldige rol'), 400
     me.role     = new_role
+    me.persona_id = None  # personages belong to one role
     me.is_ready = False  # reset ready on role change
     me.codename = assign_codename(new_role, game.id)
     db.session.commit()
@@ -3489,6 +3504,7 @@ def api_state(code):
             'is_paused': pause_active or p.is_paused,
             'is_caught': p.is_caught,
             'is_bot': bool(p.user.is_bot),
+            'persona': persona_of(p),
             'offline_uses_left': p.offline_uses_left,
             'offline_remaining': max(0, int(math.ceil(game.max_offline_sec - (now - p.offline_since).total_seconds()))) if p.is_offline and p.offline_since and game.max_offline_sec else 0,
             'offline_until': utc_iso(p.offline_since + timedelta(seconds=game.max_offline_sec)) if p.is_offline and p.offline_since and game.max_offline_sec else None,
@@ -5200,17 +5216,51 @@ IMAGE_SLOTS = [
 ]
 IMAGE_KEYS = {k for _, items in IMAGE_SLOTS for k, _ in items}
 
-def site_image(key):
-    """URL of an admin-uploaded picture, or '' (then templates fall back to an icon)."""
-    name = _existing_bg(SiteSetting.get(key, '') or '')
-    return f'/backgrounds/{name}' if name else ''
+def _image_theme_id():
+    """Theme whose pictures are shown right now: the game's theme while in a game, else the site default."""
+    from flask import g
+    try:
+        theme = getattr(g, 'theme_override', None) or get_default_sound_theme()
+        return theme.id if theme else None
+    except Exception:
+        return None
+
+def _img_setting(key, theme_id):
+    return f'{key}@{theme_id}' if theme_id else key
+
+def site_image(key, theme_id=None):
+    """URL of an admin-uploaded picture, or '' (then templates fall back to an icon).
+    A picture set for the active theme wins; otherwise the general one (all themes) is used."""
+    tid = theme_id if theme_id is not None else _image_theme_id()
+    for k in ([_img_setting(key, tid)] if tid else []) + [key]:
+        name = _existing_bg(SiteSetting.get(k, '') or '')
+        if name:
+            return f'/backgrounds/{name}'
+    return ''
+
+def _image_scope():
+    """?theme=<id> picks a theme, nothing means 'all themes'. Returns the theme id or None."""
+    try:
+        tid = int(request.args.get('theme') or 0)
+    except ValueError:
+        tid = 0
+    return tid if tid and db.session.get(SoundTheme, tid) else None
 
 @app.route('/admin/images')
 @login_required
 @admin_required
 def admin_images():
-    groups = [(title, [{'key': k, 'label': label, 'url': site_image(k)} for k, label in items]) for title, items in IMAGE_SLOTS]
-    return render_template('admin_images.html', groups=groups)
+    tid = _image_scope()
+    groups = []
+    for title, items in IMAGE_SLOTS:
+        row = []
+        for k, label in items:
+            own = _existing_bg(SiteSetting.get(_img_setting(k, tid), '') or '')
+            general = _existing_bg(SiteSetting.get(k, '') or '') if tid else ''
+            row.append({'key': k, 'label': label, 'url': f'/backgrounds/{own}' if own else '',
+                        'inherited': f'/backgrounds/{general}' if (tid and not own and general) else ''})
+        groups.append((title, row))
+    return render_template('admin_images.html', groups=groups, themes=SoundTheme.query.order_by(SoundTheme.name).all(), scope=tid)
 
 @app.route('/admin/images/<key>', methods=['POST'])
 @login_required
@@ -5225,7 +5275,7 @@ def admin_image_upload(key):
         name = save_image(f, app.config['BG_FOLDER'], (1000, 1000))
     except ValueError as e:
         return jsonify(error=str(e)), 400
-    SiteSetting.set(key, name)
+    SiteSetting.set(_img_setting(key, _image_scope()), name)
     return jsonify(success=True, url=f'/backgrounds/{name}')
 
 @app.route('/admin/images/<key>/clear', methods=['POST'])
@@ -5234,8 +5284,118 @@ def admin_image_upload(key):
 def admin_image_clear(key):
     if key not in IMAGE_KEYS:
         return jsonify(error='Onbekende afbeelding'), 404
-    SiteSetting.set(key, '')
+    SiteSetting.set(_img_setting(key, _image_scope()), '')
     return jsonify(success=True)
+
+# -- Personas: characters players pick in the lobby (per theme and role) ---------------------------
+def persona_dict(p):
+    if not p:
+        return None
+    name = _existing_bg(p.image or '')
+    return {'id': p.id, 'name': p.name, 'blurb': p.blurb or '', 'role': p.role,
+            'icon': p.icon or ('fa-crosshairs' if p.role == 'hunter' else 'fa-person-running'),
+            'image': f'/backgrounds/{name}' if name else ''}
+
+def persona_of(gp):
+    return persona_dict(db.session.get(ThemePersona, gp.persona_id)) if getattr(gp, 'persona_id', None) else None
+
+@app.route('/api/game/<code>/personas')
+@login_required
+def api_game_personas(code):
+    game = Game.query.filter_by(code=code).first_or_404()
+    me = GamePlayer.query.filter_by(game_id=game.id, user_id=current_user.id).first_or_404()
+    theme = get_game_sound_theme(game)
+    rows = (ThemePersona.query.filter_by(theme_id=theme.id, role=me.role)
+            .order_by(ThemePersona.sort_order, ThemePersona.id).all()) if theme else []
+    taken = {gp.persona_id: gp.user.username for gp in game.players if gp.persona_id and gp.user_id != me.user_id}
+    out = []
+    for r in rows:
+        d = persona_dict(r)
+        d['taken_by'] = taken.get(r.id)
+        out.append(d)
+    return jsonify(personas=out, mine=me.persona_id, role=me.role)
+
+@app.route('/api/game/<code>/persona', methods=['POST'])
+@login_required
+def api_game_persona(code):
+    game = Game.query.filter_by(code=code).first_or_404()
+    if game.status != 'lobby':
+        return jsonify(error='Je kunt je personage alleen in de lobby kiezen.'), 400
+    me = GamePlayer.query.filter_by(game_id=game.id, user_id=current_user.id).first_or_404()
+    pid = (request.get_json(silent=True) or {}).get('id')
+    if pid in (None, '', 0):
+        me.persona_id = None
+    else:
+        pers = db.session.get(ThemePersona, int(pid))
+        theme = get_game_sound_theme(game)
+        if not pers or not theme or pers.theme_id != theme.id or pers.role != me.role:
+            return jsonify(error='Dit personage hoort niet bij jouw rol of thema.'), 400
+        if any(gp.persona_id == pers.id and gp.user_id != me.user_id for gp in game.players):
+            return jsonify(error='Dit personage is al gekozen door iemand anders.'), 409
+        me.persona_id = pers.id
+    db.session.commit()
+    hub.broadcast(code, 'persona_changed', {'user_id': me.user_id, 'persona': persona_of(me)})
+    return jsonify(success=True, persona=persona_of(me))
+
+@app.route('/admin/personas')
+@login_required
+@admin_required
+def admin_personas():
+    themes = SoundTheme.query.order_by(SoundTheme.name).all()
+    try:
+        tid = int(request.args.get('theme') or 0)
+    except ValueError:
+        tid = 0
+    theme = next((t for t in themes if t.id == tid), None) or get_default_sound_theme()
+    rows = ThemePersona.query.filter_by(theme_id=theme.id).order_by(ThemePersona.role, ThemePersona.sort_order, ThemePersona.id).all() if theme else []
+    return render_template('admin_personas.html', themes=themes, selected=theme, personas=[persona_dict(r) for r in rows])
+
+@app.route('/admin/personas/save', methods=['POST'])
+@login_required
+@admin_required
+def admin_persona_save():
+    f = request.form
+    theme = db.session.get(SoundTheme, int(f.get('theme_id') or 0))
+    name = (f.get('name') or '').strip()[:60]
+    role = f.get('role') if f.get('role') in ('hunter', 'runner') else 'hunter'
+    if not theme or not name:
+        flash('Kies een thema en geef het personage een naam.', 'danger')
+        return redirect(url_for('admin_personas', theme=theme.id if theme else None))
+    pers = db.session.get(ThemePersona, int(f['id'])) if (f.get('id') or '').isdigit() else None
+    if pers and pers.theme_id != theme.id:
+        pers = None
+    if not pers:
+        pers = ThemePersona(theme_id=theme.id)
+        db.session.add(pers)
+    pers.name, pers.role = name, role
+    pers.blurb = (f.get('blurb') or '').strip()[:160]
+    icon = (f.get('icon') or '').strip()
+    pers.icon = icon if _ICON_RE.match(icon) else None
+    file = request.files.get('image')
+    if file and file.filename and allowed_file(file.filename):
+        try:
+            pers.image = save_image(file, app.config['BG_FOLDER'], (600, 600))
+        except ValueError as e:
+            flash(str(e), 'danger')
+    if f.get('clear_image'):
+        pers.image = None
+    db.session.commit()
+    flash('Personage opgeslagen.', 'success')
+    return redirect(url_for('admin_personas', theme=theme.id))
+
+@app.route('/admin/personas/<int:pid>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_persona_delete(pid):
+    pers = db.session.get(ThemePersona, pid)
+    tid = pers.theme_id if pers else None
+    if pers:
+        GamePlayer.query.filter_by(persona_id=pid).update({'persona_id': None})
+        db.session.delete(pers)
+        db.session.commit()
+    return redirect(url_for('admin_personas', theme=tid))
+
+_ICON_RE = __import__('re').compile(r'^fa-[a-z0-9-]{2,30}$')
 
 # -- Editable pages & texts -----------------------------------------------------
 @app.route('/p/<slug>')
@@ -5829,6 +5989,7 @@ def init_db():
         ensure_column('user', 'is_bot', 'BOOLEAN DEFAULT 0')
         ensure_column('game', 'hunter_multiplier', 'FLOAT')
         ensure_column('game', 'runner_multiplier', 'FLOAT')
+        ensure_column('game_player', 'persona_id', 'INTEGER')
         for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),
                          ('font_body', 'VARCHAR(40)'), ('radius', 'INTEGER'), ('bg_image', 'VARCHAR(200)'),
                          ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)'),
@@ -5914,6 +6075,34 @@ def init_db():
             db.session.add(SoundTheme(slug='halloween', name='Halloween', skin='halloween', is_default=False,
                                       description='Enge sfeer: hartslag, gefluister en dreigende geluiden.'))
             db.session.commit()
+        if not SiteSetting.get('migr_themes_v1'):
+            # Seasonal themes: Klassiek-based, each with its own colours and fonts (sounds/pictures per theme in Admin)
+            extra = [
+                ('pasen', 'Pasen', 'Frisse lentekleuren: eieren zoeken, zacht groen en geel.', '#a3e635', '#060a05', 'Outfit', 'DM Sans'),
+                ('sinterklaas', 'Sinterklaas', 'Pakjesavond: rood en goud, met pepernoten-sfeer.', '#dc2626', '#0b0505', 'Cinzel', 'DM Sans'),
+                ('kerst', 'Kerst', 'Warm donkergroen met rood en goud.', '#22c55e', '#030a06', 'Playfair Display', 'DM Sans'),
+                ('oudennieuw', 'Oud & Nieuw', 'Goud op zwart, vuurwerksfeer.', '#eab308', '#05050a', 'Bebas Neue', 'DM Sans'),
+                ('koningsdag', 'Koningsdag', 'Oranje feest.', '#f97316', '#0a0603', 'Montserrat', 'DM Sans'),
+                ('zomer', 'Zomer', 'Zonnig blauw voor lange avonden.', '#0ea5e9', '#030a10', 'Sora', 'DM Sans'),
+                ('neon', 'Neon Cyber', 'Cyaan en magenta, sciencefiction.', '#22d3ee', '#04040c', 'Orbitron', 'DM Sans'),
+            ]
+            for slug, name, desc, acc, bgc, fh, fb in extra:
+                if not SoundTheme.query.filter_by(slug=slug).first():
+                    db.session.add(SoundTheme(slug=slug, name=name, description=desc, skin='classic', accent=acc, bg_color=bgc,
+                                              font_head=fh, font_body=fb, radius=12, bg_overlay=82))
+            db.session.commit()
+            SiteSetting.set('migr_themes_v1', '1')
+        if not SiteSetting.get('migr_personas_v1'):
+            hw = SoundTheme.query.filter_by(slug='halloween').first()
+            if hw:
+                for i, (role, name, blurb, icon) in enumerate([
+                        ('hunter', 'Leatherface', 'Zwaar, ruw en onstopbaar.', 'fa-skull'),
+                        ('hunter', 'Ghostface', 'Belt je op en jaagt in stilte.', 'fa-ghost'),
+                        ('runner', 'Sidney', 'De Final Girl: slim en niet klein te krijgen.', 'fa-person-running')]):
+                    if not ThemePersona.query.filter_by(theme_id=hw.id, name=name).first():
+                        db.session.add(ThemePersona(theme_id=hw.id, role=role, name=name, blurb=blurb, icon=icon, sort_order=i))
+                db.session.commit()
+            SiteSetting.set('migr_personas_v1', '1')
         # themes made before colours were per theme: give them a look (Halloween keeps its orange)
         for th in SoundTheme.query.all():
             base = HALLOWEEN_UI if th.skin == 'halloween' else {}
@@ -5943,6 +6132,10 @@ def init_db():
         if not Changelog.query.filter_by(version='3.2.0').first():
             db.session.add(Changelog(version='3.2.0', title='Nieuw Spel vernieuwd, eerlijke punten, krimpende zone en missies', type='feature',
                           body='- Spel startte soms direct af: opgelost (spelers uit de lobby werden als weggegaan gezien)\n- Hunter-in-de-buurt-geluid speelt 1x per nadering (100 m), opnieuw na 1 minuut buiten de straal\n- Nieuw Spel opnieuw opgezet met afbeeldingskaarten en uitleg-knoppen; afbeeldingen via Admin > Afbeeldingen\n- Eerlijke punten: hunters en runners hebben elk een eigen multiplier\n- Speelveld: verboden zones en lijnen, elk speelveld bewaard en te delen met een code\n- Krimpende zone (Fortnite-stijl) en missies voor runners als speelopties\n- Lobby: duidelijk overzicht en brede instellingen-popup'))
+            db.session.commit()
+        if not Changelog.query.filter_by(version='3.3.0').first():
+            db.session.add(Changelog(version='3.3.0', title='Personages, themas per seizoen, wolken en reparaties', type='feature',
+                          body='- Kaart springt niet meer naar Amersfoort: hunters starten op hun eigen plek en de kaart volgt je ook na offline\n- Klokjes en aftelling zichtbaar (cijfers gebruiken nu altijd het leesbare lettertype)\n- Geluid: een melding als je nog op het scherm moet tikken\n- Zone-wolken: doorzichtig, giftig en met ronde hoeken\n- Afbeeldingen per thema (Admin > Afbeeldingen)\n- Personages per thema en rol, te kiezen in de lobby (Admin > Personages)\n- Nieuwe themas: Pasen, Sinterklaas, Kerst, Oud & Nieuw, Koningsdag, Zomer, Neon Cyber'))
             db.session.commit()
         # Seed game catalog if empty
         if GameCatalog.query.count() == 0:
