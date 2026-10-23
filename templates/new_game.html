@@ -451,6 +451,26 @@ details.more summary::-webkit-details-marker{display:none}
       </div>
 
       <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-flag"></i></div><div class="panel-t">Missies voor runners {{ ibtn('Missies', 'Zodat runners niet de hele tijd op dezelfde plek blijven zitten: er verschijnt een missiepunt op de kaart. Wie als runner de cirkel bereikt en daar de ingestelde tijd blijft, krijgt bonuspunten. Daarna verschijnt de volgende missie ergens anders. Een verlopen missie verhuist ook. Lootboxen blijven zoals ze zijn.') }}</div></div>
+        <p class="panel-sub">Een missiepunt trekt de runners over de kaart. Bonuspunten voor wie hem haalt.</p>
+        {% if img('img_style_missions') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_missions') }}')"></div></div>{% endif %}
+        <div class="set" style="border-top:none;padding-top:0">
+          <div class="set-ic" style="color:#a78bfa"><i class="fas fa-flag"></i></div>
+          <div class="set-tx"><div class="set-t">Missies aan</div><div class="set-s">Runners halen bonuspunten bij een missiepunt</div></div>
+          <label class="switch"><input type="checkbox" name="missions" id="missionsOn" onchange="tog('missionOpts',this)"><span class="slider"></span></label>
+        </div>
+        <div id="missionOpts" style="display:none;margin-top:6px">
+          <div class="two">
+            <div class="fld"><label>Blijven in de cirkel</label><select name="mission_hold_sec" class="form-control"><option value="30">30 seconden</option><option value="45" selected>45 seconden</option><option value="60">1 minuut</option><option value="90">1,5 minuut</option></select></div>
+            <div class="fld"><label>Missie blijft staan</label><select name="mission_duration_min" class="form-control"><option value="8">8 min</option><option value="12" selected>12 min</option><option value="15">15 min</option><option value="20">20 min</option></select></div>
+            <div class="fld"><label>Bonuspunten</label><select name="mission_points" class="form-control"><option value="3">3</option><option value="5" selected>5</option><option value="8">8</option><option value="10">10</option></select></div>
+            <div class="fld"><label>Hunters zien de missie</label><select name="mission_hunters_see" class="form-control"><option value="on" selected>Ja (spannender)</option><option value="off">Nee</option></select></div>
+          </div>
+          <div class="pts-note">De bonus wordt ook eerlijk vermenigvuldigd met de runner-punten van dit spel. Pas na de voorsprong verschijnt de eerste missie.</div>
+        </div>
+      </div>
+
+      <div class="panel">
         <div class="panel-h"><div class="panel-ic" style="--c:#ef4444"><i class="fas fa-circle-dot"></i></div><div class="panel-t">Krimpende zone {{ ibtn('Krimpende zone', 'Net als bij Fortnite wordt het speelveld steeds kleiner. Iedereen krijgt vooraf een melding met een aftelling en het nieuwe centrum (ook op de kaart). Wie buiten de nieuwe zone staat loopt af. Dit werkt het mooist met een getekend speelveld; zonder speelveld maakt VenTrax een cirkel van 600 m rond de spelers.') }}</div></div>
         <p class="panel-sub">Het speelveld wordt tijdens het spel kleiner. Je kunt dit aan- en uitzetten.</p>
         {% if img('img_style_zone') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_zone') }}')"></div></div>{% endif %}
@@ -681,10 +701,10 @@ function selectGameStyle(style){
     if(el) el.classList.toggle('sel', s===style);
   });
   const presets={
-    classic:{dropboxes:false,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:false,classes:false},
-    adventure:{dropboxes:true,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:true,classes:true},
-    battlefield:{dropboxes:true,landmine:true,laser:true,tripwire:true,hacker:true,glitch:true,echo:true,classes:true},
-    stealth:{dropboxes:true,landmine:false,laser:false,tripwire:true,hacker:true,glitch:true,echo:true,classes:true}
+    classic:{dropboxes:false,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:false,classes:false,missions:false},
+    adventure:{dropboxes:true,landmine:false,laser:false,tripwire:false,hacker:false,glitch:false,echo:true,classes:true,missions:true},
+    battlefield:{dropboxes:true,landmine:true,laser:true,tripwire:true,hacker:true,glitch:true,echo:true,classes:true,missions:true},
+    stealth:{dropboxes:true,landmine:false,laser:false,tripwire:true,hacker:true,glitch:true,echo:true,classes:true,missions:true}
   };
   const p=presets[style]||presets.classic;
   setNamedCheck('extra_dropboxes',p.dropboxes);
@@ -696,6 +716,7 @@ function selectGameStyle(style){
   setNamedCheck('extra_echo',p.echo);
   const cls=document.getElementById('classesEnabled');
   if(cls) cls.checked=!!p.classes;
+  const ms=document.getElementById('missionsOn'); if(ms){ ms.checked=!!p.missions; tog('missionOpts',ms); }
   const drop=document.querySelector('[name=extra_dropboxes]');
   if(drop) tog('dropboxOpts', drop);
   showToast(`Spelstijl gekozen: ${style==='classic'?'Classic':style==='adventure'?'Adventure':style==='battlefield'?'Battlefield':'Shadow Ops'}`,'info');
@@ -793,6 +814,8 @@ function applyGameTemplate(idx){
   setFormValue('dropboxes_global', e.dropboxes_global);
   setFormValue('dropbox_min_m', e.dropbox_min_m);
   setFormValue('dropbox_max_m', e.dropbox_max_m);
+  setFormValue('missions', e.missions); setFormValue('mission_hold_sec', e.mission_hold_sec); setFormValue('mission_duration_min', e.mission_duration_min); setFormValue('mission_points', e.mission_points);
+  setFormValue('mission_hunters_see', e.mission_hunters_see===false?'off':'on'); tog('missionOpts', document.getElementById('missionsOn'));
   setFormValue('shrinking_zone', e.shrinking_zone); setFormValue('zone_first_min', e.zone_first_min); setFormValue('zone_interval_min', e.zone_interval_min);
   setFormValue('zone_shrink_pct', e.zone_shrink_pct); setFormValue('zone_warning_sec', e.zone_warning_sec);
   tog('shrinkOpts', document.getElementById('shrinkOn'));
@@ -1045,7 +1068,7 @@ function buildSummary(){
       <div class="sum-sec">Extra's</div>
       <div class="chips">${extras.map(([n,l])=>chip(l,'',nm(n))).join('')}</div>
       <div class="sum-sec">Speelveld en sfeer</div>
-      <div class="chips" style="margin-bottom:10px">${chip('Krimpende zone','',nm('shrinking_zone'))}</div>
+      <div class="chips" style="margin-bottom:10px">${chip('Krimpende zone','',nm('shrinking_zone'))}${chip('Missies','',nm('missions'))}</div>
       <div class="sum-grid">
         ${box('Speelveld',pfPoints.length>=3?pfPoints.length+' punten'+(pfForb.length?' · '+pfForb.length+' verboden':''):'Niet ingesteld')}
         ${box('Geluid & sfeer',e(theme))}

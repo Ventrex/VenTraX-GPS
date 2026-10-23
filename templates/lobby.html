@@ -267,6 +267,7 @@
           <span class="chip {{ 'on' if game.offline_button }}"><i class="fas fa-{{ 'check' if game.offline_button else 'xmark' }}"></i> Offline-knop{% if game.offline_button %} ({{ game.offline_uses }}x, {{ game.max_offline_sec // 60 }} min){% endif %}</span>
           <span class="chip {{ 'on' if game.pause_allowed }}"><i class="fas fa-{{ 'check' if game.pause_allowed else 'xmark' }}"></i> Pauze</span>
           <span class="chip {{ 'on' if game.bike_allowed }}"><i class="fas fa-{{ 'check' if game.bike_allowed else 'xmark' }}"></i> Fiets</span>
+          <span class="chip {{ 'on' if game_extras.missions }}"><i class="fas fa-{{ 'check' if game_extras.missions else 'xmark' }}"></i> Missies{% if game_extras.missions %} ({{ game_extras.mission_hold_sec }}s, +{{ game_extras.mission_points }}){% endif %}</span>
           <span class="chip {{ 'on' if game_extras.shrinking_zone }}"><i class="fas fa-{{ 'check' if game_extras.shrinking_zone else 'xmark' }}"></i> Krimpende zone{% if game_extras.shrinking_zone %} ({{ game_extras.zone_shrink_pct }}% elke {{ game_extras.zone_interval_min }} min){% endif %}</span>
           <span class="chip {{ 'on' if game.feat_photo_missions }}"><i class="fas fa-{{ 'check' if game.feat_photo_missions else 'xmark' }}"></i> Foto-opdrachten</span>
         </div>
