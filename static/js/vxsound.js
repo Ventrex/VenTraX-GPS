@@ -14,7 +14,7 @@
   var ctx = null, master = null;
   var theme = null, buffers = {}, playing = {}, lastPlayed = {};
   var unlocked = false, pending = [];
-  var muted = false;
+  var muted = false, testHook = null;
   try { muted = localStorage.getItem('vx_muted') === '1'; } catch (e) {}
 
   function now() { return Date.now(); }
@@ -188,6 +188,7 @@
     var cooldown = opts.cooldown || 0;
     if (cooldown && lastPlayed[ev] && now() - lastPlayed[ev] < cooldown) return;
     lastPlayed[ev] = now();
+    if (testHook) testHook(ev);
     // Visual hook (red pulse etc.) fires even when muted or still locked.
     try { document.dispatchEvent(new CustomEvent('vx:play', {detail: ev})); } catch (e) {}
     if (!theme || !unlocked) { later(function () { doPlay(ev, opts); }); return; }
@@ -227,11 +228,25 @@
   function isPlaying(ev) { return !!playing[ev]; }
   function has(ev) { return !!(theme && theme.events[ev] && theme.events[ev].length); }
 
-  // Runner: distance (m) to the nearest hunter -> near / close sounds with their own repeat rate.
+  // Runner: distance (m) to the nearest hunter.
+  // Rule: the near/close sound plays ONCE when a hunter comes inside the radius. It plays again only after the
+  // runner has been outside that radius for REARM_MS (1 minute). Coming back within that minute stays silent.
+  var REARM_MS = 60000, HYSTERESIS_M = 10;
+  var zones = {near: {armed: true, outsideSince: 0}, close: {armed: true, outsideSince: 0}};
+  function track(z, d, radius) {
+    if (d <= radius) { z.outsideSince = 0; if (z.armed) { z.armed = false; return true; } return false; }
+    if (d > radius + HYSTERESIS_M) {            // clearly outside (a few metres of GPS jitter do not count)
+      if (!z.outsideSince) z.outsideSince = now();
+      if (now() - z.outsideSince >= REARM_MS) z.armed = true;
+    }
+    return false;
+  }
   function nearby(distM) {
     if (!theme || distM === null || distM === undefined) return;
-    if (distM <= theme.close_m) play('hunter_close', {cooldown: 9000});
-    else if (distM <= theme.near_m) play('hunter_near', {cooldown: 22000});
+    var close = track(zones.close, distM, theme.close_m);
+    var near = track(zones.near, distM, theme.near_m);
+    if (close) { zones.near.armed = false; play('hunter_close'); }
+    else if (near) play('hunter_near');
   }
 
   // Random spooky sounds while a game runs.
@@ -276,7 +291,7 @@
     init: init, play: play, stop: stop, stopAll: stopAll, isPlaying: isPlaying, has: has,
     nearby: nearby, startAmbient: startAmbient, stopAmbient: stopAmbient,
     setMuted: setMuted, isMuted: function () { return muted; }, isUnlocked: function () { return unlocked; },
-    unlock: unlock, theme: function () { return theme; },
+    unlock: unlock, theme: function () { return theme; }, __test_hook: function (fn) { testHook = fn; },
     skin: function () { return (theme && theme.skin) || 'classic'; }
   };
 })();

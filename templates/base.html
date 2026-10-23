@@ -524,6 +524,7 @@ html[data-skin="halloween"] .hw-hide{display:none}
       <div class="tx"><b>Installeer als app</b><span id="appTxt">Je telefoon onthoudt je keuzes dan beter.</span></div>
       <button class="btn btn-ghost btn-sm" id="btnApp" onclick="vxSetupInstall()">Installeren</button>
     </div>
+    <div id="iosTip" class="alert alert-info" style="display:none;margin-top:6px;font-size:13px"></div>
     <div id="geoDenied" class="alert alert-warning" style="display:none;margin-top:6px"></div>
     <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="vxSetupClose()">Klaar</button>
   </div>
@@ -607,6 +608,7 @@ function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m
       $('geoDenied').style.display = 'block';
       $('geoDenied').innerHTML = '<i class="fas fa-triangle-exclamation"></i><span>Locatie staat geblokkeerd voor deze site. Tik op het slotje naast het webadres en kies <b>Locatie → Toestaan</b>.</span>';
     }
+    VXPerm.showIosTip(document.getElementById('iosTip'));
     setTimeout(() => sheet.classList.add('open'), 900);
   })();
 })();
