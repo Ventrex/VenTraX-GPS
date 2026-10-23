@@ -32,6 +32,8 @@ def appmodule(tmp_path, monkeypatch):
     yield module
     # uploaded test sounds must not stay behind in the real static/audio/themes folder
     import glob
+    for f in glob.glob(os.path.join(os.path.dirname(module.__file__), "static", "qr", "qr_BOT*.png")):
+        os.remove(f)
     for f in glob.glob(os.path.join(module.SOUND_FOLDER, "[0-9]*_*")) + glob.glob(os.path.join(module.FONT_FOLDER, "[0-9]*_*")):
         os.remove(f)
     with module.app.app_context():
