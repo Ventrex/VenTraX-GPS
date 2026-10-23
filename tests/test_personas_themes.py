@@ -52,23 +52,30 @@ def lobby_game(appmodule, theme_slug="halloween"):
         return g.id, uid, th.id
 
 
-def test_players_pick_a_persona_for_their_role(appmodule, client, monkeypatch):
+def test_players_pick_a_persona_for_their_side(appmodule, client, monkeypatch):
     gid, uid, tid = lobby_game(appmodule)
     monkeypatch.setattr(appmodule, "get_game_sound_theme", lambda game: appmodule.db.session.get(appmodule.SoundTheme, tid))
     with client.session_transaction() as s:
         s["_user_id"] = str(uid); s["_fresh"] = True
     d = client.get("/api/game/PRS123/personas").get_json()
+    assert d["kind"] == "good"                                          # hunters pick from the good characters (default)
+    assert len(d["personas"]) == 10 and {p["gender"] for p in d["personas"]} == {"guy", "girl"}
+    assert sum(p["gender"] == "guy" for p in d["personas"]) == 5 and sum(p["gender"] == "girl" for p in d["personas"]) == 5
     names = {p["name"]: p for p in d["personas"]}
-    assert {"Leatherface", "Ghostface", "Freddy Krueger"} <= set(names) and "Sidney Prescott" not in names   # hunter personas only
-    r = client.post("/api/game/PRS123/persona", json={"id": names["Ghostface"]["id"]})
-    assert r.get_json()["persona"]["name"] == "Ghostface"
-    assert client.get("/api/game/PRS123/lobby_state").get_json()["players"][0]["persona"]["name"] == "Ghostface"
+    assert "Sidney Prescott" in names and "Ghostface" not in names
+    r = client.post("/api/game/PRS123/persona", json={"id": names["Sidney Prescott"]["id"]})
+    assert r.get_json()["persona"]["name"] == "Sidney Prescott"
+    assert client.get("/api/game/PRS123/lobby_state").get_json()["players"][0]["persona"]["name"] == "Sidney Prescott"
     with appmodule.app.app_context():
-        sid = appmodule.ThemePersona.query.filter_by(name="Sidney").first().id
-    assert client.post("/api/game/PRS123/persona", json={"id": sid}).status_code == 400   # runner persona, hunter player
+        bad = appmodule.ThemePersona.query.filter_by(name="Ghostface").first().id
+    assert client.post("/api/game/PRS123/persona", json={"id": bad}).status_code == 400   # a bad character, hunter player
     client.post("/api/game/PRS123/switch_role", json={"role": "runner"})
     with appmodule.app.app_context():
         assert appmodule.GamePlayer.query.first().persona_id is None   # role change clears the persona
+    d = client.get("/api/game/PRS123/personas").get_json()
+    assert d["kind"] == "bad" and "Ghostface" in {p["name"] for p in d["personas"]}          # runners pick from the bad ones
+    # the maker can swap who picks from whom
+    client.post("/admin/personas/map", data={"theme_id": tid, "hunter": "bad"})
 
 
 def test_admin_manages_personas(appmodule, client):
@@ -76,12 +83,12 @@ def test_admin_manages_personas(appmodule, client):
     with appmodule.app.app_context():
         tid = appmodule.SoundTheme.query.filter_by(slug="kerst").first().id
     assert client.get(f"/admin/personas?theme={tid}").status_code == 200
-    r = client.post("/admin/personas/save", data={"theme_id": tid, "name": "Kerstman", "role": "runner", "icon": "fa-tree",
+    r = client.post("/admin/personas/save", data={"theme_id": tid, "name": "Kerstman", "kind": "good", "gender": "guy", "icon": "fa-tree",
                                                   "image": (png_bytes(), "k.png")}, content_type="multipart/form-data")
     assert r.status_code == 302
     with appmodule.app.app_context():
         p = appmodule.ThemePersona.query.filter_by(name="Kerstman").first()
-        assert p.role == "runner" and p.image and p.icon == "fa-tree"
+        assert p.kind == "good" and p.gender == "guy" and p.image and p.icon == "fa-tree"
         pid = p.id
     client.post(f"/admin/personas/{pid}/delete")
     with appmodule.app.app_context():
@@ -119,16 +126,21 @@ def test_picture_slots_for_field_modes_colours_and_theme_cards(appmodule, client
     assert 'class="pf-ico"' in html and "img_pfcolor" not in html
 
 
-def test_paste_a_table_of_films_with_bad_and_good_characters(appmodule, client):
+def test_halloween_has_five_of_each_group_and_pasting_lists_works(appmodule, client):
     login(client, appmodule)
     with appmodule.app.app_context():
         tid = appmodule.SoundTheme.query.filter_by(slug="halloween").first().id
-        names = {(p.name, p.role) for p in appmodule.ThemePersona.query.filter_by(theme_id=tid)}
-    assert ("Freddy Krueger", "hunter") in names and ("Nancy Thompson", "runner") in names      # seeded from the maker's list
-    assert ("Ichabod Crane", "runner") in names and len(names) >= 30
-    text = "| Film | Slecht 🔪 | Goed 🛡️ |\n|---|---|---|\n| **Poltergeist** | The Beast | Diane Freeling |\n| Scream | Ghostface | Sidney Prescott |"
+        rows = [appmodule.persona_dict(p) for p in appmodule.ThemePersona.query.filter_by(theme_id=tid)]
+    groups = {}
+    for r in rows:
+        groups[(r["kind"], r["gender"])] = groups.get((r["kind"], r["gender"]), 0) + 1
+    assert groups == {("good", "guy"): 5, ("bad", "guy"): 5, ("good", "girl"): 5, ("bad", "girl"): 5}
+    text = "Pennywise | slecht | jongen | IT\nPoltergeist heks | slecht | meisje\nGhostface | slecht | jongen | Scream"
     client.post("/admin/personas/bulk", data={"theme_id": tid, "text": text})
     with appmodule.app.app_context():
-        got = {(p.name, p.role): p.blurb for p in appmodule.ThemePersona.query.filter_by(theme_id=tid)}
-        assert got[("The Beast", "hunter")] == "Poltergeist" and got[("Diane Freeling", "runner")] == "Poltergeist"
-        assert sum(1 for k in got if k[0] == "Ghostface") == 1                               # no duplicates
+        got = {p.name: (persona_kind, p.gender, p.blurb) for p, persona_kind in
+               [(p, appmodule.persona_kind(p)) for p in appmodule.ThemePersona.query.filter_by(theme_id=tid)]}
+        assert got["Pennywise"] == ("bad", "guy", "IT") and got["Poltergeist heks"][:2] == ("bad", "girl")
+        assert sum(1 for p in appmodule.ThemePersona.query.filter_by(theme_id=tid, name="Ghostface")) == 1      # no duplicate
+    old_table = "| Film | Slecht | Goed |\n|---|---|---|\n| **Poltergeist** | The Beast | Diane Freeling |"
+    assert [(r["name"], r["kind"]) for r in appmodule.parse_persona_table(old_table)] == [("The Beast", "bad"), ("Diane Freeling", "good")]

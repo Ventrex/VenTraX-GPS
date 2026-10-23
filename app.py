@@ -766,6 +766,8 @@ class ThemePersona(db.Model):
     icon      = db.Column(db.String(40), nullable=True)           # Font Awesome icon when there is no picture
     image     = db.Column(db.String(200), nullable=True)          # file in the backgrounds folder
     sort_order = db.Column(db.Integer, default=0)
+    kind      = db.Column(db.String(8), nullable=True)            # good / bad
+    gender    = db.Column(db.String(8), nullable=True)            # guy / girl
 
 
 class CmsPage(db.Model):
@@ -5340,12 +5342,30 @@ def admin_image_clear(key):
     return jsonify(success=True)
 
 # -- Personas: characters players pick in the lobby (per theme and role) ---------------------------
+PERSONA_KINDS = {'good': 'Goed', 'bad': 'Slecht'}
+PERSONA_GENDERS = {'guy': 'Jongen', 'girl': 'Meisje'}
+
+def persona_kind(p):
+    """good / bad. Older rows only have a role: hunters were the bad ones, runners the good ones."""
+    return p.kind if p.kind in PERSONA_KINDS else ('bad' if p.role == 'hunter' else 'good')
+
+def persona_map(theme_id):
+    """Which kind each side picks from in this theme. Default: hunters pick good characters, runners bad ones."""
+    try:
+        m = json.loads(SiteSetting.get(f'persona_map:{theme_id}', '') or '{}')
+    except Exception:
+        m = {}
+    hk = m.get('hunter') if m.get('hunter') in PERSONA_KINDS else 'good'
+    return {'hunter': hk, 'runner': 'bad' if hk == 'good' else 'good'}
+
 def persona_dict(p):
     if not p:
         return None
     name = _existing_bg(p.image or '')
-    return {'id': p.id, 'name': p.name, 'blurb': p.blurb or '', 'role': p.role,
-            'icon': p.icon or ('fa-crosshairs' if p.role == 'hunter' else 'fa-person-running'),
+    gender = p.gender if p.gender in PERSONA_GENDERS else ''
+    default_icon = 'fa-person-dress' if gender == 'girl' else 'fa-person'
+    return {'id': p.id, 'name': p.name, 'blurb': p.blurb or '', 'role': p.role, 'kind': persona_kind(p), 'gender': gender,
+            'icon': p.icon if (p.icon and p.icon not in ('fa-skull', 'fa-shield-halved', 'fa-ghost')) else default_icon,
             'image': f'/backgrounds/{name}' if name else ''}
 
 def persona_of(gp):
@@ -5357,15 +5377,16 @@ def api_game_personas(code):
     game = Game.query.filter_by(code=code).first_or_404()
     me = GamePlayer.query.filter_by(game_id=game.id, user_id=current_user.id).first_or_404()
     theme = get_game_sound_theme(game)
-    rows = (ThemePersona.query.filter_by(theme_id=theme.id, role=me.role)
-            .order_by(ThemePersona.sort_order, ThemePersona.id).all()) if theme else []
+    want = persona_map(theme.id)[me.role] if theme else 'good'
+    rows = [r for r in (ThemePersona.query.filter_by(theme_id=theme.id)
+                        .order_by(ThemePersona.sort_order, ThemePersona.id).all() if theme else []) if persona_kind(r) == want]
     taken = {gp.persona_id: gp.user.username for gp in game.players if gp.persona_id and gp.user_id != me.user_id}
     out = []
     for r in rows:
         d = persona_dict(r)
         d['taken_by'] = taken.get(r.id)
         out.append(d)
-    return jsonify(personas=out, mine=me.persona_id, role=me.role)
+    return jsonify(personas=out, mine=me.persona_id, role=me.role, kind=want)
 
 @app.route('/api/game/<code>/persona', methods=['POST'])
 @login_required
@@ -5380,7 +5401,7 @@ def api_game_persona(code):
     else:
         pers = db.session.get(ThemePersona, int(pid))
         theme = get_game_sound_theme(game)
-        if not pers or not theme or pers.theme_id != theme.id or pers.role != me.role:
+        if not pers or not theme or pers.theme_id != theme.id or persona_kind(pers) != persona_map(theme.id)[me.role]:
             return jsonify(error='Dit personage hoort niet bij jouw rol of thema.'), 400
         if any(gp.persona_id == pers.id and gp.user_id != me.user_id for gp in game.players):
             return jsonify(error='Dit personage is al gekozen door iemand anders.'), 409
@@ -5399,8 +5420,20 @@ def admin_personas():
     except ValueError:
         tid = 0
     theme = next((t for t in themes if t.id == tid), None) or get_default_sound_theme()
-    rows = ThemePersona.query.filter_by(theme_id=theme.id).order_by(ThemePersona.role, ThemePersona.sort_order, ThemePersona.id).all() if theme else []
-    return render_template('admin_personas.html', themes=themes, selected=theme, personas=[persona_dict(r) for r in rows])
+    rows = ThemePersona.query.filter_by(theme_id=theme.id).order_by(ThemePersona.sort_order, ThemePersona.id).all() if theme else []
+    pers = sorted([persona_dict(r) for r in rows], key=lambda d: (d['kind'], d['gender']))
+    return render_template('admin_personas.html', themes=themes, selected=theme, personas=pers,
+                           pmap=persona_map(theme.id) if theme else {}, kinds=PERSONA_KINDS, genders=PERSONA_GENDERS)
+
+@app.route('/admin/personas/map', methods=['POST'])
+@login_required
+@admin_required
+def admin_persona_map():
+    tid = int(request.form.get('theme_id') or 0)
+    hk = request.form.get('hunter') if request.form.get('hunter') in PERSONA_KINDS else 'good'
+    SiteSetting.set(f'persona_map:{tid}', json.dumps({'hunter': hk}))
+    flash('Opgeslagen.', 'success')
+    return redirect(url_for('admin_personas', theme=tid))
 
 @app.route('/admin/personas/save', methods=['POST'])
 @login_required
@@ -5409,7 +5442,9 @@ def admin_persona_save():
     f = request.form
     theme = db.session.get(SoundTheme, int(f.get('theme_id') or 0))
     name = (f.get('name') or '').strip()[:60]
-    role = f.get('role') if f.get('role') in ('hunter', 'runner') else 'hunter'
+    kind = f.get('kind') if f.get('kind') in PERSONA_KINDS else 'good'
+    gender = f.get('gender') if f.get('gender') in PERSONA_GENDERS else ''
+    role = 'hunter' if kind == 'bad' else 'runner'
     if not theme or not name:
         flash('Kies een thema en geef het personage een naam.', 'danger')
         return redirect(url_for('admin_personas', theme=theme.id if theme else None))
@@ -5419,7 +5454,7 @@ def admin_persona_save():
     if not pers:
         pers = ThemePersona(theme_id=theme.id)
         db.session.add(pers)
-    pers.name, pers.role = name, role
+    pers.name, pers.role, pers.kind, pers.gender = name, role, kind, gender
     pers.blurb = (f.get('blurb') or '').strip()[:160]
     icon = (f.get('icon') or '').strip()
     pers.icon = icon if _ICON_RE.match(icon) else None
@@ -5435,7 +5470,7 @@ def admin_persona_save():
     flash('Personage opgeslagen.', 'success')
     return redirect(url_for('admin_personas', theme=theme.id))
 
-HALLOWEEN_PERSONAS = """
+HALLOWEEN_PERSONAS_OLD = """
 | Scream | Ghostface | Sidney Prescott |
 | Halloween | Michael Myers | Laurie Strode |
 | A Nightmare on Elm Street | Freddy Krueger | Nancy Thompson |
@@ -5453,9 +5488,36 @@ HALLOWEEN_PERSONAS = """
 | Sleepy Hollow (1999) | De Ruiter zonder Hoofd en degene die hem aanstuurt | Ichabod Crane |
 """
 
+_KIND_WORDS = {'goed': 'good', 'good': 'good', 'slecht': 'bad', 'bad': 'bad'}
+_GENDER_WORDS = {'jongen': 'guy', 'guy': 'guy', 'man': 'guy', 'meisje': 'girl', 'girl': 'girl', 'vrouw': 'girl'}
+
+HALLOWEEN_PERSONAS = """
+Ghostface | slecht | jongen | Scream
+Michael Myers | slecht | jongen | Halloween
+Freddy Krueger | slecht | jongen | A Nightmare on Elm Street
+Jason Voorhees | slecht | jongen | Friday the 13th: Part 2
+Leatherface | slecht | jongen | The Texas Chain Saw Massacre
+Samara Morgan | slecht | meisje | The Ring (2002)
+Valak, de demonische non | slecht | meisje | The Conjuring 2
+Esther | slecht | meisje | Orphan
+Pamela Voorhees | slecht | meisje | Friday the 13th
+Mary Shaw | slecht | meisje | Dead Silence
+Ed Warren | goed | jongen | The Conjuring 2
+Andy Barclay | goed | jongen | Child's Play
+Bill Denbrough | goed | jongen | IT
+Ichabod Crane | goed | jongen | Sleepy Hollow (1999)
+Finney Blake | goed | jongen | The Black Phone
+Sidney Prescott | goed | meisje | Scream
+Laurie Strode | goed | meisje | Halloween
+Nancy Thompson | goed | meisje | A Nightmare on Elm Street
+Ellen Ripley | goed | meisje | Alien
+Sally Hardesty | goed | meisje | The Texas Chain Saw Massacre
+"""
+
 def parse_persona_table(text):
-    """Pasted lines -> [(film, bad, good)]. Accepts the markdown table (| Film | Slecht | Goed |), or lines separated
-    by ; or tab. The 'bad' character becomes a Hunter, the 'good' one a Runner."""
+    """Pasted lines -> [{'name','kind','gender','blurb'}].
+    Per line:  Naam | goed/slecht | jongen/meisje | omschrijving      (the last two are optional)
+    or the film table:  | Film | Slecht | Goed |  (bad character, good character; gender unknown)."""
     rows = []
     for line in (text or '').splitlines():
         line = line.replace('**', '').strip()
@@ -5465,29 +5527,40 @@ def parse_persona_table(text):
         if not sep:
             continue
         cols = [c.strip() for c in line.strip('|').split(sep)]
-        cols = [c for c in cols if c != ''] if sep != '|' else cols
+        if cols and cols[0].lower() in ('film', 'naam'):
+            continue                                    # header row
+        if len(cols) >= 2 and cols[1].lower() in _KIND_WORDS:
+            gender = _GENDER_WORDS.get((cols[2] if len(cols) > 2 else '').lower(), '')
+            rows.append({'name': cols[0], 'kind': _KIND_WORDS[cols[1].lower()], 'gender': gender,
+                         'blurb': cols[3] if len(cols) > 3 else (cols[2] if len(cols) > 2 and not gender else '')})
+            continue
+        cols = [c for c in cols if c != '']
         if len(cols) < 3:
             continue
         film, bad, good = cols[0], cols[1], cols[2]
         if film.lower().startswith('film') and 'slecht' in bad.lower():
             continue                                    # header row
-        # drop the emoji the table uses in its header/cells
         clean = lambda v: v.replace('\U0001F52A', '').replace('\U0001F6E1\uFE0F', '').strip()
-        rows.append((clean(film), clean(bad), clean(good)))
+        rows.append({'name': clean(bad), 'kind': 'bad', 'gender': '', 'blurb': clean(film)})
+        rows.append({'name': clean(good), 'kind': 'good', 'gender': '', 'blurb': clean(film)})
     return rows
 
 def add_personas_from_rows(theme, rows):
+    """Adds the characters that do not exist yet (same name + kind); returns how many."""
     added = 0
     order = (db.session.query(db.func.max(ThemePersona.sort_order)).filter_by(theme_id=theme.id).scalar() or 0) + 1
-    for film, bad, good in rows:
-        for role, name in (('hunter', bad), ('runner', good)):
-            name = name[:60]
-            if not name or ThemePersona.query.filter_by(theme_id=theme.id, name=name, role=role).first():
-                continue
-            db.session.add(ThemePersona(theme_id=theme.id, role=role, name=name, blurb=(film or '')[:160],
-                                        icon='fa-skull' if role == 'hunter' else 'fa-shield-halved', sort_order=order))
-            order += 1
-            added += 1
+    for r in rows:
+        name = (r.get('name') or '')[:60]
+        if not name:
+            continue
+        existing = [p for p in ThemePersona.query.filter_by(theme_id=theme.id, name=name).all() if persona_kind(p) == r['kind']]
+        if existing:
+            continue
+        db.session.add(ThemePersona(theme_id=theme.id, role='hunter' if r['kind'] == 'bad' else 'runner', name=name,
+                                    blurb=(r.get('blurb') or '')[:160], kind=r['kind'], gender=r.get('gender') or None,
+                                    sort_order=order))
+        order += 1
+        added += 1
     return added
 
 @app.route('/admin/personas/bulk', methods=['POST'])
@@ -5501,7 +5574,7 @@ def admin_persona_bulk():
     rows = parse_persona_table(request.form.get('text'))
     n = add_personas_from_rows(theme, rows)
     db.session.commit()
-    flash(f'{n} personage(s) toegevoegd.' if n else 'Niets nieuws gevonden. Gebruik per regel: Film | Slecht | Goed', 'success' if n else 'warning')
+    flash(f'{n} personage(s) toegevoegd.' if n else 'Niets nieuws gevonden. Gebruik per regel: Naam | goed | jongen | omschrijving', 'success' if n else 'warning')
     return redirect(url_for('admin_personas', theme=theme.id))
 
 @app.route('/admin/personas/<int:pid>/delete', methods=['POST'])
@@ -6114,6 +6187,8 @@ def init_db():
         ensure_column('game', 'hunter_multiplier', 'FLOAT')
         ensure_column('game', 'runner_multiplier', 'FLOAT')
         ensure_column('game_player', 'persona_id', 'INTEGER')
+        ensure_column('theme_persona', 'kind', 'VARCHAR(8)')
+        ensure_column('theme_persona', 'gender', 'VARCHAR(8)')
         for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),
                          ('font_body', 'VARCHAR(40)'), ('radius', 'INTEGER'), ('bg_image', 'VARCHAR(200)'),
                          ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)'),
@@ -6230,9 +6305,29 @@ def init_db():
         if not SiteSetting.get('migr_personas_v2'):
             hw = SoundTheme.query.filter_by(slug='halloween').first()
             if hw:
-                add_personas_from_rows(hw, parse_persona_table(HALLOWEEN_PERSONAS))
+                add_personas_from_rows(hw, parse_persona_table(HALLOWEEN_PERSONAS_OLD))
                 db.session.commit()
             SiteSetting.set('migr_personas_v2', '1')
+        if not SiteSetting.get('migr_personas_v3'):
+            # 5 good guys, 5 bad guys, 5 good girls, 5 bad girls; characters without a picture that are not in that list go
+            for pr in ThemePersona.query.filter(ThemePersona.kind.is_(None)).all():
+                pr.kind = persona_kind(pr)
+            hw = SoundTheme.query.filter_by(slug='halloween').first()
+            if hw:
+                keep = parse_persona_table(HALLOWEEN_PERSONAS)
+                names = {r['name'] for r in keep}
+                for r in keep:
+                    ex = ThemePersona.query.filter_by(theme_id=hw.id, name=r['name']).first()
+                    if ex:
+                        ex.kind, ex.gender, ex.role = r['kind'], r['gender'], ('hunter' if r['kind'] == 'bad' else 'runner')
+                        ex.blurb = r['blurb']
+                add_personas_from_rows(hw, keep)
+                for pr in ThemePersona.query.filter_by(theme_id=hw.id).all():
+                    if pr.name not in names and not pr.image:
+                        GamePlayer.query.filter_by(persona_id=pr.id).update({'persona_id': None})
+                        db.session.delete(pr)
+            db.session.commit()
+            SiteSetting.set('migr_personas_v3', '1')
         # themes made before colours were per theme: give them a look (Halloween keeps its orange)
         for th in SoundTheme.query.all():
             base = HALLOWEEN_UI if th.skin == 'halloween' else {}
