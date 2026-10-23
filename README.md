@@ -42,6 +42,14 @@ Creator kan in de lobby bots toevoegen (Runner of Hunter, max 8 per spel) om all
 - Snelheid volgt de moeilijkheid: makkelijk 1,0 m/s, gemiddeld 1,4 m/s, moeilijk 2,0 m/s (wandelen, niet rennen).
 - Beperkingen: tuinen en hekken staan niet op de kaart; OSM kan fout of verouderd zijn; bots weten waar iedereen is, gebruiken geen offline/pauze, en tikken binnen 6 m (de kaart heeft 6 m-cellen). Zonder kaartdata lopen ze over open terrein en krijgen spelers een melding.
 
+## Speelopties
+- **Krimpende zone**: het speelveld wordt in fases kleiner (aanpasbaar); iedereen krijgt vooraf een melding met aftelling en het nieuwe centrum. Schema en logica in `zone.py`.
+- **Missies**: runners halen bonuspunten bij een missiepunt dat steeds verschuift.
+- **Verboden gebieden** in het speelveld: cirkels en lijnen (corridor); laat een opening bij een tunnel.
+- **Speelvelden delen**: elk spel bewaart zijn veld in "Mijn speelvelden"; delen met een code of link `/new_game?zone=CODE`.
+- **Eerlijke punten**: `compute_multipliers()` geeft hunters en runners elk een eigen multiplier.
+- Afbeeldingen voor rollen, moeilijkheid, extra's, stijlen en classes upload je in Admin > Afbeeldingen; lettertypes per thema in Admin > Thema's & geluiden.
+
 ## Lokaal draaien
 
 ```bash
