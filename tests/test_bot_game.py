@@ -79,7 +79,7 @@ def test_bots_cannot_log_in_and_stay_off_the_leaderboard(appmodule, client):
 def run_loop(appmodule, monkeypatch, seconds, difficulty="hard", runner_role="runner"):
     monkeypatch.setattr(appmodule, "BOT_TICK", 0.02)
     monkeypatch.setattr(appmodule, "BOT_TIME_SCALE", 100)          # 1 tick = 2 simulated seconds
-    monkeypatch.setattr(botlib, "load_terrain", lambda bbox, url, pf=None, cache=None, http_post=None: botlib.open_terrain(bbox, pf))
+    monkeypatch.setattr(botlib, "load_terrain", lambda bbox, url, pf=None, cache=None, http_post=None, forbidden=None: botlib.open_terrain(bbox, pf, forbidden))
     g = gevent.spawn(appmodule._bot_loop, "BOT123")
     gevent.sleep(seconds)
     return g

@@ -206,7 +206,20 @@ def assemble_rings(segments):
     return rings
 
 
-def build_terrain(elements, bbox, playfield=None, cell_m=CELL_M):
+def draw_forbidden(t, img, forbidden):
+    """Block the play field's forbidden areas (circles and corridor lines) so bots stay out of them."""
+    d = ImageDraw.Draw(img)
+    for it in forbidden or []:
+        if it.get('type') == 'circle':
+            cx, cy = t.to_xy(it['lat'], it['lng'])
+            r = it['radius'] / t.cell
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=BLOCKED)
+        elif it.get('type') == 'line':
+            xy = [t.to_xy(p['lat'], p['lng']) for p in it['points']]
+            d.line(xy, fill=BLOCKED, width=max(1, int(round(it['width'] / t.cell))))
+
+
+def build_terrain(elements, bbox, playfield=None, cell_m=CELL_M, forbidden=None):
     """Draw OSM elements onto a Terrain. playfield: [(lat, lon)] polygon, everything outside is blocked."""
     t = Terrain(bbox, cell_m)
     img = Image.new('L', (t.w, t.h), NORMAL)
@@ -291,26 +304,28 @@ def build_terrain(elements, bbox, playfield=None, cell_m=CELL_M):
         ImageDraw.Draw(mask).polygon(px(playfield), fill=255, outline=255)
         img = Image.composite(img, Image.new('L', (t.w, t.h), BLOCKED), mask)
 
+    draw_forbidden(t, img, forbidden)
     t.cost = bytearray(img.tobytes())
     return t
 
 
-def open_terrain(bbox, playfield=None):
+def open_terrain(bbox, playfield=None, forbidden=None):
     """Fallback when no map data is available: open ground (still limited to the play field)."""
     t = Terrain(bbox, degraded=True)
     if playfield and len(playfield) >= 3:
         img = Image.new('L', (t.w, t.h), BLOCKED)
         ImageDraw.Draw(img).polygon([t.to_xy(a, b) for a, b in playfield], fill=NORMAL, outline=NORMAL)
+        draw_forbidden(t, img, forbidden)
         t.cost = bytearray(img.tobytes())
     return t
 
 
-def load_terrain(bbox, overpass_url, playfield=None, cache_dir=None, http_post=None):
+def load_terrain(bbox, overpass_url, playfield=None, cache_dir=None, http_post=None, forbidden=None):
     """Terrain from OpenStreetMap, or open ground (degraded=True) if the download fails."""
     try:
-        return build_terrain(fetch_elements(bbox, overpass_url, cache_dir, http_post=http_post), bbox, playfield)
+        return build_terrain(fetch_elements(bbox, overpass_url, cache_dir, http_post=http_post), bbox, playfield, forbidden=forbidden)
     except Exception:
-        return open_terrain(bbox, playfield)
+        return open_terrain(bbox, playfield, forbidden)
 
 
 # --------------------------------------------------------------------------------------- routes
