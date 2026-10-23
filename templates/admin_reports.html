@@ -2,6 +2,7 @@
 {% block title %}Meldingen – Admin{% endblock %}
 {% block content %}
 <div class="container">
+  {% include '_admin_nav.html' %}
   <h1 style="font-family:var(--hfont);font-size:28px;font-weight:800;margin-bottom:24px">
     <i class="fas fa-flag" style="color:var(--accent)"></i> Meldingen
     {% set open = reports|selectattr('status','eq','open')|list|length %}

@@ -22,8 +22,9 @@ def login(client, appmodule, admin=True, username="boss"):
 def test_default_themes_are_seeded(appmodule):
     with appmodule.app.app_context():
         names = {t.slug: t for t in appmodule.SoundTheme.query.all()}
-        assert names["halloween"].is_default and names["halloween"].skin == "halloween"
-        assert "klassiek" in names
+        assert names["klassiek"].is_default and names["klassiek"].skin == "classic"   # Klassiek is the base
+        assert names["klassiek"].bg_color == "#000000" and names["klassiek"].accent == "#c4161c"
+        assert names["halloween"].skin == "halloween" and names["halloween"].accent == "#ff6a13"
 
 
 def test_sound_theme_payload_lists_uploaded_clips(appmodule):
@@ -34,7 +35,7 @@ def test_sound_theme_payload_lists_uploaded_clips(appmodule):
         payload = appmodule.sound_theme_payload(theme)
         assert payload["events"]["intro"][0]["url"] == "/audio/themes/x.mp3"
         assert payload["events"]["intro"][0]["volume"] == 70
-        assert payload["skin"] == "halloween"
+        assert payload["skin"] == "classic"
 
 
 def test_every_event_is_unique_and_documented(appmodule):
@@ -105,7 +106,9 @@ def test_new_theme_default_and_delete_rules(appmodule, client):
 
 def test_admin_pages_render(appmodule, client):
     login(client, appmodule)
-    for url in ("/admin/sounds", "/admin/pages", "/admin/pages?new=1", "/admin/texts", "/admin"):
+    for url in ("/admin/sounds", "/admin/pages", "/admin/pages?new=1", "/admin/texts", "/admin",
+                "/admin?tab=users", "/admin?tab=games", "/admin?tab=catalog", "/admin/log", "/admin/reports",
+                "/admin/photos", "/admin/changelog", "/admin/todo"):
         assert client.get(url).status_code == 200, url
 
 
@@ -154,9 +157,10 @@ def test_missing_logo_and_background_fall_back_to_shipped_images(appmodule, clie
     assert client.get("/backgrounds/..%2fapp.py").status_code == 404
 
 
-def test_homepage_uses_halloween_skin_by_default(appmodule, client):
+def test_homepage_uses_classic_oled_by_default(appmodule, client):
     html = client.get("/").get_data(as_text=True)
-    assert 'data-skin="halloween"' in html
+    assert 'data-skin="classic"' in html
+    assert "--bg:#000000" in html and "--accent:  #c4161c" in html.replace("--accent: #c4161c", "--accent:  #c4161c")
     assert "VenFaye" not in html
 
 
@@ -168,12 +172,57 @@ def test_pwa_files(appmodule, client):
     assert client.get("/static/img/icon-192.png").status_code == 200
 
 
-def test_classic_skin_is_oled_black_with_dark_red(appmodule, client):
+def test_switching_default_theme_changes_the_whole_site(appmodule, client):
     login(client, appmodule)
     with appmodule.app.app_context():
-        klassiek = appmodule.SoundTheme.query.filter_by(slug="klassiek").first()
-        kid = klassiek.id
-    client.post(f"/admin/sounds/theme/{kid}/default")
+        hid = appmodule.SoundTheme.query.filter_by(slug="halloween").first().id
+    client.post(f"/admin/sounds/theme/{hid}/default")
     html = client.get("/").get_data(as_text=True)
-    assert 'data-skin="classic"' in html
-    assert 'html[data-skin="classic"][data-theme="dark"]' in html and "--bg:#000" in html and "#c4161c" in html
+    assert 'data-skin="halloween"' in html and "#ff6a13" in html and "--bg:#06040a" in html
+
+
+def test_new_theme_copies_klassiek_including_sounds(appmodule, client):
+    login(client, appmodule)
+    with appmodule.app.app_context():
+        kl = appmodule.SoundTheme.query.filter_by(slug="klassiek").first()
+        kid = kl.id
+    up = client.post(f"/admin/sounds/theme/{kid}/upload",
+                     data={"event": "intro", "file": (io.BytesIO(b"ID3x"), "a.mp3")}, content_type="multipart/form-data").get_json()
+    client.post(f"/admin/sounds/theme/{kid}/save", data={"name": "Klassiek", "accent": "#112233", "bg_color": "#000000",
+                                                       "skin": "classic", "synth": "on", "volume": "55"})
+    client.post("/admin/sounds/theme/new", data={"name": "Zombie", "copy_from": ""})   # "" = Klassiek
+    with appmodule.app.app_context():
+        z = appmodule.SoundTheme.query.filter_by(slug="zombie").first()
+        assert z.accent == "#112233" and z.volume == 55 and z.skin == "classic"
+        assert len(z.clips) == 1 and z.clips[0].filename != up["url"].rsplit("/", 1)[1]   # own file copy
+        copy_id = z.clips[0].id
+    # deleting the copy's clip must not break Klassiek's
+    assert client.post(f"/admin/sounds/clip/{copy_id}/delete").get_json()["success"]
+    assert client.get(up["url"]).status_code == 200
+
+
+def test_theme_appearance_is_saved_and_validated(appmodule, client):
+    login(client, appmodule)
+    with appmodule.app.app_context():
+        tid = appmodule.SoundTheme.query.filter_by(slug="klassiek").first().id
+    client.post(f"/admin/sounds/theme/{tid}/save", data={
+        "name": "Klassiek", "accent": "javascript:alert(1)", "bg_color": "#0a0a0f", "font_head": "Orbitron",
+        "font_body": "Hacker Font", "radius": "99", "bg_overlay": "10", "skin": "classic", "volume": "80"})
+    with appmodule.app.app_context():
+        t = appmodule.db.session.get(appmodule.SoundTheme, tid)
+        assert t.accent == "#c4161c"            # invalid colour ignored
+        assert t.bg_color == "#0a0a0f" and t.font_head == "Orbitron"
+        assert t.font_body == "DM Sans"          # unknown font ignored
+        assert t.radius == 24 and t.bg_overlay == 30   # clamped
+
+
+def test_admin_hub_has_one_menu_and_everything_in_the_panel(appmodule, client):
+    login(client, appmodule)
+    import html as htmllib
+    html = client.get("/admin?tab=users").get_data(as_text=True)
+    assert "adm-nav" in html
+    text = htmllib.unescape(html)
+    for label in ("Thema's & geluiden", "Pagina's", "Teksten", "Nieuws", "Gebruikers", "Meldingen", "Changelog", "TODO"):
+        assert label in text, label
+    assert 'class="dd-menu"' not in html          # the duplicate Admin dropdown is gone
+    assert 'id="tab-site"' not in html            # "Site & Thema" moved into Thema's

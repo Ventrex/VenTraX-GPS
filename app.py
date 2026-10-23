@@ -707,6 +707,15 @@ class SoundTheme(db.Model):
     ambient_min = db.Column(db.Integer, default=45)               # seconds between ambient sounds (min)
     ambient_max = db.Column(db.Integer, default=150)              # ... (max)
     is_default  = db.Column(db.Boolean, default=False)
+    # Look & feel of the whole site while this theme is active
+    accent      = db.Column(db.String(9),  nullable=True)
+    bg_color    = db.Column(db.String(9),  nullable=True)
+    font_head   = db.Column(db.String(40), nullable=True)
+    font_body   = db.Column(db.String(40), nullable=True)
+    radius      = db.Column(db.Integer,    nullable=True)
+    bg_image    = db.Column(db.String(200), nullable=True)   # file in the backgrounds folder
+    bg_overlay  = db.Column(db.Integer,    nullable=True)    # 30-95 (% darkening over the image)
+    logo        = db.Column(db.String(200), nullable=True)
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
     clips = db.relationship('SoundClip', back_populates='theme', cascade='all, delete-orphan',
                             order_by='SoundClip.id')
@@ -1927,6 +1936,27 @@ def get_profile_playfield(user_id):
             return data
     return None
 
+THEME_UI_DEFAULTS = {'accent': '#c4161c', 'bg_color': '#000000', 'font_head': 'Syne', 'font_body': 'DM Sans',
+                     'radius': 12, 'bg_overlay': 82}
+HALLOWEEN_UI = {'accent': '#ff6a13', 'bg_color': '#06040a'}
+HEAD_FONTS = ['Syne', 'Orbitron', 'Bebas Neue', 'Rajdhani', 'Exo 2', 'Oxanium', 'Press Start 2P', 'Cinzel', 'Playfair Display', 'Montserrat']
+BODY_FONTS = ['DM Sans', 'Inter', 'Nunito', 'Source Sans 3', 'Roboto', 'Open Sans', 'Lato', 'Jost', 'Outfit', 'Quicksand']
+_HEX_RE = __import__('re').compile(r'^#[0-9a-fA-F]{6}$')
+
+def theme_ui(theme):
+    """Look & feel of a theme with fallbacks, so a half-filled theme never breaks the page."""
+    d = THEME_UI_DEFAULTS
+    if theme is None:
+        return {**d, 'bg_image': '', 'logo': SiteSetting.get('site_logo', '') or 'logo_round.png'}
+    return {
+        'accent': theme.accent or d['accent'], 'bg_color': theme.bg_color or d['bg_color'],
+        'font_head': theme.font_head or d['font_head'], 'font_body': theme.font_body or d['font_body'],
+        'radius': theme.radius if theme.radius is not None else d['radius'],
+        'bg_overlay': theme.bg_overlay or d['bg_overlay'],
+        'bg_image': _existing_bg(theme.bg_image or ''),
+        'logo': theme.logo or SiteSetting.get('site_logo', '') or 'logo_round.png',
+    }
+
 def _existing_bg(name):
     """Background chosen in the admin portal, but only if the file really exists
     (older databases were seeded with a default that was never shipped)."""
@@ -1935,16 +1965,24 @@ def _existing_bg(name):
     return name
 
 def site_context():
+    from flask import g
+    try:
+        theme = getattr(g, 'theme_override', None) or get_default_sound_theme()
+        ui = theme_ui(theme)
+    except Exception:
+        db.session.rollback()
+        ui = theme_ui(None)
     return {
         'site_name':          SiteSetting.get('site_name',          'VenTrax'),
-        'site_bg':            _existing_bg(SiteSetting.get('site_bg', '')),
-        'site_logo':          SiteSetting.get('site_logo',          ''),
-        'site_accent':        SiteSetting.get('site_accent',        '#e11d48'),
+        'site_bg':            ui['bg_image'],
+        'site_logo':          ui['logo'],
+        'site_accent':        ui['accent'],
+        'site_bg_color':      ui['bg_color'],
         'site_tagline':       SiteSetting.get('site_tagline',       'Het ultieme real-time jachtspel'),
-        'site_font':          SiteSetting.get('site_font',          'Syne'),
-        'site_font_body':     SiteSetting.get('site_font_body',     'DM Sans'),
-        'site_bg_overlay':    SiteSetting.get('site_bg_overlay',    '0.82'),
-        'site_border_radius': SiteSetting.get('site_border_radius', '12'),
+        'site_font':          ui['font_head'],
+        'site_font_body':     ui['font_body'],
+        'site_bg_overlay':    ui['bg_overlay'] / 100,
+        'site_border_radius': ui['radius'],
         'diff_easy_img':      SiteSetting.get('diff_easy_img',      ''),
         'diff_medium_img':    SiteSetting.get('diff_medium_img',    ''),
         'diff_hard_img':      SiteSetting.get('diff_hard_img',      ''),
@@ -2225,7 +2263,7 @@ def send_game_summary_email(game):
     end_result = get_game_end_result(game)
     winner_role = end_result.get('winner_role')
     winner = next((p for p in standings if p.role == winner_role), None) if winner_role else (standings[0] if standings else None)
-    logo = SiteSetting.get('site_logo', '')
+    logo = theme_ui(get_default_sound_theme())['logo']
     if logo:
         logo_html = f'<img src="{app.config["BASE_URL"]}/backgrounds/{logo}" alt="VenTrax" style="max-height:72px;max-width:220px;object-fit:contain">'
     else:
@@ -4469,41 +4507,28 @@ def admin():
     games    = Game.query.order_by(Game.created_at.desc()).all()
     settings = {s.key: s.value for s in SiteSetting.query.all()}
     catalog_games = GameCatalog.query.order_by(GameCatalog.sort_order, GameCatalog.name).all()
+    tab = request.args.get('tab') if request.args.get('tab') in ('news', 'catalog', 'users', 'games') else 'news'
     return render_template('admin.html', users=users, games=games, settings=settings,
-                           catalog_games=catalog_games)
+                           catalog_games=catalog_games, active_tab=tab)
 
 @app.route('/admin/settings', methods=['POST'])
 @login_required
 @admin_required
 def admin_settings():
-    for key in ['site_name','site_accent','site_tagline','site_font',
-                'site_font_body','site_bg_overlay','site_border_radius']:
-        val = request.form.get(key,'').strip()
+    """Settings shared by every theme (name, tagline, difficulty pictures). Colours, fonts, logo and
+    background are per theme and live on Admin > Thema's & geluiden."""
+    for key in ['site_name', 'site_tagline']:
+        val = request.form.get(key, '').strip()
         if val: SiteSetting.set(key, val)
-    if 'site_bg' in request.files:
-        f2 = request.files['site_bg']
-        if f2 and f2.filename and allowed_file(f2.filename):
-            SiteSetting.set('site_bg', save_image(f2, app.config['BG_FOLDER'], (2560,1440)))
-    elif request.form.get('clear_bg'): SiteSetting.set('site_bg','')
-    if 'site_logo' in request.files:
-        f2 = request.files['site_logo']
-        if f2 and f2.filename and allowed_file(f2.filename):
-            SiteSetting.set('site_logo', save_image(f2, app.config['BG_FOLDER'], (400,200)))
-    elif request.form.get('clear_logo'): SiteSetting.set('site_logo','')
-    for field, setting_key in [
-        ('diff_easy_img', 'diff_easy_img'),
-        ('diff_medium_img', 'diff_medium_img'),
-        ('diff_hard_img', 'diff_hard_img'),
-        ('diff_custom_img', 'diff_custom_img'),
-    ]:
+    for field in ('diff_easy_img', 'diff_medium_img', 'diff_hard_img', 'diff_custom_img'):
         if field in request.files:
             f2 = request.files[field]
             if f2 and f2.filename and allowed_file(f2.filename):
-                SiteSetting.set(setting_key, save_image(f2, app.config['BG_FOLDER'], (900,600)))
+                SiteSetting.set(field, save_image(f2, app.config['BG_FOLDER'], (900, 600)))
         if request.form.get('clear_' + field):
-            SiteSetting.set(setting_key, '')
-    flash('Instellingen opgeslagen!','success')
-    return redirect(url_for('admin'))
+            SiteSetting.set(field, '')
+    flash('Instellingen opgeslagen!', 'success')
+    return redirect(url_for('admin_sounds', theme=request.form.get('theme') or None))
 
 @app.route('/admin/catalog/<int:cid>/edit', methods=['POST'])
 @login_required
@@ -4621,7 +4646,9 @@ def sound_theme_payload(theme):
     }
 
 def game_sound_ctx(game):
+    from flask import g
     theme = get_game_sound_theme(game)
+    g.theme_override = theme      # colours/fonts of this game's theme apply to the page
     return {'page_skin': (theme.skin if theme else None) or 'classic',
             'sound_theme': sound_theme_payload(theme)}
 
@@ -4668,8 +4695,12 @@ def admin_sounds():
     groups = {}
     for key, group, label, desc, loop in SOUND_EVENTS:
         groups.setdefault(group, []).append({'key': key, 'label': label, 'desc': desc})
+    settings = {s.key: s.value for s in SiteSetting.query.filter(~SiteSetting.key.like('txt:%')).all()}
     return render_template('admin_sounds.html', themes=themes, selected=selected, groups=groups,
-                           skins=SOUND_SKINS, payload=sound_theme_payload(selected) if selected else None)
+                           skins=SOUND_SKINS, payload=sound_theme_payload(selected) if selected else None,
+                           ui=theme_ui(selected) if selected else None, settings=settings,
+                           head_fonts=HEAD_FONTS, body_fonts=BODY_FONTS,
+                           klassiek=SoundTheme.query.filter_by(slug='klassiek').first())
 
 @app.route('/admin/sounds/theme/new', methods=['POST'])
 @login_required
@@ -4682,11 +4713,31 @@ def admin_sound_theme_new():
     slug, n = _slugify(name), 2
     while SoundTheme.query.filter_by(slug=slug).first():
         slug = f'{_slugify(name)[:34]}-{n}'; n += 1
-    skin = request.form.get('skin') if request.form.get('skin') in dict(SOUND_SKINS) else 'classic'
-    theme = SoundTheme(slug=slug, name=name, skin=skin, description=(request.form.get('description') or '')[:300])
+    theme = SoundTheme(slug=slug, name=name, description=(request.form.get('description') or '')[:300])
+    # A new theme starts as a copy of another one (Klassiek unless chosen otherwise): look, settings and sounds.
+    try:
+        src_id = int(request.form.get('copy_from') or 0)
+    except ValueError:
+        src_id = 0
+    src = db.session.get(SoundTheme, src_id) if src_id else SoundTheme.query.filter_by(slug='klassiek').first()
+    if src:
+        for col in ('skin', 'synth', 'volume', 'near_m', 'close_m', 'ambient_min', 'ambient_max', 'accent',
+                    'bg_color', 'font_head', 'font_body', 'radius', 'bg_image', 'bg_overlay', 'logo'):
+            setattr(theme, col, getattr(src, col))
     db.session.add(theme); db.session.commit()
+    if src:
+        import shutil
+        for c in src.clips:            # own copy of each file, so deleting a clip here never breaks the original
+            ext = c.filename.rsplit('.', 1)[-1]
+            new_fn = f"{theme.id}_{c.event}_{int(time.time())}_{random.randint(1000, 9999)}.{ext}"
+            try:
+                shutil.copyfile(os.path.join(SOUND_FOLDER, os.path.basename(c.filename)), os.path.join(SOUND_FOLDER, new_fn))
+            except OSError:
+                continue
+            db.session.add(SoundClip(theme_id=theme.id, event=c.event, filename=new_fn, label=c.label, volume=c.volume))
+        db.session.commit()
     log_activity('sound_theme_new', name, user_id=current_user.id)
-    flash(f'Thema "{name}" aangemaakt. Zet nu geluidjes bij de gebeurtenissen.', 'success')
+    flash(f'Thema "{name}" aangemaakt als kopie van {src.name if src else "een leeg thema"}. Pas het uiterlijk en de geluiden aan.', 'success')
     return redirect(url_for('admin_sounds', theme=theme.id))
 
 @app.route('/admin/sounds/theme/<int:tid>/save', methods=['POST'])
@@ -4707,6 +4758,28 @@ def admin_sound_theme_save(tid):
     theme.close_m = _int_field(f, 'close_m', 40, 5, 1000)
     if theme.close_m >= theme.near_m:
         theme.close_m = max(5, theme.near_m // 3)
+    if _HEX_RE.match(f.get('accent', '')):
+        theme.accent = f.get('accent').lower()
+    if _HEX_RE.match(f.get('bg_color', '')):
+        theme.bg_color = f.get('bg_color').lower()
+    if f.get('font_head') in HEAD_FONTS:
+        theme.font_head = f.get('font_head')
+    if f.get('font_body') in BODY_FONTS:
+        theme.font_body = f.get('font_body')
+    theme.radius = _int_field(f, 'radius', 12, 0, 24)
+    theme.bg_overlay = _int_field(f, 'bg_overlay', 82, 30, 95)
+    for field, col, size in (('logo', 'logo', (400, 400)), ('bg_image', 'bg_image', (2560, 1440))):
+        up = request.files.get(field)
+        if up and up.filename:
+            if not allowed_file(up.filename):
+                flash('Alleen png, jpg of webp afbeeldingen.', 'danger')
+            else:
+                try:
+                    setattr(theme, col, save_image(up, app.config['BG_FOLDER'], size))
+                except ValueError as e:
+                    flash(f'Afbeelding niet opgeslagen: {e}', 'danger')
+        elif f.get('clear_' + field):
+            setattr(theme, col, '')
     theme.ambient_min = _int_field(f, 'ambient_min', 45, 10, 1800)
     theme.ambient_max = _int_field(f, 'ambient_max', 150, 15, 3600)
     if theme.ambient_max < theme.ambient_min:
@@ -5017,6 +5090,10 @@ def init_db():
         db.create_all()
         ensure_column('post', 'audio_filename', 'VARCHAR(256)')
         ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
+        for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),
+                         ('font_body', 'VARCHAR(40)'), ('radius', 'INTEGER'), ('bg_image', 'VARCHAR(200)'),
+                         ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)')):
+            ensure_column('sound_theme', col, typ)
         os.makedirs(AUDIO_FOLDER, exist_ok=True)
         os.makedirs(SOUND_FOLDER, exist_ok=True)
         if not SiteSetting.get('site_logo'):
@@ -5092,11 +5169,18 @@ def init_db():
             db.session.commit()
         # Seed sound themes. Halloween is the default; switch it in Admin > Geluiden.
         if SoundTheme.query.count() == 0:
-            db.session.add(SoundTheme(slug='halloween', name='Halloween', skin='halloween', is_default=True,
+            db.session.add(SoundTheme(slug='klassiek', name='Klassiek', skin='classic', is_default=True,
+                                      description='OLED-zwart met donkerrood. Basis voor nieuwe thema\'s.'))
+            db.session.add(SoundTheme(slug='halloween', name='Halloween', skin='halloween', is_default=False,
                                       description='Enge sfeer: hartslag, gefluister en dreigende geluiden.'))
-            db.session.add(SoundTheme(slug='klassiek', name='Klassiek', skin='classic', is_default=False,
-                                      description='Het normale VenTrax-uiterlijk met simpele pieptonen.'))
             db.session.commit()
+        # themes made before colours were per theme: give them a look (Halloween keeps its orange)
+        for th in SoundTheme.query.all():
+            base = HALLOWEEN_UI if th.skin == 'halloween' else {}
+            for key, val in {**THEME_UI_DEFAULTS, **base}.items():
+                if getattr(th, key) in (None, ''):
+                    setattr(th, key, val)
+        db.session.commit()
         if not Changelog.query.filter_by(version='3.0.0').first():
             db.session.add(Changelog(version='3.0.0', title='Halloween-update: geluidsthema\'s, nieuwe look, bewerkbare pagina\'s', type='feature',
                           body='- Geluidsthema\'s: kies per thema geluidjes bij start, einde, lootbox, offline, target, buiten de zone en Hunter in de buurt\n- Admin > Geluiden: upload en beluister geluidjes per gebeurtenis\n- Eng Halloween-uiterlijk voor site en spel\n- Admin kan pagina\'s en teksten zelf aanpassen\n- Kapotte logo\'s en achtergronden hersteld\n- Eenmalige toestemmingen (locatie/geluid) en installeerbare app zodat de popup niet steeds terugkomt'))

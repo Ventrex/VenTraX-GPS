@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Teksten – {{ site_name }}{% endblock %}
 {% block content %}
-<div class="container container-md" style="max-width:820px">
+<div class="container">
+  {% include '_admin_nav.html' %}
+  <div style="max-width:820px;margin:0 auto">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">
     <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800"><i class="fas fa-pen-to-square" style="color:var(--accent)"></i> Teksten</h1>
     <div style="display:flex;gap:8px"><a href="{{ url_for('admin_pages') }}" class="btn btn-ghost btn-sm"><i class="fas fa-file-lines"></i> Pagina's</a>
@@ -26,5 +28,6 @@
     {% endfor %}
     <button class="btn btn-primary btn-lg"><i class="fas fa-floppy-disk"></i> Alles opslaan</button>
   </form>
+  </div>
 </div>
 {% endblock %}
