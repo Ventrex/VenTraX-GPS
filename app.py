@@ -703,8 +703,8 @@ class SoundTheme(db.Model):
     skin        = db.Column(db.String(20), default='classic')     # visual style: classic / halloween
     synth       = db.Column(db.Boolean, default=True)             # use built-in synth sounds where no clip is uploaded
     volume      = db.Column(db.Integer, default=80)               # master volume 0-100
-    near_m      = db.Column(db.Integer, default=120)              # "hunter in de buurt" distance (m)
-    close_m     = db.Column(db.Integer, default=40)               # "hunter heel dichtbij" distance (m)
+    near_m      = db.Column(db.Integer, default=100)              # "hunter in de buurt" distance (m)
+    close_m     = db.Column(db.Integer, default=30)               # "hunter heel dichtbij" distance (m)
     ambient_min = db.Column(db.Integer, default=45)               # seconds between ambient sounds (min)
     ambient_max = db.Column(db.Integer, default=150)              # ... (max)
     is_default  = db.Column(db.Boolean, default=False)
@@ -819,6 +819,7 @@ def admin_required(f):
         return f(*a, **kw)
     return d
 
+STALE_PLAYER_MINUTES   = 10   # no sign of life for this long during a game = player is out
 CATCH_MAX_DISTANCE_M   = 2    # hunter must be within this many meters to tag a runner
 CATCH_MIN_PROGRESS_PCT = 50   # tagging only allowed once the game is this far along
 
@@ -1064,16 +1065,19 @@ def maybe_resume_game_from_pause(game, broadcast=True):
     return True
 
 def sweep_stale_players(game, broadcast=True):
-    """Mark players as out when they have not been reachable for 5 minutes."""
+    """Mark players as out when they have not been reachable for STALE_PLAYER_MINUTES.
+    The clock only starts at the game start: phones that sat in the lobby with a locked screen have an old
+    last_seen, and must not be thrown out the moment the game begins."""
     if not game or game.status != 'active':
         return []
     now = datetime.utcnow()
-    cutoff = now - timedelta(minutes=5)
+    cutoff = now - timedelta(minutes=STALE_PLAYER_MINUTES)
     timed_out = []
     for p in game.players.all():
         if p.is_caught:
             continue
-        if p.last_seen and p.last_seen < cutoff:
+        seen = max(p.last_seen, game.started_at) if (p.last_seen and game.started_at) else p.last_seen
+        if seen and seen < cutoff:
             p.is_caught = True
             p.is_offline = False
             p.is_paused = False
@@ -3210,6 +3214,7 @@ def api_start_game(code):
                 g2.started_at = datetime.utcnow()
                 for p in g2.players.all():
                     p.user.total_games += 1
+                    p.last_seen = g2.started_at        # everybody counts as present at the start
                 db.session.commit()
                 hub.broadcast(code, 'game_started', {
                     'code': code,
@@ -5471,6 +5476,11 @@ def init_db():
                     setattr(th, key, val)
         db.session.commit()
         # Syne is very wide and looked cheap: move themes that still have it to the new default, once.
+        if not SiteSetting.get('migr_near_v2'):       # new default: sound at 100 m (was 120 m / 40 m)
+            for th in SoundTheme.query.filter_by(near_m=120, close_m=40).all():
+                th.near_m, th.close_m = 100, 30
+            db.session.commit()
+            SiteSetting.set('migr_near_v2', '1')
         if not SiteSetting.get('migr_font_v2'):
             for th in SoundTheme.query.filter(SoundTheme.font_head == 'Syne').all():
                 th.font_head = THEME_UI_DEFAULTS['font_head']

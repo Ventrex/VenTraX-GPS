@@ -42,7 +42,24 @@
     });
   }
 
+  // Safari asks again on every page load unless the site is set to "Allow" in its website settings.
+  // A web page cannot change that setting, so we show the (30 second) fix instead.
+  function iosTipHtml() {
+    return '<b>Safari blijft om toestemming vragen?</b> Zet het één keer vast: tik op <b>aA</b> in de adresbalk → ' +
+           '<b>Websiteinstellingen</b> → zet <b>Locatie</b>, <b>Camera</b> en <b>Microfoon</b> op <b>Toestaan</b>. ' +
+           'Daarna vraagt Safari het niet meer. Nog beter: <b>Deel</b> <i class="fas fa-arrow-up-from-bracket"></i> → ' +
+           '<b>Zet op beginscherm</b> en open VenTrax als app.';
+  }
+  function showIosTip(el) {
+    if (!el || !isIOS() || isStandalone() || get('vx_ios_tip_done') === '1') return;
+    el.innerHTML = '<i class="fas fa-circle-info"></i><span>' + iosTipHtml() +
+      ' <a href="#" style="text-decoration:underline" onclick="VXPerm.hideIosTip(this);return false">Gedaan, niet meer tonen</a></span>';
+    el.style.display = 'flex';
+  }
+
   window.VXPerm = {
+    iosTipHtml: iosTipHtml, showIosTip: showIosTip,
+    hideIosTip: function (a) { set('vx_ios_tip_done', '1'); var box = a.closest('.alert'); if (box) box.style.display = 'none'; },
     geoState: geoState, isStandalone: isStandalone, isIOS: isIOS, requestGeo: requestGeo,
     setupDone: function () { return get(K_DONE) === '1'; },
     markDone: function () { set(K_DONE, '1'); },
