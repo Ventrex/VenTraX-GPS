@@ -34,6 +34,14 @@ Open `http://localhost:5001` in je browser. De eerste persoon die zich registree
 - Geüploade geluiden staan in `static/audio/themes` (volume-mount in `docker-compose.yml`).
 - Telefoons: eenmalige setup (locatie + geluid) en "installeer als app" (PWA) zodat toestemmingen onthouden worden.
 
+## Bots
+
+Creator kan in de lobby bots toevoegen (Runner of Hunter, max 8 per spel) om alleen te testen of een groep aan te vullen.
+- Kaartdata komt van OpenStreetMap via de Overpass API (`OVERPASS_URL`, standaard de publieke server; resultaten worden 7 dagen gecachet in `instance/terrain`). Op een eigen Overpass-server kan ook.
+- Water, gebouwen, spoor en snelwegen zijn geblokkeerd; bosjes/struiken half zo snel; paden, wegen en bruggen altijd begaanbaar (dus ook tunnels en bruggen over water/spoor).
+- Snelheid volgt de moeilijkheid: makkelijk 1,0 m/s, gemiddeld 1,4 m/s, moeilijk 2,0 m/s (wandelen, niet rennen).
+- Beperkingen: tuinen en hekken staan niet op de kaart; OSM kan fout of verouderd zijn; bots weten waar iedereen is, gebruiken geen offline/pauze, en tikken binnen 6 m (de kaart heeft 6 m-cellen). Zonder kaartdata lopen ze over open terrein en krijgen spelers een melding.
+
 ## Lokaal draaien
 
 ```bash

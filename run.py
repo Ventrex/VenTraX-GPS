@@ -2,7 +2,7 @@
 import os, logging
 from gevent import pywsgi
 from geventwebsocket.handler import WebSocketHandler
-from app import app, init_db
+from app import app, init_db, resume_bot_games
 
 logging.basicConfig(
     level=logging.INFO,
@@ -11,6 +11,7 @@ logging.basicConfig(
 
 if __name__ == '__main__':
     init_db()
+    resume_bot_games()
     port = int(os.environ.get('PORT', 5000))
     print(f'\nVenTrax -> http://0.0.0.0:{port}\n')
     server = pywsgi.WSGIServer(
