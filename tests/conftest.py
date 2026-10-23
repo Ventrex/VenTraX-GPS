@@ -30,6 +30,10 @@ def appmodule(tmp_path, monkeypatch):
     with module.app.app_context():
         module.init_db()
     yield module
+    # uploaded test sounds must not stay behind in the real static/audio/themes folder
+    import glob
+    for f in glob.glob(os.path.join(module.SOUND_FOLDER, "[0-9]*_*")):
+        os.remove(f)
     with module.app.app_context():
         module.db.session.remove()
         module.db.drop_all()
