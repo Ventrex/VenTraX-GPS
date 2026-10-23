@@ -14,9 +14,9 @@
   {% include '_admin_nav.html' %}
   <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800;margin-bottom:6px"><i class="fas fa-masks-theater" style="color:var(--accent)"></i> Personages</h1>
   <p style="color:var(--text2);margin-bottom:18px;max-width:760px;line-height:1.6">
-    Personages zijn figuren die spelers in de lobby kiezen, per thema en per rol (bijv. Ghostface als Hunter, Sidney als Runner).
-    Ze zijn voor het uiterlijk: je ziet ze in de lobby en als plaatje op de kaart. Ze veranderen niets aan de punten.
-    Upload zelf een plaatje (vierkant werkt het best); zonder plaatje zie je het icoon.
+    Personages zijn figuren die spelers in de lobby kiezen, per thema. Elk personage is <b>goed</b> of <b>slecht</b> en een <b>jongen</b> of <b>meisje</b>.
+    Zet er per groep 5 neer: 5 goede jongens, 5 slechte jongens, 5 goede meisjes en 5 slechte meisjes. Ze zijn voor het uiterlijk en veranderen niets aan de punten.
+    Upload zelf een plaatje (vierkant werkt het best); zonder plaatje zie je een icoon.
   </p>
   <div class="card" style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
     <b style="font-size:14px">Thema:</b>
@@ -25,11 +25,21 @@
     </select>
   </div>
   {% if selected %}
+  <form class="card" method="POST" action="{{ url_for('admin_persona_map') }}" style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <input type="hidden" name="theme_id" value="{{ selected.id }}">
+    <b style="font-size:14px">Wie kiest uit wie?</b>
+    <label style="font-size:14px">Hunters kiezen uit
+      <select name="hunter" class="form-control" style="display:inline-block;width:auto" onchange="this.form.submit()">
+        <option value="good" {{ 'selected' if pmap.hunter=='good' else '' }}>goede personages</option>
+        <option value="bad" {{ 'selected' if pmap.hunter=='bad' else '' }}>slechte personages</option>
+      </select></label>
+    <span class="form-hint">Runners kiezen uit {{ 'de slechte' if pmap.hunter=='good' else 'de goede' }} personages.</span>
+  </form>
   <form class="card" method="POST" action="{{ url_for('admin_persona_bulk') }}" style="margin-bottom:16px">
     <input type="hidden" name="theme_id" value="{{ selected.id }}">
     <div class="card-title"><i class="fas fa-list"></i> Lijst plakken voor {{ selected.name }}</div>
-    <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:8px">Plak een lijst met per regel <b>Film | Slecht | Goed</b> (je mag ook de tabel uit een document plakken). De slechte personages worden Hunters, de goede Runners. Bestaande namen worden overgeslagen.</p>
-    <textarea name="text" class="form-control" rows="5" placeholder="Scream | Ghostface | Sidney Prescott"></textarea>
+    <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:8px">Plak een lijst met per regel <b>Naam | goed of slecht | jongen of meisje | omschrijving</b>. Bestaande namen worden overgeslagen.</p>
+    <textarea name="text" class="form-control" rows="5" placeholder="Ghostface | slecht | jongen | Scream"></textarea>
     <button class="btn btn-primary btn-sm" style="margin-top:8px"><i class="fas fa-plus"></i> Toevoegen</button>
   </form>
   <div class="pg">
@@ -40,11 +50,11 @@
         <div class="pph">{% if r.image %}<img src="{{ r.image }}" alt="">{% else %}<i class="fas {{ r.icon }}"></i>{% endif %}</div>
         <div style="flex:1;min-width:0">
           <input class="form-control" name="name" value="{{ r.name }}" placeholder="Naam" required style="margin-bottom:6px">
-          <select class="form-control" name="role"><option value="hunter" {{ 'selected' if r.role=='hunter' else '' }}>Hunter</option><option value="runner" {{ 'selected' if r.role=='runner' else '' }}>Runner</option></select>
+          <div style="display:flex;gap:6px"><select class="form-control" name="kind"><option value="good" {{ 'selected' if r.kind=='good' else '' }}>Goed</option><option value="bad" {{ 'selected' if r.kind=='bad' else '' }}>Slecht</option></select><select class="form-control" name="gender"><option value="guy" {{ 'selected' if r.gender=='guy' else '' }}>Jongen</option><option value="girl" {{ 'selected' if r.gender=='girl' else '' }}>Meisje</option></select></div>
         </div>
       </div>
       <input class="form-control" name="blurb" value="{{ r.blurb }}" placeholder="Korte omschrijving">
-      <input class="form-control" name="icon" value="{{ r.icon }}" placeholder="Icoon (bijv. fa-skull)">
+      <input class="form-control" name="icon" value="{{ r.icon }}" placeholder="Icoon (optioneel, bijv. fa-ghost)">
       <input type="file" name="image" accept="image/*" class="form-control">
       {% if r.image %}<label style="font-size:12px;color:var(--text2)"><input type="checkbox" name="clear_image"> plaatje verwijderen</label>{% endif %}
       <div style="display:flex;gap:8px">
@@ -57,7 +67,7 @@
       <input type="hidden" name="theme_id" value="{{ selected.id }}">
       <b><i class="fas fa-plus"></i> Nieuw personage</b>
       <input class="form-control" name="name" placeholder="Naam" required>
-      <select class="form-control" name="role"><option value="hunter">Hunter</option><option value="runner">Runner</option></select>
+      <div style="display:flex;gap:6px"><select class="form-control" name="kind"><option value="good">Goed</option><option value="bad">Slecht</option></select><select class="form-control" name="gender"><option value="guy">Jongen</option><option value="girl">Meisje</option></select></div>
       <input class="form-control" name="blurb" placeholder="Korte omschrijving">
       <input class="form-control" name="icon" placeholder="Icoon (bijv. fa-ghost)">
       <input type="file" name="image" accept="image/*" class="form-control">

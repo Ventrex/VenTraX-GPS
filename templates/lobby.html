@@ -176,8 +176,8 @@
 
       <!-- Persona picker (only shown when this theme has characters for your role) -->
       <div id="personaCard" class="card" style="display:none;margin-bottom:16px">
-        <div class="sec-title" style="margin-bottom:10px"><i class="fas fa-masks-theater"></i> Kies je personage</div>
-        <div id="personaGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px"></div>
+        <div class="sec-title" style="margin-bottom:10px"><i class="fas fa-masks-theater"></i> <span id="personaTitle">Kies je personage</span></div>
+        <div id="personaGrid"></div>
       </div>
 
       <!-- Players -->
@@ -939,18 +939,29 @@ function onPersona(uid, p) {
   if (row) row.textContent = p ? '· ' + p.name : '';
   if (uid === MY_ID) loadPersonas();
 }
+let personaTab = null;
 function loadPersonas() {
   fetch('/api/game/' + CODE + '/personas').then(r => r.json()).then(d => {
     const card = document.getElementById('personaCard'), grid = document.getElementById('personaGrid');
     if (!d.personas || !d.personas.length || GAME_STATUS !== 'lobby') { card.style.display = 'none'; return; }
     card.style.display = '';
-    grid.innerHTML = d.personas.map(p => {
+    const groups = [['guy', 'Jongens'], ['girl', 'Meisjes'], ['', 'Overige']].map(g => [g[0], g[1], d.personas.filter(p => p.gender === g[0])]).filter(g => g[2].length);
+    const mineGroup = (groups.find(g => g[2].some(p => p.id === d.mine)) || [])[0];
+    if (personaTab === null || !groups.some(g => g[0] === personaTab)) personaTab = mineGroup !== undefined ? mineGroup : groups[0][0];
+    const col = d.kind === 'good' ? '#10b981' : '#ef4444';
+    document.getElementById('personaTitle').textContent = 'Kies je personage (' + (d.kind === 'good' ? 'de goeden' : 'de slechten') + ')';
+    const tabs = groups.length > 1 ? '<div style="display:flex;gap:8px;margin-bottom:12px">' + groups.map(g =>
+      '<button type="button" onclick="personaTab=\'' + g[0] + '\';loadPersonas()" style="flex:1;padding:9px;border-radius:12px;border:2px solid ' + (g[0] === personaTab ? col : 'var(--border)') + ';background:' + (g[0] === personaTab ? 'color-mix(in srgb,' + col + ' 14%,var(--bg3))' : 'var(--bg3)') + ';color:var(--text);font-weight:700;cursor:pointer">' + g[1] + ' (' + g[2].length + ')</button>').join('') + '</div>' : '';
+    const list = (groups.find(g => g[0] === personaTab) || groups[0])[2];
+    grid.style.display = 'block';
+    grid.innerHTML = tabs + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px">' + list.map(p => {
       const sel = d.mine === p.id, off = p.taken_by ? 'opacity:.45' : '';
-      return '<button type="button" onclick="pickPersona(' + p.id + ',' + (sel ? 'true' : 'false') + ')" title="' + (p.taken_by ? 'Gekozen door ' + p.taken_by : p.blurb).replace(/"/g, '') + '" style="' + off + ';border:2px solid ' + (sel ? 'var(--accent)' : 'var(--border)') + ';background:var(--bg3);border-radius:16px;padding:8px;color:var(--text);cursor:pointer;text-align:center">' +
-        '<div style="aspect-ratio:1;border-radius:12px;background:var(--bg2);display:grid;place-items:center;overflow:hidden;font-size:28px;margin-bottom:6px">' +
+      return '<button type="button" onclick="pickPersona(' + p.id + ',' + (sel ? 'true' : 'false') + ')" title="' + (p.taken_by ? 'Gekozen door ' + p.taken_by : p.blurb).replace(/"/g, '') + '" style="' + off + ';border:2px solid ' + (sel ? col : 'var(--border)') + ';background:var(--bg3);border-radius:16px;padding:8px;color:var(--text);cursor:pointer;text-align:center">' +
+        '<div style="aspect-ratio:1;border-radius:12px;background:var(--bg2);display:grid;place-items:center;overflow:hidden;font-size:34px;color:' + col + ';margin-bottom:6px">' +
         (p.image ? '<img src="' + p.image + '" style="width:100%;height:100%;object-fit:cover" alt="">' : '<i class="fas ' + p.icon + '"></i>') + '</div>' +
-        '<div style="font-weight:700;font-size:13px">' + p.name.replace(/</g, '&lt;') + '</div></button>';
-    }).join('');
+        '<div style="font-weight:700;font-size:13px;line-height:1.25">' + p.name.replace(/</g, '&lt;') + '</div>' +
+        (p.blurb ? '<div style="font-size:10.5px;color:var(--text2);margin-top:2px">' + p.blurb.replace(/</g, '&lt;') + '</div>' : '') + '</button>';
+    }).join('') + '</div>';
   }).catch(() => {});
 }
 function pickPersona(id, already) {
