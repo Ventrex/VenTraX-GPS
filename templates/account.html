@@ -2,7 +2,7 @@
 {% block title %}Mijn Profiel – {{ site_name }}{% endblock %}
 {% block content %}
 <div class="container" style="max-width:820px">
-  <h1 style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;margin-bottom:24px">
+  <h1 style="font-family:var(--hfont);font-size:32px;font-weight:800;margin-bottom:24px">
     <i class="fas fa-user" style="color:var(--accent)"></i> Mijn Profiel
   </h1>
 
@@ -10,10 +10,10 @@
     <!-- Left: Info -->
     <div>
       <div class="card" style="margin-bottom:20px;text-align:center;padding:32px">
-        <div style="width:80px;height:80px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:36px;margin:0 auto 16px">
+        <div style="width:80px;height:80px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--hfont);font-weight:800;font-size:36px;margin:0 auto 16px">
           {{ current_user.avatar_letter }}
         </div>
-        <div style="font-family:'Syne',sans-serif;font-size:26px;font-weight:800">{{ current_user.username }}</div>
+        <div style="font-family:var(--hfont);font-size:26px;font-weight:800">{{ current_user.username }}</div>
         {% if current_user.email %}<div style="color:var(--text2);font-size:14px;margin-top:4px">{{ current_user.email }}</div>{% endif %}
         {% if current_user.is_admin %}<div style="margin-top:10px"><span class="badge badge-admin"><i class="fas fa-shield-halved"></i> Admin</span></div>{% endif %}
         <div style="color:var(--text2);font-size:13px;margin-top:10px">Lid sinds {{ current_user.created_at.strftime('%d %b %Y') }}</div>

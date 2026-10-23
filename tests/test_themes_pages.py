@@ -226,3 +226,49 @@ def test_admin_hub_has_one_menu_and_everything_in_the_panel(appmodule, client):
         assert label in text, label
     assert 'class="dd-menu"' not in html          # the duplicate Admin dropdown is gone
     assert 'id="tab-site"' not in html            # "Site & Thema" moved into Thema's
+
+
+def _klassiek_id(appmodule):
+    with appmodule.app.app_context():
+        return appmodule.SoundTheme.query.filter_by(slug="klassiek").first().id
+
+
+def test_google_font_url_only_asks_for_weights_that_exist(appmodule):
+    with appmodule.app.app_context():
+        ui = appmodule.theme_ui(None)
+    ui["font_head"] = "Creepster"          # only has weight 400; asking for 700 would make Google reject everything
+    url, faces, head, body = appmodule.font_assets(ui)
+    assert "family=Creepster:wght@400" in url and "700" not in url.split("Creepster")[1].split("&")[0]
+    assert faces == "" and head == "Creepster" and body == "DM Sans"
+
+
+def test_uploaded_font_overrides_and_is_validated(appmodule, client):
+    login(client, appmodule)
+    tid = _klassiek_id(appmodule)
+    base = {"name": "Klassiek", "skin": "classic", "volume": "80"}
+    bad = client.post(f"/admin/sounds/theme/{tid}/save",
+                      data={**base, "font_head_upload": (io.BytesIO(b"<?php echo 1;"), "evil.woff2")},
+                      content_type="multipart/form-data")
+    with appmodule.app.app_context():
+        assert not appmodule.db.session.get(appmodule.SoundTheme, tid).font_head_file   # fake header rejected
+    good = client.post(f"/admin/sounds/theme/{tid}/save",
+                       data={**base, "font_head_upload": (io.BytesIO(b"wOF2" + b"\x00" * 64), "Horror.woff2")},
+                       content_type="multipart/form-data")
+    with appmodule.app.app_context():
+        fn = appmodule.db.session.get(appmodule.SoundTheme, tid).font_head_file
+        assert fn and fn.endswith(".woff2")
+    html = client.get("/").get_data(as_text=True)
+    assert "@font-face{font-family:'VX Head'" in html and f"/static/fonts/{fn}" in html
+    assert "--hfont:'VX Head'" in html
+    # removing it deletes the file and goes back to the Google font
+    client.post(f"/admin/sounds/theme/{tid}/save", data={**base, "clear_font_head_upload": "1"}, content_type="multipart/form-data")
+    import os
+    assert not os.path.exists(os.path.join(appmodule.FONT_FOLDER, fn))
+    assert "VX Head" not in client.get("/").get_data(as_text=True)
+
+
+def test_select_options_are_readable_and_default_font_is_not_syne(appmodule, client):
+    html = client.get("/").get_data(as_text=True)
+    assert "color-scheme:dark" in html and "select option" in html
+    assert "--hfont:'Space Grotesk'" in html
+    assert "'Syne'" not in html

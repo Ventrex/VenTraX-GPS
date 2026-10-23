@@ -712,6 +712,8 @@ class SoundTheme(db.Model):
     bg_color    = db.Column(db.String(9),  nullable=True)
     font_head   = db.Column(db.String(40), nullable=True)
     font_body   = db.Column(db.String(40), nullable=True)
+    font_head_file = db.Column(db.String(120), nullable=True)   # uploaded font (static/fonts), overrides font_head
+    font_body_file = db.Column(db.String(120), nullable=True)
     radius      = db.Column(db.Integer,    nullable=True)
     bg_image    = db.Column(db.String(200), nullable=True)   # file in the backgrounds folder
     bg_overlay  = db.Column(db.Integer,    nullable=True)    # 30-95 (% darkening over the image)
@@ -1936,21 +1938,37 @@ def get_profile_playfield(user_id):
             return data
     return None
 
-THEME_UI_DEFAULTS = {'accent': '#c4161c', 'bg_color': '#000000', 'font_head': 'Syne', 'font_body': 'DM Sans',
+THEME_UI_DEFAULTS = {'accent': '#c4161c', 'bg_color': '#000000', 'font_head': 'Space Grotesk', 'font_body': 'DM Sans',
                      'radius': 12, 'bg_overlay': 82}
 HALLOWEEN_UI = {'accent': '#ff6a13', 'bg_color': '#06040a'}
-HEAD_FONTS = ['Syne', 'Orbitron', 'Bebas Neue', 'Rajdhani', 'Exo 2', 'Oxanium', 'Press Start 2P', 'Cinzel', 'Playfair Display', 'Montserrat']
-BODY_FONTS = ['DM Sans', 'Inter', 'Nunito', 'Source Sans 3', 'Roboto', 'Open Sans', 'Lato', 'Jost', 'Outfit', 'Quicksand']
+# Google Fonts and the weights each really has (asking for a missing weight makes Google reject the whole request).
+HEAD_FONT_GROUPS = [
+    ('Modern', {'Space Grotesk': '500;700', 'Sora': '600;700', 'Outfit': '600;700', 'Plus Jakarta Sans': '600;800',
+                'Montserrat': '600;800', 'Rajdhani': '600;700', 'Exo 2': '600;800', 'Oxanium': '600;700',
+                'Orbitron': '700;900', 'Syne': '700;800'}),
+    ('Klassiek & stoer', {'Bebas Neue': '400', 'Cinzel': '600;800', 'Playfair Display': '600;800', 'Press Start 2P': '400'}),
+    ('Horror', {'Creepster': '400', 'Nosifer': '400', 'Eater': '400', 'Butcherman': '400', 'Metal Mania': '400',
+                'Special Elite': '400', 'UnifrakturCook': '700', 'Rubik Wet Paint': '400', 'Griffy': '400'}),
+]
+HEAD_FONTS = {name: w for _, group in HEAD_FONT_GROUPS for name, w in group.items()}
+BODY_FONTS = {'DM Sans': '400;500;600', 'Inter': '400;500;600', 'Nunito': '400;600', 'Source Sans 3': '400;600',
+              'Roboto': '400;500;700', 'Open Sans': '400;600', 'Lato': '400;700', 'Jost': '400;500;600',
+              'Outfit': '400;500;600', 'Quicksand': '400;600', 'Special Elite': '400', 'Cinzel': '400;600'}
+FONT_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'fonts')
+FONT_MAGIC = {b'wOF2': 'woff2', b'wOFF': 'woff', b'\x00\x01\x00\x00': 'ttf', b'true': 'ttf', b'OTTO': 'otf'}
 _HEX_RE = __import__('re').compile(r'^#[0-9a-fA-F]{6}$')
+_FONT_FILE_RE = __import__('re').compile(r'^[A-Za-z0-9_.-]{1,120}\.(woff2|woff|ttf|otf)$')
 
 def theme_ui(theme):
     """Look & feel of a theme with fallbacks, so a half-filled theme never breaks the page."""
     d = THEME_UI_DEFAULTS
     if theme is None:
-        return {**d, 'bg_image': '', 'logo': SiteSetting.get('site_logo', '') or 'logo_round.png'}
+        return {**d, 'bg_image': '', 'font_head_file': '', 'font_body_file': '',
+                'logo': SiteSetting.get('site_logo', '') or 'logo_round.png'}
     return {
         'accent': theme.accent or d['accent'], 'bg_color': theme.bg_color or d['bg_color'],
         'font_head': theme.font_head or d['font_head'], 'font_body': theme.font_body or d['font_body'],
+        'font_head_file': theme.font_head_file or '', 'font_body_file': theme.font_body_file or '',
         'radius': theme.radius if theme.radius is not None else d['radius'],
         'bg_overlay': theme.bg_overlay or d['bg_overlay'],
         'bg_image': _existing_bg(theme.bg_image or ''),
@@ -1964,6 +1982,26 @@ def _existing_bg(name):
         return ''
     return name
 
+def font_assets(ui):
+    """(google stylesheet url or '', @font-face css, heading family, body family) for a theme."""
+    faces, families = [], []
+    out = {}
+    for role, name_key, file_key, table in (('head', 'font_head', 'font_head_file', HEAD_FONTS), ('body', 'font_body', 'font_body_file', BODY_FONTS)):
+        fn = ui.get(file_key) or ''
+        if fn and _FONT_FILE_RE.match(fn):
+            ext = fn.rsplit('.', 1)[1]
+            fmt = {'ttf': 'truetype', 'otf': 'opentype'}.get(ext, ext)
+            fam = 'VX ' + role.title()
+            faces.append(f"@font-face{{font-family:'{fam}';src:url('/static/fonts/{fn}') format('{fmt}');font-display:swap}}")
+            out[role] = fam
+        else:
+            name = ui.get(name_key)
+            name = name if name in table else THEME_UI_DEFAULTS[name_key]
+            families.append(f"family={name.replace(' ', '+')}:wght@{table[name]}")
+            out[role] = name
+    url = ('https://fonts.googleapis.com/css2?' + '&'.join(dict.fromkeys(families)) + '&display=swap') if families else ''
+    return url, ''.join(faces), out['head'], out['body']
+
 def site_context():
     from flask import g
     try:
@@ -1972,15 +2010,18 @@ def site_context():
     except Exception:
         db.session.rollback()
         ui = theme_ui(None)
+    font_url, font_faces, font_head, font_body = font_assets(ui)
     return {
+        'site_font_url':      font_url,
+        'site_font_faces':    font_faces,
         'site_name':          SiteSetting.get('site_name',          'VenTrax'),
         'site_bg':            ui['bg_image'],
         'site_logo':          ui['logo'],
         'site_accent':        ui['accent'],
         'site_bg_color':      ui['bg_color'],
         'site_tagline':       SiteSetting.get('site_tagline',       'Het ultieme real-time jachtspel'),
-        'site_font':          ui['font_head'],
-        'site_font_body':     ui['font_body'],
+        'site_font':          font_head,
+        'site_font_body':     font_body,
         'site_bg_overlay':    ui['bg_overlay'] / 100,
         'site_border_radius': ui['radius'],
         'diff_easy_img':      SiteSetting.get('diff_easy_img',      ''),
@@ -4682,6 +4723,35 @@ def _int_field(form, name, default, lo, hi):
     except (TypeError, ValueError):
         return default
 
+def save_font(file, theme_id, role):
+    """Store an uploaded font. Checks the real file header, not just the extension. Returns (filename, error)."""
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in ('woff2', 'woff', 'ttf', 'otf'):
+        return None, 'Lettertype moet .woff2, .woff, .ttf of .otf zijn.'
+    if upload_too_large(file, max_bytes=3 * 1024 * 1024):
+        return None, 'Lettertype is te groot (max 3 MB).'
+    head = file.stream.read(4)
+    file.stream.seek(0)
+    if FONT_MAGIC.get(head) is None:
+        return None, 'Dit lijkt geen geldig lettertype-bestand.'
+    os.makedirs(FONT_FOLDER, exist_ok=True)
+    name = f"{theme_id}_{role}_{int(time.time())}_{random.randint(1000, 9999)}.{ext}"
+    file.save(os.path.join(FONT_FOLDER, name))
+    return name, None
+
+def _drop_font_if_unused(filename, keep_for=None):
+    """Delete an uploaded font file once no theme references it any more."""
+    if not filename or not _FONT_FILE_RE.match(filename):
+        return
+    used = SoundTheme.query.filter(
+        ((SoundTheme.font_head_file == filename) | (SoundTheme.font_body_file == filename))
+        & (SoundTheme.id != (keep_for or 0))).count()
+    if not used:
+        try:
+            os.remove(os.path.join(FONT_FOLDER, filename))
+        except OSError:
+            pass
+
 @app.route('/admin/sounds')
 @login_required
 @admin_required
@@ -4699,7 +4769,7 @@ def admin_sounds():
     return render_template('admin_sounds.html', themes=themes, selected=selected, groups=groups,
                            skins=SOUND_SKINS, payload=sound_theme_payload(selected) if selected else None,
                            ui=theme_ui(selected) if selected else None, settings=settings,
-                           head_fonts=HEAD_FONTS, body_fonts=BODY_FONTS,
+                           head_font_groups=HEAD_FONT_GROUPS, body_fonts=BODY_FONTS,
                            klassiek=SoundTheme.query.filter_by(slug='klassiek').first())
 
 @app.route('/admin/sounds/theme/new', methods=['POST'])
@@ -4722,7 +4792,7 @@ def admin_sound_theme_new():
     src = db.session.get(SoundTheme, src_id) if src_id else SoundTheme.query.filter_by(slug='klassiek').first()
     if src:
         for col in ('skin', 'synth', 'volume', 'near_m', 'close_m', 'ambient_min', 'ambient_max', 'accent',
-                    'bg_color', 'font_head', 'font_body', 'radius', 'bg_image', 'bg_overlay', 'logo'):
+                    'bg_color', 'font_head', 'font_body', 'font_head_file', 'font_body_file', 'radius', 'bg_image', 'bg_overlay', 'logo'):
             setattr(theme, col, getattr(src, col))
     db.session.add(theme); db.session.commit()
     if src:
@@ -4780,6 +4850,22 @@ def admin_sound_theme_save(tid):
                     flash(f'Afbeelding niet opgeslagen: {e}', 'danger')
         elif f.get('clear_' + field):
             setattr(theme, col, '')
+    for field, col, role in (('font_head_upload', 'font_head_file', 'head'), ('font_body_upload', 'font_body_file', 'body')):
+        up = request.files.get(field)
+        if up and up.filename:
+            fn, err = save_font(up, theme.id, role)
+            if err:
+                flash(err, 'danger')
+            else:
+                old = getattr(theme, col)
+                setattr(theme, col, fn)
+                db.session.flush()
+                _drop_font_if_unused(old)
+        elif f.get('clear_' + field):
+            old = getattr(theme, col)
+            setattr(theme, col, '')
+            db.session.flush()
+            _drop_font_if_unused(old)
     theme.ambient_min = _int_field(f, 'ambient_min', 45, 10, 1800)
     theme.ambient_max = _int_field(f, 'ambient_max', 150, 15, 3600)
     if theme.ambient_max < theme.ambient_min:
@@ -5092,7 +5178,8 @@ def init_db():
         ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
         for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),
                          ('font_body', 'VARCHAR(40)'), ('radius', 'INTEGER'), ('bg_image', 'VARCHAR(200)'),
-                         ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)')):
+                         ('bg_overlay', 'INTEGER'), ('logo', 'VARCHAR(200)'),
+                         ('font_head_file', 'VARCHAR(120)'), ('font_body_file', 'VARCHAR(120)')):
             ensure_column('sound_theme', col, typ)
         os.makedirs(AUDIO_FOLDER, exist_ok=True)
         os.makedirs(SOUND_FOLDER, exist_ok=True)
@@ -5181,6 +5268,12 @@ def init_db():
                 if getattr(th, key) in (None, ''):
                     setattr(th, key, val)
         db.session.commit()
+        # Syne is very wide and looked cheap: move themes that still have it to the new default, once.
+        if not SiteSetting.get('migr_font_v2'):
+            for th in SoundTheme.query.filter(SoundTheme.font_head == 'Syne').all():
+                th.font_head = THEME_UI_DEFAULTS['font_head']
+            db.session.commit()
+            SiteSetting.set('migr_font_v2', '1')
         if not Changelog.query.filter_by(version='3.0.0').first():
             db.session.add(Changelog(version='3.0.0', title='Halloween-update: geluidsthema\'s, nieuwe look, bewerkbare pagina\'s', type='feature',
                           body='- Geluidsthema\'s: kies per thema geluidjes bij start, einde, lootbox, offline, target, buiten de zone en Hunter in de buurt\n- Admin > Geluiden: upload en beluister geluidjes per gebeurtenis\n- Eng Halloween-uiterlijk voor site en spel\n- Admin kan pagina\'s en teksten zelf aanpassen\n- Kapotte logo\'s en achtergronden hersteld\n- Eenmalige toestemmingen (locatie/geluid) en installeerbare app zodat de popup niet steeds terugkomt'))
