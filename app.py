@@ -243,8 +243,12 @@ def log_activity(event, detail=None, user_id=None, game_id=None, flag=False):
         ip = get_client_ip() if request else None
     except Exception:
         ip = None
+    try:
+        uid = user_id or (current_user.id if current_user.is_authenticated else None)
+    except Exception:          # called from a background greenlet: there is no request/user
+        uid = user_id
     entry = ActivityLog(
-        user_id=user_id or (current_user.id if current_user.is_authenticated else None),
+        user_id=uid,
         game_id=game_id,
         event=event, detail=detail, ip_address=ip, flag=flag
     )
@@ -678,6 +682,7 @@ SOUND_EVENTS = [
     ('hunter_close', 'Gevaar',      'Hunter heel dichtbij',          'Runner: een Hunter is bijna bij je. Wordt vaker herhaald.', False),
     ('zone_out',     'Gevaar',      'Je loopt buiten de zone',       'Waarschuwing zodra je buiten het speelveld bent.', False),
     ('zone_back',    'Gevaar',      'Terug in de zone',              'Je bent weer binnen het speelveld.', False),
+    ('zone_shrink',  'Gevaar',      'Zone wordt kleiner',            'De krimpende zone wordt aangekondigd of gaat in.', False),
     ('speed_warning','Gevaar',      'Niet rennen',                   'Waarschuwing bij te hoge snelheid.', False),
     ('caught',       'Acties',      'Runner gepakt',                 'Iemand is gepakt.', False),
     ('lootbox_open', 'Acties',      'Lootbox openen',                'Een dropbox/lootbox wordt geopend.', False),
@@ -1158,6 +1163,11 @@ def save_game_extras(game, form):
         'dropbox_max_m': dropbox_max_m,
         'dropbox_wait_enabled': form.get('dropbox_wait_enabled') == 'on',
         'dropbox_wait_sec': form_int('dropbox_wait_sec', 20, 5, 120),
+        'shrinking_zone': form.get('shrinking_zone') == 'on',
+        'zone_first_min': form_int('zone_first_min', 10, 1, 120),
+        'zone_interval_min': form_int('zone_interval_min', 8, 2, 60),
+        'zone_shrink_pct': form_int('zone_shrink_pct', 30, 10, 60),
+        'zone_warning_sec': form_int('zone_warning_sec', 90, 30, 300),
     }
     SiteSetting.set(_extras_key(game.id), json.dumps(extras))
     return extras
@@ -3349,6 +3359,8 @@ def api_start_game(code):
                     'headstart_minutes': g2.headstart_minutes,
                 })
                 start_bot_loop(code)
+                if zone_config(g2):
+                    start_zone_loop(code)
     gevent.spawn(_do_start)
     # Return countdown=0 so maker's frontend also waits for WS event
     return jsonify(success=True, countdown=5,
@@ -3556,6 +3568,8 @@ def api_state(code):
         my_class=get_player_class(game, current_user.id),
         class_cooldown=class_cooldown_remaining(game, current_user.id),
         hazards=[h for h in effects.get('hazards', []) if h.get('owner_id') == current_user.id],
+        zone=zone_info(game),
+        zone_points=(get_playfield(game) or {}).get('points') if zone_config(game) else None,
     )
 
 def _clear_gps(game):
@@ -5326,6 +5340,104 @@ def service_worker():
     resp.mimetype = 'application/javascript'
     return resp
 
+# -- Shrinking zone (Fortnite-style) --------------------------------------------------------------
+import zone as zonelib
+
+ZONE_TICK = 5.0
+ZONE_LOOPS = set()
+
+def _zone_shrink_key(game_id):
+    return f'zone_shrink:{game_id}'
+
+def zone_config(game):
+    """Shrinking-zone settings of a game, or None when it is off."""
+    ex = get_game_extras(game)
+    if not ex.get('shrinking_zone'):
+        return None
+    return {
+        'headstart_sec': game.headstart_minutes * 60,
+        'first_sec': int(ex.get('zone_first_min', 10)) * 60,
+        'interval_sec': int(ex.get('zone_interval_min', 8)) * 60,
+        'warning_sec': int(ex.get('zone_warning_sec', 90)),
+        'factor': 1.0 - int(ex.get('zone_shrink_pct', 30)) / 100.0,
+    }
+
+def zone_state(game):
+    try:
+        st = json.loads(SiteSetting.get(_zone_shrink_key(game.id), '{}') or '{}')
+        return st if isinstance(st, dict) else {}
+    except Exception:
+        return {}
+
+def zone_info(game):
+    """What a client needs to show the shrinking zone (also after a reload or late join)."""
+    cfg = zone_config(game)
+    if not cfg:
+        return None
+    st = zone_state(game)
+    nxt = st.get('phase', 0) + 1
+    t_next = cfg['headstart_sec'] + cfg['first_sec'] + (nxt - 1) * cfg['interval_sec']
+    pending = st.get('pending')
+    return {'phase': st.get('phase', 0), 'final': bool(st.get('final')),
+            'next_in': None if st.get('final') else max(0, int(t_next - game.effective_elapsed)),
+            'pending': ({'phase': pending['phase'], 'points': pending['points'], 'center': pending['center']}
+                        if pending else None)}
+
+def ensure_zone_playfield(game):
+    """A shrinking zone needs a field. Without one, make a circle around the players."""
+    pf = get_playfield(game)
+    if pf:
+        return pf
+    spots = [(p.last_lat, p.last_lon) for p in game.players.all() if p.last_lat is not None]
+    if not spots:
+        return None
+    lat, lng = sum(a for a, _ in spots) / len(spots), sum(b for _, b in spots) / len(spots)
+    pf = {'enabled': True, 'color': 'storm', 'points': zonelib.regular_polygon(lat, lng, 600), 'forbidden': []}
+    SiteSetting.set(_playfield_key(game.id), json.dumps(pf))
+    return pf
+
+def start_zone_loop(code):
+    if code in ZONE_LOOPS:
+        return
+    import gevent
+    ZONE_LOOPS.add(code)
+    gevent.spawn(_zone_loop, code)
+
+def _zone_loop(code):
+    import gevent
+    try:
+        while True:
+            gevent.sleep(ZONE_TICK)
+            with app.app_context():
+                game = Game.query.filter_by(code=code).first()
+                if not game or game.status != 'active':
+                    break
+                cfg = zone_config(game)
+                if not cfg:
+                    break
+                if get_game_pause_state(game).get('active'):
+                    continue
+                pf = ensure_zone_playfield(game)
+                if not pf:
+                    continue
+                state, events = zonelib.step(zone_state(game), game.effective_elapsed, cfg, pf['points'])
+                SiteSetting.set(_zone_shrink_key(game.id), json.dumps(state))
+                for kind, info in events:
+                    if kind == 'warn':
+                        hub.broadcast(code, 'zone_warning', info)
+                    elif kind == 'shrink':
+                        pf = {**pf, 'points': info['points']}
+                        SiteSetting.set(_playfield_key(game.id), json.dumps(pf))
+                        log_activity('zone_shrunk', f"phase {info['phase']}", game_id=game.id)
+                        db.session.commit()
+                        hub.broadcast(code, 'zone_shrunk', info)
+                    elif kind == 'final':
+                        hub.broadcast(code, 'zone_final', info)
+    except Exception:
+        app.logger.exception(f'zone loop for {code} crashed')
+    finally:
+        ZONE_LOOPS.discard(code)
+
 # -- Bots -----------------------------------------------------------------------
 import bots as botlib
 
@@ -5439,6 +5551,8 @@ def resume_bot_games():
         for g in Game.query.filter_by(status='active').all():
             if bot_players(g):
                 start_bot_loop(g.code)
+            if zone_config(g):
+                start_zone_loop(g.code)
 
 def _bot_loop(code):
     import gevent
@@ -5464,6 +5578,7 @@ def _bot_loop(code):
             hub.broadcast(code, 'bot_notice', {'message': 'Kaartdata niet beschikbaar: de bots lopen zonder water- en bosregels.'})
 
         states = {}
+        field_sig = None
         with app.app_context():
             game = Game.query.filter_by(code=code).first()
             centre = None
@@ -5487,6 +5602,12 @@ def _bot_loop(code):
                     break
                 if get_game_pause_state(game).get('active'):
                     continue
+                pf_now = get_playfield(game)
+                sig = (len(pf_now['points']), pf_now['points'][0]['lat'], pf_now['points'][0]['lng']) if pf_now else None
+                if sig != field_sig:                                   # the zone shrank: bots must stay inside the new one
+                    field_sig = sig
+                    if pf_now:
+                        botlib.apply_field(terrain, [(p['lat'], p['lng']) for p in pf_now['points']], pf_now.get('forbidden'))
                 now = time.time() * BOT_TIME_SCALE
                 players = game.players.all()
                 hunters = [(p.last_lat, p.last_lon) for p in players

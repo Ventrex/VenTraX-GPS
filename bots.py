@@ -89,6 +89,7 @@ class Terrain:
         self.h = max(1, int(math.ceil(height_m / cell)))
         self.cost = bytearray([NORMAL]) * (self.w * self.h)
         self.degraded = degraded         # True = map data was unavailable, everything is open ground
+        self.base = None                 # ground without play-field mask, to re-apply a shrunken field
 
     def to_xy(self, lat, lon):
         return (int((lon - self.lon_w) * self.kx / self.cell), int((self.lat_n - lat) * M_LAT / self.cell))
@@ -299,6 +300,7 @@ def build_terrain(elements, bbox, playfield=None, cell_m=CELL_M, forbidden=None)
     for g in walk_lines:                         # last: bridges, crossings and forest paths stay walkable
         line(g, NORMAL, 1)
 
+    t.base = bytes(img.tobytes())
     if playfield and len(playfield) >= 3:
         mask = Image.new('L', (t.w, t.h), 0)
         ImageDraw.Draw(mask).polygon(px(playfield), fill=255, outline=255)
@@ -309,9 +311,23 @@ def build_terrain(elements, bbox, playfield=None, cell_m=CELL_M, forbidden=None)
     return t
 
 
+def apply_field(t, playfield, forbidden=None):
+    """Re-apply a (shrunken) play field and forbidden areas onto the ground without downloading anything."""
+    if t.base is None:
+        return
+    img = Image.frombytes('L', (t.w, t.h), t.base)
+    if playfield and len(playfield) >= 3:
+        mask = Image.new('L', (t.w, t.h), 0)
+        ImageDraw.Draw(mask).polygon([t.to_xy(a, b) for a, b in playfield], fill=255, outline=255)
+        img = Image.composite(img, Image.new('L', (t.w, t.h), BLOCKED), mask)
+    draw_forbidden(t, img, forbidden)
+    t.cost = bytearray(img.tobytes())
+
+
 def open_terrain(bbox, playfield=None, forbidden=None):
     """Fallback when no map data is available: open ground (still limited to the play field)."""
     t = Terrain(bbox, degraded=True)
+    t.base = bytes(t.cost)
     if playfield and len(playfield) >= 3:
         img = Image.new('L', (t.w, t.h), BLOCKED)
         ImageDraw.Draw(img).polygon([t.to_xy(a, b) for a, b in playfield], fill=NORMAL, outline=NORMAL)
