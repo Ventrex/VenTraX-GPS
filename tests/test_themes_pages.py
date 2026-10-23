@@ -166,3 +166,14 @@ def test_pwa_files(appmodule, client):
     sw = client.get("/sw.js")
     assert sw.status_code == 200 and sw.headers["Service-Worker-Allowed"] == "/"
     assert client.get("/static/img/icon-192.png").status_code == 200
+
+
+def test_classic_skin_is_oled_black_with_dark_red(appmodule, client):
+    login(client, appmodule)
+    with appmodule.app.app_context():
+        klassiek = appmodule.SoundTheme.query.filter_by(slug="klassiek").first()
+        kid = klassiek.id
+    client.post(f"/admin/sounds/theme/{kid}/default")
+    html = client.get("/").get_data(as_text=True)
+    assert 'data-skin="classic"' in html
+    assert 'html[data-skin="classic"][data-theme="dark"]' in html and "--bg:#000" in html and "#c4161c" in html
