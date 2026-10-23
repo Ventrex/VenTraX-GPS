@@ -77,3 +77,22 @@ def test_a_new_game_never_inherits_state_of_a_deleted_game_with_the_same_id(appm
         appmodule.SiteSetting.set(appmodule._zone_state_key(gid), "{}")
         appmodule.purge_game_state(gid); appmodule.db.session.commit()
         assert appmodule.SiteSetting.get(appmodule._zone_state_key(gid)) is None
+
+
+def test_runner_sees_when_hunters_get_the_location_and_which_spot(appmodule, client):
+    from datetime import timedelta
+    uid = setup(appmodule, client)
+    with appmodule.app.app_context():
+        g = appmodule.Game.query.filter_by(code="LIV123").first()
+        g.hunter_interval_sec = 600; g.started_at = datetime.utcnow() - timedelta(seconds=250)   # 4 min into a game without headstart
+        gp = appmodule.GamePlayer.query.filter_by(game_id=g.id, user_id=uid).first()
+        gp.last_lat, gp.last_lon = LAT, LON
+        appmodule.db.session.commit()
+    d = client.get("/api/game/LIV123/state").get_json()
+    lv = d["loc_view"]
+    assert lv["interval"] == 600 and 340 <= lv["next_in"] <= 352                     # 10 min round, ~4 min gone
+    assert abs(lv["view"]["lat"] - LAT) < 1e-6                                       # the spot hunters currently see
+    with appmodule.app.app_context():                                                # hunters get no countdown
+        g = appmodule.Game.query.filter_by(code="LIV123").first()
+        gp = appmodule.GamePlayer.query.filter_by(game_id=g.id, user_id=uid).first(); gp.role = "hunter"; appmodule.db.session.commit()
+    assert client.get("/api/game/LIV123/state").get_json()["loc_view"] is None

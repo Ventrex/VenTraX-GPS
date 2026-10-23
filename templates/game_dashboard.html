@@ -200,6 +200,14 @@ path.zone-next{animation:march 2.4s linear infinite reverse}
 path.zone-cloud{}
 @keyframes march{to{stroke-dashoffset:-32}}
 @keyframes cloud{0%,100%{fill-opacity:.80}50%{fill-opacity:.92}}
+#locCd{position:absolute;left:50%;top:58px;transform:translateX(-50%);z-index:350;width:min(92vw,320px);text-align:center;background:rgba(10,14,22,.86);color:#fff;border:2px solid var(--runner);border-radius:18px;padding:8px 14px 10px;display:none;backdrop-filter:blur(8px);box-shadow:0 8px 28px rgba(0,0,0,.5);pointer-events:none}
+#locCd .lc-l{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.85}
+#locCd .lc-t{font-size:40px;font-weight:800;line-height:1.05;margin:2px 0 4px;font-variant-numeric:tabular-nums}
+#locCd .lc-track{height:7px;background:rgba(255,255,255,.18);border-radius:99px;overflow:hidden}
+#locCd .lc-track i{display:block;height:100%;width:100%;background:var(--runner);transition:width 1s linear}
+#locCd.warn{border-color:var(--warn)} #locCd.warn .lc-track i{background:var(--warn)}
+#locCd.hot{border-color:var(--danger);animation:gPulse 1s infinite} #locCd.hot .lc-track i{background:var(--danger)}
+#locCd.now{background:rgba(127,29,29,.92);border-color:#fff}
 #missionBar{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);z-index:430;width:min(92vw,360px);background:rgba(20,12,36,.92);color:#fff;border:1px solid #a78bfa;border-radius:16px;padding:10px 14px;display:none;backdrop-filter:blur(8px)}
 #missionBar.show{display:block;animation:fadeUp .3s ease}
 #missionBar .mb-t{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px}
@@ -262,6 +270,9 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     <!-- Notification popup -->
     <div id="notifPop"><div class="notif-box" id="notifTxt"></div></div>
 
+    {% if me.role == 'runner' and not game.live_tracking %}
+    <div id="locCd"><div class="lc-l" id="lcL">Hunters zien je locatie over</div><div class="lc-t" id="lcT">--:--</div><div class="lc-track"><i id="lcFill"></i></div></div>
+    {% endif %}
     <div id="zoneBar">
       <div class="zb-title"><span>Buiten speelveld</span><span id="zoneBarPct">0%</span></div>
       <div class="zb-track"><div id="zoneBarFill"></div></div>
@@ -1001,6 +1012,42 @@ function onGPSErr() {
   document.getElementById('gpsBadge').innerHTML = '<i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> GPS fout';
 }
 
+// ---- Runner: when do the hunters get my location, and which spot do they see? ----
+let locNextAt = 0, locInterval = 0, locSlot = null, locFlashUntil = 0, hunterView = [];
+function clearHunterView() { hunterView.forEach(l => { try { map.removeLayer(l); } catch (e) {} }); hunterView = []; }
+function updateLocCountdown(d) {
+  const el = document.getElementById('locCd'); if (!el || MY_ROLE !== 'runner') return;
+  const lv = d.loc_view;
+  if (!lv || d.is_caught || d.is_offline || d.is_paused || !d.headstart_over) { locNextAt = 0; el.style.display = 'none'; clearHunterView(); return; }
+  locInterval = lv.interval; locNextAt = Date.now() + lv.next_in * 1000;
+  if (lv.view && map && typeof L !== 'undefined') {
+    clearHunterView();
+    hunterView.push(L.circle([lv.view.lat, lv.view.lon], {radius: 25, color: '#ef4444', weight: 2, dashArray: '4 5', fillOpacity: .12, interactive: false}).addTo(map));
+    hunterView.push(L.marker([lv.view.lat, lv.view.lon], {interactive: false, icon: L.divIcon({className: '', iconSize: [0, 0],
+      html: '<div style="transform:translate(-50%,-50%);white-space:nowrap;font-size:10px;font-weight:800;color:#fff;background:rgba(239,68,68,.9);padding:2px 7px;border-radius:99px;border:1px solid #fff"><i class="fas fa-eye"></i> hunters zien dit</div>'})}).addTo(map));
+    if (locSlot !== null && lv.view.slot !== locSlot) {
+      locFlashUntil = Date.now() + 15000;
+      showToast('De hunters hebben je locatie gekregen (rode stip). Zij lopen daar naartoe. Ren de andere kant op!', 'warn', 9000);
+    }
+    locSlot = lv.view.slot;
+  }
+  el.style.display = 'block'; tickLocCd();
+}
+function tickLocCd() {
+  const el = document.getElementById('locCd'); if (!el || !locNextAt || el.style.display === 'none') return;
+  let left = Math.ceil((locNextAt - Date.now()) / 1000);
+  if (left <= 0) {                                    // the hunters get it right now; start the next round and ask the server
+    locFlashUntil = Date.now() + 15000; locNextAt += locInterval * 1000; left = locInterval; setTimeout(pollState, 700);
+  }
+  const flash = Date.now() < locFlashUntil;
+  document.getElementById('lcL').textContent = flash ? 'Hunters hebben je locatie nu!' : (left <= 20 ? 'Gaan zo je locatie zien!' : 'Hunters zien je locatie over');
+  document.getElementById('lcT').textContent = flash ? 'RENNEN!' : fmtMM(left);
+  document.getElementById('lcFill').style.width = Math.max(0, Math.min(100, left / Math.max(1, locInterval) * 100)) + '%';
+  el.classList.toggle('now', flash);
+  el.classList.toggle('hot', !flash && left <= 20);
+  el.classList.toggle('warn', !flash && left > 20 && left <= 60);
+}
+
 function updateZoneBar(z) {
   const bar = document.getElementById('zoneBar');
   if (!bar) return;
@@ -1047,6 +1094,7 @@ function pollState() {
         return;
       }
       if (d.status === 'active') hideCountdownOverlay();
+      updateLocCountdown(d);
       if (d.is_caught && d.status === 'active') showOutScreen(lastOutWhy());
       if (!introHandled && d.status === 'active') maybePlayIntro(d.elapsed);
       if (!d.headstart_over) sawHeadstart = true;
@@ -2243,6 +2291,7 @@ setInterval(()=>{
   }
   document.getElementById('tv-el').textContent  = fmtMM(elapsed);
   document.getElementById('tv-left').textContent = fmtMM(timeLeft);
+  tickLocCd();
   // Headstart
   if(hsLeft<=0 && !headstartOver){
     headstartOver=true;
