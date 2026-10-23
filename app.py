@@ -1350,6 +1350,23 @@ def _point_segment_distance_m(lat, lng, a, b):
     cx, cy = ax + t * dx, ay + t * dy
     return math.hypot(px - cx, py - cy)
 
+def forbidden_penetration_m(pf, lat, lng):
+    """How deep (m) a position is inside a forbidden area; 0 when it is in none."""
+    deepest = 0.0
+    for it in (pf or {}).get('forbidden') or []:
+        if it.get('type') == 'circle':
+            d = botlib.haversine(lat, lng, it['lat'], it['lng'])
+            deepest = max(deepest, it['radius'] - d)
+        elif it.get('type') == 'line':
+            pts = it['points']
+            d = min(_point_segment_distance_m(lat, lng, pts[i], pts[i + 1]) for i in range(len(pts) - 1))
+            deepest = max(deepest, it['width'] / 2.0 - d)
+    return deepest
+
+def in_forbidden_area(game, lat, lng):
+    pf = get_playfield(game)
+    return bool(pf) and forbidden_penetration_m(pf, float(lat), float(lng)) > 0
+
 def playfield_outside_distance_m(game, lat, lng):
     pf = get_playfield(game)
     pts = pf.get('points') if pf else None
@@ -1357,7 +1374,9 @@ def playfield_outside_distance_m(game, lat, lng):
         return 0
     lat = float(lat); lng = float(lng)
     if _point_in_poly(lat, lng, pts):
-        return 0
+        pen = forbidden_penetration_m(pf, lat, lng)
+        # inside a forbidden area counts like being outside the field (always past the 5 m GPS margin)
+        return max(6.0, pen) if pen > 0 else 0
     return min(_point_segment_distance_m(lat, lng, pts[i], pts[(i + 1) % len(pts)])
                for i in range(len(pts)))
 
@@ -1365,7 +1384,9 @@ def playfield_status(game, lat, lng):
     pf = get_playfield(game)
     if not pf or len(pf.get('points') or []) < 3:
         return 'none'
-    return 'inside' if _point_in_poly(float(lat), float(lng), pf['points']) else 'outside'
+    if not _point_in_poly(float(lat), float(lng), pf['points']):
+        return 'outside'
+    return 'forbidden' if forbidden_penetration_m(pf, float(lat), float(lng)) > 0 else 'inside'
 
 def get_runner_snapshot(game, player):
     if player.last_lat is None or player.last_lon is None:
@@ -1422,7 +1443,7 @@ def get_game_end_result(game):
     except Exception:
         return {}
 
-def update_zone_pressure(game, player, outside_distance_m):
+def update_zone_pressure(game, player, outside_distance_m, forbidden=False):
     """Track how long a player is safely outside the playfield margin."""
     limit_sec = 30
     margin_m = 5
@@ -1446,6 +1467,7 @@ def update_zone_pressure(game, player, outside_distance_m):
         'seconds': seconds,
         'last_ts': now_ts,
         'outside_m': round(float(outside_distance_m or 0), 1),
+        'forbidden': bool(forbidden) and outside_distance_m > margin_m,
         'limit_sec': limit_sec,
         'margin_m': margin_m,
     })
@@ -1466,6 +1488,7 @@ def get_zone_pressure(game, user_id):
         'limit_sec': limit_sec,
         'margin_m': int(item.get('margin_m') or 5),
         'outside_m': float(item.get('outside_m') or 0),
+        'forbidden': bool(item.get('forbidden')),
         'pct': round(min(100, (seconds / max(1, limit_sec)) * 100), 1),
     }
 
@@ -1761,6 +1784,27 @@ def api_class_power(code):
     })
     return jsonify(success=True, message=msg, cooldown=cooldown_sec, **payload)
 
+def normalize_forbidden(items):
+    """Areas players may not enter inside the play field: circles (a mast, a pond) and lines (a railway).
+    A line is a corridor `width` metres wide, so a gap in the line (a tunnel) stays walkable."""
+    out = []
+    for it in (items if isinstance(items, list) else [])[:30]:
+        try:
+            if it.get('type') == 'circle':
+                lat, lng, r = float(it['lat']), float(it['lng']), float(it.get('radius', 40))
+                if -90 <= lat <= 90 and -180 <= lng <= 180:
+                    out.append({'type': 'circle', 'lat': round(lat, 7), 'lng': round(lng, 7),
+                                'radius': round(max(10.0, min(500.0, r)), 1), 'label': str(it.get('label') or '')[:40]})
+            elif it.get('type') == 'line':
+                pts = [{'lat': round(float(p['lat']), 7), 'lng': round(float(p['lng']), 7)} for p in it.get('points', [])[:60]
+                       if -90 <= float(p['lat']) <= 90 and -180 <= float(p['lng']) <= 180]
+                if len(pts) >= 2:
+                    out.append({'type': 'line', 'points': pts, 'width': round(max(6.0, min(60.0, float(it.get('width', 12)))), 1),
+                                'label': str(it.get('label') or '')[:40]})
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+    return out
+
 def normalize_playfield(raw_json):
     """Validate and normalize playfield data without requiring a database migration."""
     if not raw_json:
@@ -1783,6 +1827,7 @@ def normalize_playfield(raw_json):
             'enabled': True,
             'color': color,
             'points': clean_points,
+            'forbidden': normalize_forbidden(data.get('forbidden')),
         }
     except Exception as e:
         app.logger.warning(f"Invalid playfield ignored: {e}")
@@ -2876,9 +2921,9 @@ def new_game():
         saved_playfield = save_playfield(game, f.get('playfield_json', ''))
         if saved_playfield:
             save_profile_playfield(current_user.id, f.get('playfield_json', ''))
-            if (f.get('playfield_name') or '').strip():
-                save_named_profile_playfield(current_user.id, f.get('playfield_json', ''), f.get('playfield_name'))
-            save_global_playfield(f.get('playfield_json', ''), (f.get('playfield_name') or game.name).strip())
+            # every game's zone is kept in "Mijn speelvelden" (named after the game unless you named it)
+            save_named_profile_playfield(current_user.id, f.get('playfield_json', ''),
+                                         (f.get('playfield_name') or '').strip() or game.name)
         save_game_extras(game, f)
         save_game_template_for_user(current_user.id, game)
         db.session.commit()
@@ -2893,7 +2938,8 @@ def new_game():
                            game_templates=get_game_templates_for_user(current_user.id),
                            sound_themes=SoundTheme.query.order_by(SoundTheme.name).all(),
                            default_sound_theme=get_default_sound_theme(),
-                           class_loadouts=CLASS_LOADOUTS)
+                           class_loadouts=CLASS_LOADOUTS,
+                           import_zone=load_shared_playfield(request.args.get('zone')))
 
 # â”€â”€ Lobby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/api/profile/playfield', methods=['POST'])
@@ -2903,6 +2949,7 @@ def api_profile_playfield():
     raw = json.dumps({
         'color': data.get('color'),
         'points': data.get('points'),
+        'forbidden': data.get('forbidden'),
     })
     saved = save_profile_playfield(current_user.id, raw)
     if not saved:
@@ -2918,6 +2965,42 @@ def api_profile_playfield():
         saved_item=named,
         profile_playfields=get_profile_playfields_for_user(current_user.id),
     )
+
+# -- Sharing play fields with friends (by code or link) -------------------------------------------
+def _share_key(code):
+    return f'pf_share:{code}'
+
+@app.route('/api/profile/playfield/<pid>/share', methods=['POST'])
+@login_required
+def api_share_playfield(pid):
+    items = get_profile_playfields_for_user(current_user.id)
+    item = next((i for i in items if i.get('id') == pid), None)
+    if not item:
+        return jsonify(error='Speelveld niet gevonden'), 404
+    code = item.get('share_code')
+    if not code or not SiteSetting.get(_share_key(code)):
+        code = gen_code()
+        item['share_code'] = code
+        SiteSetting.set(_profile_playfields_key(current_user.id), json.dumps(items))
+    SiteSetting.set(_share_key(code), json.dumps({'name': item.get('name'), 'data': item.get('data'),
+                                                  'owner': current_user.username, 'created': datetime.utcnow().isoformat()}))
+    return jsonify(success=True, code=code, url=f"{app.config['BASE_URL']}/new_game?zone={code}",
+                   profile_playfields=get_profile_playfields_for_user(current_user.id))
+
+def load_shared_playfield(code):
+    try:
+        data = json.loads(SiteSetting.get(_share_key((code or '').strip().upper()), '') or 'null')
+    except Exception:
+        return None
+    return data if isinstance(data, dict) and data.get('data') else None
+
+@app.route('/api/playfield/share/<code>')
+@login_required
+def api_get_shared_playfield(code):
+    shared = load_shared_playfield(code)
+    if not shared:
+        return jsonify(error='Deze speelveld-code bestaat niet (meer)'), 404
+    return jsonify(success=True, name=shared.get('name'), owner=shared.get('owner'), data=shared['data'])
 
 @app.route('/join', methods=['GET', 'POST'])
 @login_required
@@ -3620,16 +3703,19 @@ def api_location(code):
     _maybe_log_location_ping(game, current_user.id, lat, lon)
     hazard_messages = check_hazard_triggers(game, me, code)
     outside_m = playfield_outside_distance_m(game, lat, lon)
-    zone_pressure = update_zone_pressure(game, me, outside_m)
+    forbidden = in_forbidden_area(game, lat, lon)
+    zone_pressure = update_zone_pressure(game, me, outside_m, forbidden)
     if outside_m > 5:
-        msg = 'Je bent buiten het speelveld. Ga direct terug!'
+        msg = ('Je bent in een verboden gebied. Ga direct weg!' if forbidden
+               else 'Je bent buiten het speelveld. Ga direct terug!')
         hazard_messages.append(msg)
         # Not flagged as suspicious: leaving the playfield happens during normal play too.
         # Flagging is reserved for real anti-cheat signals (see 'high_speed' below).
         log_activity('playfield_violation', f'{me.codename or current_user.username} buiten speelveld in {game.code}')
         if zone_pressure.get('seconds', 0) >= zone_pressure.get('limit_sec', 30) and not me.is_caught:
             me.is_caught = True
-            hazard_messages.append('Je was te lang buiten het speelveld en bent af.')
+            hazard_messages.append('Je was te lang in een verboden gebied en bent af.' if forbidden
+                                   else 'Je was te lang buiten het speelveld en bent af.')
             hub.broadcast(code, 'player_zone_out', {
                 'user_id': current_user.id,
                 'codename': me.codename or current_user.username,
@@ -5365,6 +5451,7 @@ def _bot_loop(code):
                 return
             pf = get_playfield(game)
             pf_pts = [(p['lat'], p['lng']) for p in pf['points']] if pf else None
+            forbidden = (pf or {}).get('forbidden') or []
             humans = [(p.last_lat, p.last_lon) for p in game.players.all()
                       if not p.user.is_bot and p.last_lat is not None]
             pts = (pf_pts or []) + humans
@@ -5372,7 +5459,7 @@ def _bot_loop(code):
                 return
             bbox = botlib.bbox_of(pts, margin_m=250 if pf_pts else 700)
             difficulty = game.difficulty or 'medium'
-        terrain = pool.spawn(botlib.load_terrain, bbox, OVERPASS_URL, pf_pts, TERRAIN_CACHE_DIR).get()
+        terrain = pool.spawn(botlib.load_terrain, bbox, OVERPASS_URL, pf_pts, TERRAIN_CACHE_DIR, None, forbidden).get()
         if terrain.degraded:
             hub.broadcast(code, 'bot_notice', {'message': 'Kaartdata niet beschikbaar: de bots lopen zonder water- en bosregels.'})
 
