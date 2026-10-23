@@ -2,12 +2,17 @@
 {% block title %}{{ site_name }} - Het echte jachtspel{% endblock %}
 {% block extra_head %}
 <style>
-.hero{text-align:center;padding:60px 20px 40px;position:relative;z-index:1}
-.hero-logo{width:90px;height:90px;border-radius:50%;object-fit:cover;margin:0 auto 20px;display:block;border:3px solid var(--accent);box-shadow:0 0 30px var(--accent-glow)}
+.hero{text-align:center;padding:72px 20px 48px;position:relative;z-index:2}
+.hero-banner{display:inline-flex;align-items:center;gap:8px;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);color:var(--text);padding:8px 16px;border-radius:999px;font-size:13px;font-weight:600;margin-bottom:22px}
+.hero-title .accent{background:linear-gradient(135deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.stats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:34px}
+.stat-chip{display:flex;align-items:center;gap:10px;background:var(--glass);border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:9px 18px;font-size:13px;color:var(--text2);backdrop-filter:blur(10px)}
+.stat-chip b{font-family:var(--hfont);font-size:17px;color:var(--text)}
+.hero-logo{width:104px;height:104px;border-radius:50%;object-fit:cover;margin:0 auto 20px;display:block;border:3px solid var(--accent);box-shadow:0 0 30px var(--accent-glow)}
 .hero-title{font-family:var(--hfont);font-size:clamp(36px,8vw,64px);font-weight:800;line-height:1.1;margin-bottom:12px}
 .hero-sub{font-size:clamp(14px,3vw,18px);color:var(--text2);max-width:560px;margin:0 auto 30px;line-height:1.6}
 .hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-.lb-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:32px}
+.lb-wrap{background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:calc(var(--r) + 6px);overflow:hidden;margin-bottom:32px}
 .lb-tabs{display:flex;border-bottom:1px solid var(--border)}
 .lb-tab{flex:1;padding:12px 8px;text-align:center;cursor:pointer;font-size:13px;font-weight:600;color:var(--text2);border:none;background:none;font-family:inherit;transition:all .2s;border-bottom:3px solid transparent}
 .lb-tab.active{color:var(--accent);border-bottom-color:var(--accent);background:var(--bg3)}
@@ -18,9 +23,9 @@
 .lb-av{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
 .lb-name{flex:1;font-weight:600;font-size:14px}.lb-val{font-family:var(--hfont);font-size:16px;font-weight:700;color:var(--accent)}
 .games-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:40px}
-.game-tile{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .25s;text-decoration:none;display:block}
+.game-tile{background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:calc(var(--r) + 6px);overflow:hidden;cursor:pointer;transition:all .25s;text-decoration:none;display:block}
 .game-tile:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 8px 30px rgba(0,0,0,.3)}
-.game-tile-img{height:165px;background:#111827;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.game-tile-img{height:190px;background:#111827;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
 .game-tile-img img{width:100%;height:100%;object-fit:cover}
 .game-tile-icon{font-size:58px;color:#fff;line-height:1}
 .game-tile-badge{position:absolute;top:12px;right:12px;background:var(--accent);color:#fff;font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px}
@@ -37,15 +42,16 @@
 {% block content %}
 
 <div class="hero">
+  {% if t('home.banner') %}<div class="hero-banner"><i class="fas fa-bolt"></i> {{ t('home.banner') }}</div>{% endif %}
   {% if site_logo %}
-  <img src="/backgrounds/{{ site_logo }}" alt="{{ site_name }}" class="hero-logo">
+  <img src="/backgrounds/{{ site_logo }}" alt="{{ site_name }}" class="hero-logo" onerror="this.onerror=null;this.src='/static/img/logo_round.png'">
   {% else %}
-  <div class="hero-logo" style="background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:34px;color:#fff"><i class="fas fa-crosshairs"></i></div>
+  <div class="hero-logo" style="background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:38px;color:#fff"><i class="fas fa-crosshairs"></i></div>
   {% endif %}
-  <h1 class="hero-title">
-    <span style="color:var(--text)">Ven</span><span style="color:var(--accent)">Trax</span>
+  <h1 class="hero-title flicker">
+    <span style="color:var(--text)">{{ t('home.hero_title_a') }}</span><span class="accent">{{ t('home.hero_title_b') }}</span>
   </h1>
-  <p class="hero-sub">Het echte GPS-jachtspel. Speel buiten met vrienden, kies je missie en maak van de buurt een avontuur.</p>
+  <p class="hero-sub">{{ t('home.hero_sub') }}</p>
   {% if current_user.is_authenticated %}
   <div class="hero-btns">
     <a href="{{ url_for('new_game') }}" class="btn btn-primary btn-lg"><i class="fas fa-plus-circle"></i> Nieuw Spel</a>
@@ -58,11 +64,16 @@
     <a href="{{ url_for('login') }}" class="btn btn-ghost btn-lg"><i class="fas fa-sign-in-alt"></i> Inloggen</a>
   </div>
   {% endif %}
+  <div class="stats">
+    <div class="stat-chip"><i class="fas fa-users" style="color:var(--accent)"></i><b>{{ total_users }}</b> spelers</div>
+    <div class="stat-chip"><i class="fas fa-flag-checkered" style="color:var(--accent)"></i><b>{{ total_games }}</b> spellen gespeeld</div>
+    <div class="stat-chip hw-only"><i class="fas fa-ghost" style="color:var(--accent)"></i> Halloween-modus aan</div>
+  </div>
 </div>
 
 <div class="container">
   <div class="sec-title" style="margin-bottom:16px">
-    <i class="fas fa-trophy" style="color:#f59e0b"></i> Leaderboard
+    <i class="fas fa-trophy" style="color:#f59e0b"></i> {{ t('home.leaderboard') }}
   </div>
   <div class="lb-wrap">
     <div class="lb-tabs">
@@ -109,7 +120,7 @@
     </div>
   </div>
 
-  <div class="sec-title" style="margin-bottom:16px"><i class="fas fa-gamepad"></i> Kies je spel</div>
+  <div class="sec-title" style="margin-bottom:16px"><i class="fas fa-gamepad"></i> {{ t('home.games') }}</div>
   <div class="games-grid">
     {% for game in games_catalog %}
     {% set playable = game.is_active and not game.coming_soon %}
@@ -121,9 +132,9 @@
       <div class="game-tile-img" style="background:linear-gradient(135deg,{{ game.color or '#e11d48' }},#111827)">
         {% if game.logo_file %}
           {% if game.logo_file == 'logo_round.png' %}
-          <img src="/static/img/{{ game.logo_file }}" alt="{{ game.name }}">
+          <img src="/static/img/{{ game.logo_file }}" alt="{{ game.name }}" onerror="this.remove()">
           {% else %}
-          <img src="/backgrounds/{{ game.logo_file }}" alt="{{ game.name }}">
+          <img src="/backgrounds/{{ game.logo_file }}" alt="{{ game.name }}" onerror="this.remove()">
           {% endif %}
         {% else %}
         <i class="fas {{ game.icon or 'fa-gamepad' }} game-tile-icon"></i>
@@ -155,7 +166,7 @@
   </div>
 
   {% if recent_news %}
-  <div class="sec-title" style="margin-bottom:14px"><i class="fas fa-newspaper"></i> Recent Nieuws</div>
+  <div class="sec-title" style="margin-bottom:14px"><i class="fas fa-newspaper"></i> {{ t('home.news') }}</div>
   <div class="grid g3" style="margin-bottom:40px">
     {% for a in recent_news %}
     <div class="card" style="padding:0;overflow:hidden">

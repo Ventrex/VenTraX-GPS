@@ -484,6 +484,16 @@
       </div>
 
       <div class="card" style="margin-bottom:16px">
+        <div class="card-title"><i class="fas fa-volume-high"></i> Geluid &amp; sfeer</div>
+        <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Kies een thema met eigen geluidjes en uiterlijk, bijvoorbeeld een enge Halloween-sfeer. De beheerder kan thema's aanpassen.</p>
+        <select name="sound_theme" class="form-control">
+          {% for th in sound_themes %}
+          <option value="{{ th.id }}" {{ 'selected' if default_sound_theme and th.id == default_sound_theme.id }}>{{ th.name }}{{ ' (standaard)' if default_sound_theme and th.id == default_sound_theme.id }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
         <div class="card-title"><i class="fas fa-id-badge"></i> Classes</div>
         <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:12px">Als classes aan staan krijgt iedere speler straks random een rol met een speciale kracht en cooldown. De keuze wordt nu opgeslagen; de volledige in-game knoppen en acties worden daarna verder uitgewerkt.</p>
         <label class="extra-choice" style="margin-bottom:12px"><input type="checkbox" name="classes_enabled" id="classesEnabled"> Random classes inschakelen</label>
@@ -771,6 +781,7 @@ function applyGameTemplate(idx){
   setFormValue('extra_echo', e.echo);
   setFormValue('classes_enabled', e.classes_enabled);
   setFormValue('class_theme', e.class_theme);
+  if(e.sound_theme) setFormValue('sound_theme', e.sound_theme);
   setFormValue('class_cooldown_sec', e.class_cooldown_sec);
   setFormValue('dropboxes_per_team', e.dropboxes_per_team);
   setFormValue('dropboxes_global', e.dropboxes_global);

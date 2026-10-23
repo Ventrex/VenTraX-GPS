@@ -654,6 +654,127 @@ class Badge(db.Model):
     game_id     = db.Column(db.Integer, db.ForeignKey('game.id'), nullable=True)
     user        = db.relationship('User', foreign_keys=[user_id])
 
+# -- Sound themes (admin-managed) ----------------------------------------------
+# Every game event that can make a sound. `synth` names the built-in fallback that
+# plays when a theme has no uploaded clip for the event, so a brand new theme
+# already works. Order here is the order shown in the admin portal.
+SOUND_EVENTS = [
+    # key, group, label, description, loop
+    ('intro',        'Spelverloop', 'Start van het spel',            'Muziek bij het aftellen en de eerste minuten (bv. je 28-seconden muziekje).', False),
+    ('countdown_tick','Spelverloop','Aftellen 3-2-1',               'Korte tik bij elke seconde van het aftellen.', False),
+    ('go',           'Spelverloop', 'Echte start: Hunters zoeken',   'Voorsprong is voorbij, de Hunters mogen gaan zoeken.', False),
+    ('end',          'Spelverloop', 'Einde van het spel',            'Het spel is afgelopen.', False),
+    ('end_win',      'Spelverloop', 'Einde: gewonnen',               'Optioneel: speelt i.p.v. "Einde" als jouw team wint.', False),
+    ('end_lose',     'Spelverloop', 'Einde: verloren',               'Optioneel: speelt i.p.v. "Einde" als jouw team verliest.', False),
+    ('ambient',      'Sfeer',       'Sfeergeluid (willekeurig)',     'Zet hier meerdere enge geluidjes: er wordt af en toe een willekeurig geluid gespeeld tijdens het spel.', False),
+    ('hunter_near',  'Gevaar',      'Hunter in de buurt',            'Runner: een Hunter is dichtbij (afstand stel je per thema in).', False),
+    ('hunter_close', 'Gevaar',      'Hunter heel dichtbij',          'Runner: een Hunter is bijna bij je. Wordt vaker herhaald.', False),
+    ('zone_out',     'Gevaar',      'Je loopt buiten de zone',       'Waarschuwing zodra je buiten het speelveld bent.', False),
+    ('zone_back',    'Gevaar',      'Terug in de zone',              'Je bent weer binnen het speelveld.', False),
+    ('speed_warning','Gevaar',      'Niet rennen',                   'Waarschuwing bij te hoge snelheid.', False),
+    ('caught',       'Acties',      'Runner gepakt',                 'Iemand is gepakt.', False),
+    ('lootbox_open', 'Acties',      'Lootbox openen',                'Een dropbox/lootbox wordt geopend.', False),
+    ('offline_start','Acties',      'Offline knop gebruikt',         'Een Runner gaat offline.', False),
+    ('offline_end',  'Acties',      'Offline knop voorbij',          'De offline tijd is afgelopen.', False),
+    ('target_start', 'Acties',      'Target knop gebruikt',          'Er is een target gezet.', False),
+    ('target_end',   'Acties',      'Target knop voorbij',           'De target-tijd is afgelopen.', False),
+    ('power',        'Acties',      'Class power gebruikt',          'Een speciale kracht wordt ingezet.', False),
+    ('hazard',       'Acties',      'Val geactiveerd',               'Landmijn, laser of tripwire gaat af.', False),
+    ('pause',        'Overig',      'Pauze',                         'Het spel wordt gepauzeerd.', False),
+    ('resume',       'Overig',      'Pauze voorbij',                 'Het spel gaat verder.', False),
+    ('chat',         'Overig',      'Chatbericht',                   'Nieuw chatbericht.', False),
+    ('photo',        'Overig',      'Nieuwe foto',                   'Nieuwe foto in de feed.', False),
+    ('badge',        'Overig',      'Badge behaald',                 'Je hebt een badge verdiend.', False),
+    ('emergency',    'Overig',      'Noodknop',                      'Iemand heeft de noodknop gebruikt.', False),
+]
+SOUND_EVENT_KEYS = [e[0] for e in SOUND_EVENTS]
+SOUND_SKINS = [('classic', 'Standaard (neutraal)'), ('halloween', 'Halloween (eng)')]
+ALLOWED_SOUND_EXT = {'mp3', 'ogg', 'wav', 'm4a', 'aac', 'webm'}
+SOUND_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio', 'themes')
+
+
+class SoundTheme(db.Model):
+    """A named set of sounds (and an optional look) that a game can use."""
+    id          = db.Column(db.Integer, primary_key=True)
+    slug        = db.Column(db.String(40), unique=True, nullable=False)
+    name        = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.String(300), nullable=True)
+    skin        = db.Column(db.String(20), default='classic')     # visual style: classic / halloween
+    synth       = db.Column(db.Boolean, default=True)             # use built-in synth sounds where no clip is uploaded
+    volume      = db.Column(db.Integer, default=80)               # master volume 0-100
+    near_m      = db.Column(db.Integer, default=120)              # "hunter in de buurt" distance (m)
+    close_m     = db.Column(db.Integer, default=40)               # "hunter heel dichtbij" distance (m)
+    ambient_min = db.Column(db.Integer, default=45)               # seconds between ambient sounds (min)
+    ambient_max = db.Column(db.Integer, default=150)              # ... (max)
+    is_default  = db.Column(db.Boolean, default=False)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+    clips = db.relationship('SoundClip', back_populates='theme', cascade='all, delete-orphan',
+                            order_by='SoundClip.id')
+
+
+class SoundClip(db.Model):
+    id          = db.Column(db.Integer, primary_key=True)
+    theme_id    = db.Column(db.Integer, db.ForeignKey('sound_theme.id'), nullable=False)
+    event       = db.Column(db.String(30), nullable=False)
+    filename    = db.Column(db.String(200), nullable=False)       # inside SOUND_FOLDER
+    label       = db.Column(db.String(120), nullable=True)        # original filename, for display
+    volume      = db.Column(db.Integer, default=100)              # 0-100, relative to the theme volume
+    theme = db.relationship('SoundTheme', back_populates='clips')
+
+
+class CmsPage(db.Model):
+    """Admin-editable page, served at /p/<slug>."""
+    id           = db.Column(db.Integer, primary_key=True)
+    slug         = db.Column(db.String(60), unique=True, nullable=False)
+    title        = db.Column(db.String(120), nullable=False)
+    body         = db.Column(db.Text, nullable=True)              # HTML, written by admins only
+    published    = db.Column(db.Boolean, default=True)
+    show_in_nav  = db.Column(db.Boolean, default=False)
+    sort_order   = db.Column(db.Integer, default=0)
+    updated_at   = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# Editable texts: key -> (group, label, default). Overrides live in SiteSetting as "txt:<key>".
+SITE_TEXTS = {
+    'home.hero_title_a': ('Home', 'Titel (eerste deel)', 'Ven'),
+    'home.hero_title_b': ('Home', 'Titel (gekleurd deel)', 'Trax'),
+    'home.hero_sub':     ('Home', 'Ondertitel', 'Het echte GPS-jachtspel. Speel buiten met vrienden, kies je missie en maak van de buurt een avontuur.'),
+    'home.banner':       ('Home', 'Mededeling bovenaan (leeg = verbergen)', ''),
+    'home.leaderboard':  ('Home', 'Kop leaderboard', 'Leaderboard'),
+    'home.games':        ('Home', 'Kop spelkeuze', 'Kies je spel'),
+    'home.news':         ('Home', 'Kop nieuws', 'Recent Nieuws'),
+    'nav.home':          ('Menu', 'Menu: Home', 'Home'),
+    'nav.guide':         ('Menu', 'Menu: Handleiding', 'Handleiding'),
+    'nav.dashboard':     ('Menu', 'Menu: Dashboard', 'Dashboard'),
+    'nav.news':          ('Menu', 'Menu: Nieuws', 'Nieuws'),
+    'footer.text':       ('Footer', 'Footer tekst', ''),
+    'guide.title':       ('Handleiding', 'Titel', 'Zo speel je VenTrax'),
+    'guide.intro':       ('Handleiding', 'Introductie', 'Houd het simpel: join de lobby, zet GPS aan, kies je rol en wacht op de start. Tijdens het spel zie je live waar je bent, wat je moet doen en wanneer je extra informatie krijgt.'),
+    'guide.1_title':     ('Handleiding', 'Stap 1 titel', '1. Eerst in de lobby'),
+    'guide.1_text':      ('Handleiding', 'Stap 1 tekst', 'Open de spelcode of QR-code, kies je rol en zet GPS aan voordat je klaar bent.'),
+    'guide.2_title':     ('Handleiding', 'Stap 2 titel', '2. Tijdens het spel'),
+    'guide.2_text':      ('Handleiding', 'Stap 2 tekst', 'Blijf in beweging en kijk naar je kaart. Runners zien hun info onderin, Hunters zien hun targets links.'),
+    'guide.3_title':     ('Handleiding', 'Stap 3 titel', '3. Target of gepakt'),
+    'guide.3_text':      ('Handleiding', 'Stap 3 tekst', 'Wanneer een Hunter jou target, zie je meteen een waarschuwing. De Hunter ziet ook hoe lang dat target nog duurt.'),
+    'guide.4_title':     ('Handleiding', 'Stap 4 titel', '4. Spel afgelopen'),
+    'guide.4_text':      ('Handleiding', 'Stap 4 tekst', 'Na afloop zie je het eindscherm met winst, punten en samenvatting. Daarna kun je terug naar het dashboard.'),
+    'login.title':       ('Inloggen', 'Kop inlogscherm', 'Welkom terug'),
+}
+
+
+def site_text(key, default=None):
+    meta = SITE_TEXTS.get(key)
+    fallback = default if default is not None else (meta[2] if meta else '')
+    from flask import g, has_request_context
+    if has_request_context():
+        if not hasattr(g, '_site_texts'):          # one query per request instead of one per text
+            g._site_texts = {r.key[4:]: r.value for r in SiteSetting.query.filter(SiteSetting.key.like('txt:%')).all()}
+        val = g._site_texts.get(key)
+    else:
+        val = SiteSetting.get('txt:' + key, None)
+    return fallback if val is None else val
+
+
 
 # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @login_manager.user_loader
@@ -1006,6 +1127,7 @@ def save_game_extras(game, form):
         'glitch': form.get('feat_glitch') == 'on',
         'echo': form.get('extra_echo') == 'on',
         'classes_enabled': form.get('classes_enabled') == 'on',
+        'sound_theme': form.get('sound_theme') or '',
         'class_theme': form.get('class_theme') or 'street',
         'class_cooldown_sec': form_int('class_cooldown_sec', 180, 60, 1800),
         'dropboxes_per_team': form_int('dropboxes_per_team', 2, 1, 5),
@@ -1805,10 +1927,17 @@ def get_profile_playfield(user_id):
             return data
     return None
 
+def _existing_bg(name):
+    """Background chosen in the admin portal, but only if the file really exists
+    (older databases were seeded with a default that was never shipped)."""
+    if not name or not os.path.isfile(os.path.join(app.config['BG_FOLDER'], os.path.basename(name))):
+        return ''
+    return name
+
 def site_context():
     return {
         'site_name':          SiteSetting.get('site_name',          'VenTrax'),
-        'site_bg':            SiteSetting.get('site_bg',            ''),
+        'site_bg':            _existing_bg(SiteSetting.get('site_bg', '')),
         'site_logo':          SiteSetting.get('site_logo',          ''),
         'site_accent':        SiteSetting.get('site_accent',        '#e11d48'),
         'site_tagline':       SiteSetting.get('site_tagline',       'Het ultieme real-time jachtspel'),
@@ -1882,6 +2011,15 @@ def inject_site():
         gp = open_game_for_user(current_user.id)
         active_game = gp.game if gp else None
     ctx['active_game'] = active_game
+    ctx['t'] = site_text
+    try:
+        ctx['nav_pages'] = CmsPage.query.filter_by(published=True, show_in_nav=True).order_by(CmsPage.sort_order, CmsPage.title).all()
+        default_theme = get_default_sound_theme()
+        ctx['site_skin'] = (default_theme.skin if default_theme else None) or 'classic'
+    except Exception:
+        db.session.rollback()
+        ctx['nav_pages'] = []
+        ctx['site_skin'] = 'classic'
     return ctx
 
 def serialize_post(p, uid):
@@ -2636,7 +2774,9 @@ def new_game():
                            saved_playfield=get_profile_playfield(current_user.id) or get_latest_global_playfield(),
                            saved_playfields=get_global_playfields(),
                            profile_playfields=get_profile_playfields_for_user(current_user.id),
-                           game_templates=get_game_templates_for_user(current_user.id))
+                           game_templates=get_game_templates_for_user(current_user.id),
+                           sound_themes=SoundTheme.query.order_by(SoundTheme.name).all(),
+                           default_sound_theme=get_default_sound_theme())
 
 # â”€â”€ Lobby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/api/profile/playfield', methods=['POST'])
@@ -2778,7 +2918,7 @@ def lobby(code):
     join_url = f"{app.config['BASE_URL']}/join?code={code}"
     return render_template('lobby.html', game=game, me=me, players=players,
                            qr_file=qr_file, join_url=join_url,
-                           game_extras=get_game_extras(game))
+                           game_extras=get_game_extras(game), **game_sound_ctx(game))
 
 def game_settings_dict(game):
     return {
@@ -2866,7 +3006,8 @@ def game_dashboard(code):
     return render_template('game_dashboard.html', game=game, me=me, missions=missions,
                            playfield=get_playfield(game),
                            my_class=get_player_class(game, current_user.id),
-                           CATCH_MIN_PROGRESS_PCT=CATCH_MIN_PROGRESS_PCT)
+                           CATCH_MIN_PROGRESS_PCT=CATCH_MIN_PROGRESS_PCT,
+                           **game_sound_ctx(game))
 
 # â”€â”€ API: Lobby â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/api/game/<code>/gps_status', methods=['POST'])
@@ -3377,8 +3518,13 @@ def api_location(code):
     elif me.role == 'hunter' and not me.is_caught:
         hub.broadcast(code, 'hunter_location',
                       {'user_id': current_user.id, 'lat': lat, 'lon': lon})
+    nearest_hunter = None
+    if me.role == 'runner' and not me.is_caught:
+        dists = [haversine(lat, lon, p.last_lat, p.last_lon)
+                 for p in game.players if p.role == 'hunter' and p.last_lat is not None and not p.is_caught]
+        if dists: nearest_hunter = round(min(dists))
     return jsonify(success=True, points=round(me.points, 2), distance=round(me.distance, 1),
-                   hazard_messages=hazard_messages,
+                   hazard_messages=hazard_messages, nearest_hunter=nearest_hunter,
                    zone_pressure=get_zone_pressure(game, current_user.id))
 
 @app.route('/api/game/<code>/offline', methods=['POST'])
@@ -4440,13 +4586,408 @@ def admin_cleanup():
     for g in old: db.session.delete(g)
     db.session.commit(); return jsonify(success=True, deleted=n)
 
+# -- Sound themes: helpers + API ------------------------------------------------
+def get_default_sound_theme():
+    return SoundTheme.query.filter_by(is_default=True).first() or SoundTheme.query.order_by(SoundTheme.id).first()
+
+def get_game_sound_theme(game):
+    """Theme chosen by the game maker, else the site-wide default theme."""
+    try:
+        tid = int(get_game_extras(game).get('sound_theme') or 0)
+    except (TypeError, ValueError):
+        tid = 0
+    theme = db.session.get(SoundTheme, tid) if tid else None
+    return theme or get_default_sound_theme()
+
+def sound_theme_payload(theme):
+    """Everything the browser needs to play a theme (no secrets, cache-friendly)."""
+    if not theme:
+        return {'id': 0, 'slug': 'none', 'name': 'Geen', 'skin': 'classic', 'synth': True, 'volume': 80,
+                'near_m': 120, 'close_m': 40, 'ambient_min': 45, 'ambient_max': 150, 'events': {}, 'version': '0'}
+    events = {}
+    for c in theme.clips:
+        if c.event in SOUND_EVENT_KEYS:
+            events.setdefault(c.event, []).append({
+                'id': c.id, 'url': f'/audio/themes/{c.filename}',
+                'volume': max(0, min(100, c.volume if c.volume is not None else 100)),
+            })
+    version = f"{theme.id}-{theme.volume}-{theme.near_m}-{theme.close_m}-" + '.'.join(str(c.id) for c in theme.clips)
+    return {
+        'id': theme.id, 'slug': theme.slug, 'name': theme.name, 'skin': theme.skin or 'classic',
+        'synth': bool(theme.synth), 'volume': max(0, min(100, theme.volume if theme.volume is not None else 80)),
+        'near_m': theme.near_m or 120, 'close_m': theme.close_m or 40,
+        'ambient_min': max(10, theme.ambient_min or 45), 'ambient_max': max(15, theme.ambient_max or 150),
+        'events': events, 'version': version,
+    }
+
+def game_sound_ctx(game):
+    theme = get_game_sound_theme(game)
+    return {'page_skin': (theme.skin if theme else None) or 'classic',
+            'sound_theme': sound_theme_payload(theme)}
+
+@app.route('/api/sound_theme')
+def api_sound_theme_default():
+    return jsonify(sound_theme_payload(get_default_sound_theme()))
+
+@app.route('/api/sound_theme/<code>')
+@login_required
+def api_sound_theme_game(code):
+    game = Game.query.filter_by(code=code).first_or_404()
+    if not GamePlayer.query.filter_by(game_id=game.id, user_id=current_user.id).first() and not current_user.is_admin:
+        return jsonify(error='Niet in spel'), 403
+    return jsonify(sound_theme_payload(get_game_sound_theme(game)))
+
+@app.route('/audio/themes/<fn>')
+def sound_theme_file(fn):
+    resp = send_from_directory(SOUND_FOLDER, fn, conditional=True)
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'  # filenames are unique per upload
+    return resp
+
+# -- Sound themes: admin portal -------------------------------------------------
+def _slugify(text):
+    s = ''.join(ch.lower() if ch.isalnum() else '-' for ch in (text or '').strip())
+    s = '-'.join(part for part in s.split('-') if part)
+    return (s or 'thema')[:40]
+
+def _int_field(form, name, default, lo, hi):
+    try:
+        return max(lo, min(hi, int(form.get(name, default))))
+    except (TypeError, ValueError):
+        return default
+
+@app.route('/admin/sounds')
+@login_required
+@admin_required
+def admin_sounds():
+    themes = SoundTheme.query.order_by(SoundTheme.name).all()
+    try:
+        selected_id = int(request.args.get('theme') or 0)
+    except ValueError:
+        selected_id = 0
+    selected = next((t for t in themes if t.id == selected_id), None) or get_default_sound_theme()
+    groups = {}
+    for key, group, label, desc, loop in SOUND_EVENTS:
+        groups.setdefault(group, []).append({'key': key, 'label': label, 'desc': desc})
+    return render_template('admin_sounds.html', themes=themes, selected=selected, groups=groups,
+                           skins=SOUND_SKINS, payload=sound_theme_payload(selected) if selected else None)
+
+@app.route('/admin/sounds/theme/new', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_theme_new():
+    name = (request.form.get('name') or '').strip()[:80]
+    if not name:
+        flash('Geef het thema een naam.', 'danger')
+        return redirect(url_for('admin_sounds'))
+    slug, n = _slugify(name), 2
+    while SoundTheme.query.filter_by(slug=slug).first():
+        slug = f'{_slugify(name)[:34]}-{n}'; n += 1
+    skin = request.form.get('skin') if request.form.get('skin') in dict(SOUND_SKINS) else 'classic'
+    theme = SoundTheme(slug=slug, name=name, skin=skin, description=(request.form.get('description') or '')[:300])
+    db.session.add(theme); db.session.commit()
+    log_activity('sound_theme_new', name, user_id=current_user.id)
+    flash(f'Thema "{name}" aangemaakt. Zet nu geluidjes bij de gebeurtenissen.', 'success')
+    return redirect(url_for('admin_sounds', theme=theme.id))
+
+@app.route('/admin/sounds/theme/<int:tid>/save', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_theme_save(tid):
+    theme = SoundTheme.query.get_or_404(tid)
+    f = request.form
+    name = (f.get('name') or '').strip()[:80]
+    if name:
+        theme.name = name
+    theme.description = (f.get('description') or '')[:300]
+    if f.get('skin') in dict(SOUND_SKINS):
+        theme.skin = f.get('skin')
+    theme.synth = f.get('synth') == 'on'
+    theme.volume = _int_field(f, 'volume', 80, 0, 100)
+    theme.near_m = _int_field(f, 'near_m', 120, 10, 2000)
+    theme.close_m = _int_field(f, 'close_m', 40, 5, 1000)
+    if theme.close_m >= theme.near_m:
+        theme.close_m = max(5, theme.near_m // 3)
+    theme.ambient_min = _int_field(f, 'ambient_min', 45, 10, 1800)
+    theme.ambient_max = _int_field(f, 'ambient_max', 150, 15, 3600)
+    if theme.ambient_max < theme.ambient_min:
+        theme.ambient_max = theme.ambient_min + 15
+    db.session.commit()
+    flash('Thema opgeslagen.', 'success')
+    return redirect(url_for('admin_sounds', theme=theme.id))
+
+@app.route('/admin/sounds/theme/<int:tid>/default', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_theme_default(tid):
+    theme = SoundTheme.query.get_or_404(tid)
+    SoundTheme.query.update({SoundTheme.is_default: False})
+    theme.is_default = True
+    db.session.commit()
+    flash(f'"{theme.name}" is nu het standaardthema voor de hele site en voor nieuwe spellen.', 'success')
+    return redirect(url_for('admin_sounds', theme=theme.id))
+
+@app.route('/admin/sounds/theme/<int:tid>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_theme_delete(tid):
+    theme = SoundTheme.query.get_or_404(tid)
+    if SoundTheme.query.count() <= 1:
+        flash('Er moet minimaal 1 thema overblijven.', 'danger')
+        return redirect(url_for('admin_sounds', theme=theme.id))
+    was_default = theme.is_default
+    for c in list(theme.clips):
+        _remove_sound_file(c.filename)
+    db.session.delete(theme); db.session.commit()
+    if was_default:
+        first = SoundTheme.query.order_by(SoundTheme.id).first()
+        if first:
+            first.is_default = True; db.session.commit()
+    flash('Thema verwijderd.', 'success')
+    return redirect(url_for('admin_sounds'))
+
+def _remove_sound_file(filename):
+    try:
+        os.remove(os.path.join(SOUND_FOLDER, os.path.basename(filename)))
+    except OSError:
+        pass
+
+@app.route('/admin/sounds/theme/<int:tid>/upload', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_upload(tid):
+    theme = SoundTheme.query.get_or_404(tid)
+    event = request.form.get('event', '')
+    if event not in SOUND_EVENT_KEYS:
+        return jsonify(error='Onbekende gebeurtenis'), 400
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify(error='Kies een geluidsbestand'), 400
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    if ext not in ALLOWED_SOUND_EXT:
+        return jsonify(error='Alleen mp3, ogg, wav, m4a, aac of webm'), 400
+    # event 'ambient' may hold many clips; every other event also may (random pick) - cap to keep things sane
+    if SoundClip.query.filter_by(theme_id=theme.id, event=event).count() >= 12:
+        return jsonify(error='Maximaal 12 geluidjes per gebeurtenis'), 400
+    os.makedirs(SOUND_FOLDER, exist_ok=True)
+    try:
+        if upload_too_large(f, max_bytes=8 * 1024 * 1024):
+            return jsonify(error='Bestand is te groot (max 8 MB)'), 400
+        name = f"{theme.id}_{event}_{int(time.time())}_{random.randint(1000, 9999)}.{ext}"
+        f.save(os.path.join(SOUND_FOLDER, name))
+    except Exception:
+        app.logger.exception('sound upload failed')
+        return jsonify(error='Uploaden mislukt'), 500
+    clip = SoundClip(theme_id=theme.id, event=event, filename=name,
+                     label=secure_filename(f.filename)[:120], volume=100)
+    db.session.add(clip); db.session.commit()
+    return jsonify(success=True, id=clip.id, url=f'/audio/themes/{name}', label=clip.label, volume=clip.volume)
+
+@app.route('/admin/sounds/clip/<int:cid>/save', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_clip_save(cid):
+    clip = SoundClip.query.get_or_404(cid)
+    clip.volume = _int_field(request.get_json(silent=True) or request.form, 'volume', 100, 0, 100)
+    db.session.commit()
+    return jsonify(success=True, volume=clip.volume)
+
+@app.route('/admin/sounds/clip/<int:cid>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_sound_clip_delete(cid):
+    clip = SoundClip.query.get_or_404(cid)
+    _remove_sound_file(clip.filename)
+    db.session.delete(clip); db.session.commit()
+    return jsonify(success=True)
+
+# -- Editable pages: HTML sanitiser (allow-list; admins can't break the site by accident) --
+from html.parser import HTMLParser as _HTMLParser
+
+_CMS_TAGS = {'p', 'br', 'hr', 'h2', 'h3', 'h4', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'img',
+             'blockquote', 'code', 'pre', 'span', 'div', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'figure', 'figcaption'}
+_CMS_ATTRS = {'a': {'href', 'title', 'target', 'rel'}, 'img': {'src', 'alt', 'title', 'width', 'height'}}
+_CMS_VOID = {'br', 'hr', 'img'}
+
+def _safe_url(url):
+    url = (url or '').strip()
+    low = url.lower()
+    return url if low.startswith(('http://', 'https://', 'mailto:', '/', '#')) else ''
+
+class _CmsSanitizer(_HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.out = []
+        self.skip = 0          # inside <script>/<style>: drop the content too, not just the tags
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style'):
+            self.skip += 1
+            return
+        if tag not in _CMS_TAGS:
+            return
+        keep = []
+        for k, v in attrs:
+            if k in _CMS_ATTRS.get(tag, ()):
+                if k in ('href', 'src'):
+                    v = _safe_url(v)
+                    if not v:
+                        continue
+                keep.append(f' {k}="{html.escape(v or "", quote=True)}"')
+        if tag == 'a':
+            keep.append(' rel="noopener noreferrer"')
+        self.out.append(f'<{tag}{"".join(keep)}>')
+    def handle_endtag(self, tag):
+        if tag in ('script', 'style'):
+            self.skip = max(0, self.skip - 1)
+        elif tag in _CMS_TAGS and tag not in _CMS_VOID:
+            self.out.append(f'</{tag}>')
+    def handle_data(self, data):
+        if not self.skip:
+            self.out.append(html.escape(data, quote=False))
+
+def sanitize_cms_html(raw):
+    p = _CmsSanitizer()
+    p.feed(raw or '')
+    p.close()
+    return ''.join(p.out)
+
+# -- Editable pages & texts -----------------------------------------------------
+@app.route('/p/<slug>')
+def cms_page(slug):
+    page = CmsPage.query.filter_by(slug=slug).first_or_404()
+    if not page.published and not (current_user.is_authenticated and current_user.is_admin):
+        return render_template('page.html', page=None), 404
+    return render_template('page.html', page=page)
+
+@app.route('/admin/pages')
+@login_required
+@admin_required
+def admin_pages():
+    pages = CmsPage.query.order_by(CmsPage.sort_order, CmsPage.title).all()
+    try:
+        edit_id = int(request.args.get('edit') or 0)
+    except ValueError:
+        edit_id = 0
+    editing = next((p for p in pages if p.id == edit_id), None)
+    return render_template('admin_pages.html', pages=pages, editing=editing, new=request.args.get('new') == '1')
+
+@app.route('/admin/pages/save', methods=['POST'])
+@login_required
+@admin_required
+def admin_page_save():
+    f = request.form
+    title = (f.get('title') or '').strip()[:120]
+    if not title:
+        flash('Geef de pagina een titel.', 'danger')
+        return redirect(url_for('admin_pages', new=1))
+    page = db.session.get(CmsPage, int(f['id'])) if (f.get('id') or '').isdigit() else None
+    if not page:
+        slug, n = _slugify(f.get('slug') or title)[:60], 2
+        while CmsPage.query.filter_by(slug=slug).first():
+            slug = f'{_slugify(f.get("slug") or title)[:54]}-{n}'; n += 1
+        page = CmsPage(slug=slug, title=title)
+        db.session.add(page)
+    page.title = title
+    page.body = sanitize_cms_html(f.get('body') or '')
+    page.published = f.get('published') == 'on'
+    page.show_in_nav = f.get('show_in_nav') == 'on'
+    page.sort_order = _int_field(f, 'sort_order', 0, -999, 999)
+    db.session.commit()
+    log_activity('page_saved', page.slug, user_id=current_user.id)
+    flash('Pagina opgeslagen.', 'success')
+    return redirect(url_for('admin_pages', edit=page.id))
+
+@app.route('/admin/pages/upload_image', methods=['POST'])
+@login_required
+@admin_required
+def admin_page_upload_image():
+    f = request.files.get('file')
+    if not f or not f.filename or not allowed_file(f.filename):
+        return jsonify(error='Kies een png, jpg of webp afbeelding'), 400
+    try:
+        name = save_image(f, app.config['UPLOAD_FOLDER'], (1600, 1600))
+    except ValueError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(success=True, url=f'/uploads/{name}')
+
+@app.route('/admin/pages/<int:pid>/delete', methods=['POST'])
+@login_required
+@admin_required
+def admin_page_delete(pid):
+    page = CmsPage.query.get_or_404(pid)
+    db.session.delete(page); db.session.commit()
+    flash('Pagina verwijderd.', 'success')
+    return redirect(url_for('admin_pages'))
+
+@app.route('/admin/texts', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_texts():
+    if request.method == 'POST':
+        for key, (group, label, default) in SITE_TEXTS.items():
+            if ('txt__' + key) not in request.form:
+                continue
+            val = request.form.get('txt__' + key, '').strip()
+            row = db.session.get(SiteSetting, 'txt:' + key)
+            if val == default or (val == '' and default != ''):
+                if row:
+                    db.session.delete(row)          # back to the built-in text
+            elif row:
+                row.value = val
+            else:
+                db.session.add(SiteSetting(key='txt:' + key, value=val))
+        db.session.commit()
+        flash('Teksten opgeslagen.', 'success')
+        return redirect(url_for('admin_texts'))
+    groups = {}
+    for key, (group, label, default) in SITE_TEXTS.items():
+        groups.setdefault(group, []).append({'key': key, 'label': label, 'default': default, 'value': site_text(key),
+                                             'long': len(default) > 70})
+    return render_template('admin_texts.html', groups=groups)
+
+# -- PWA: manifest + service worker (keeps permissions/sounds sticky on a phone) --
+@app.route('/manifest.webmanifest')
+def web_manifest():
+    name = SiteSetting.get('site_name', 'VenTrax')
+    resp = jsonify({
+        'name': name, 'short_name': name[:12], 'start_url': '/', 'scope': '/',
+        'display': 'standalone', 'orientation': 'portrait',
+        'background_color': '#0a0a0f', 'theme_color': '#0a0a0f',
+        'icons': [
+            {'src': '/static/img/icon-192.png', 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any maskable'},
+            {'src': '/static/img/icon-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'any maskable'},
+        ],
+    })
+    resp.mimetype = 'application/manifest+json'
+    return resp
+
+@app.route('/sw.js')
+def service_worker():
+    resp = send_from_directory(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'js'), 'sw.js')
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    resp.mimetype = 'application/javascript'
+    return resp
+
 # â”€â”€ Static files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @app.route('/uploads/<fn>')
 def uploaded_file(fn): return send_from_directory(app.config['UPLOAD_FOLDER'], fn)
 @app.route('/audio/<fn>')
 def audio_file(fn): return send_from_directory(AUDIO_FOLDER, fn)
+IMG_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'img')
+# Older databases point at files that were never uploaded; map them to the shipped defaults.
+IMG_ALIASES = {'logo_default.png': 'logo_round.png'}
+
 @app.route('/backgrounds/<fn>')
-def bg_file(fn): return send_from_directory(app.config['BG_FOLDER'], fn)
+def bg_file(fn):
+    # Site logo / background are chosen in the admin portal and live in the (volume-mounted)
+    # backgrounds folder. If the file is missing there, fall back to the images shipped in
+    # static/img instead of serving a broken image.
+    if os.path.isfile(os.path.join(app.config['BG_FOLDER'], os.path.basename(fn))):
+        return send_from_directory(app.config['BG_FOLDER'], fn)
+    fallback = IMG_ALIASES.get(fn, fn)
+    if os.path.isfile(os.path.join(IMG_FOLDER, os.path.basename(fallback))):
+        return send_from_directory(IMG_FOLDER, fallback)
+    return ('', 404)
 @app.route('/handleiding')
 def handleiding():
     return render_template('handleiding.html')
@@ -4477,10 +5018,9 @@ def init_db():
         ensure_column('post', 'audio_filename', 'VARCHAR(256)')
         ensure_column('user', 'requires_email_verification', 'BOOLEAN DEFAULT 0')
         os.makedirs(AUDIO_FOLDER, exist_ok=True)
+        os.makedirs(SOUND_FOLDER, exist_ok=True)
         if not SiteSetting.get('site_logo'):
-            SiteSetting.set('site_logo', 'logo_default.png')
-        if not SiteSetting.get('site_bg'):
-            SiteSetting.set('site_bg', 'bg_default.png')
+            SiteSetting.set('site_logo', 'logo_round.png')
         if not SiteSetting.get('site_bg_overlay'):
             SiteSetting.set('site_bg_overlay', '0.75')
         # Seed initial changelog if empty
@@ -4549,6 +5089,17 @@ def init_db():
         if not Changelog.query.filter_by(version='2.3.3').first():
             db.session.add(Changelog(version='2.3.3', title='P0 lobby, GPS, countdown en chat hotfix', type='fix',
                           body='- Oude open spellen worden opgeschoond of afgesloten voordat je join/new game gebruikt\n- Bestaand geldig spel stuurt direct door naar lobby of game\n- GPS weigeren in lobby haalt speler uit het spel\n- Start vereist echte GPS-fix uit de lobby\n- QR scanner opent camera via join?scan=1\n- Powers zijn geblokkeerd tot na de voorsprong\n- Countdown ruimt zichzelf op en forceert refresh naar actieve game\n- Offline teller staat onder de offlineknop\n- Chat-rendering robuuster gemaakt\n- Mail toont foto via publieke upload-link plus bijlage waar mogelijk'))
+            db.session.commit()
+        # Seed sound themes. Halloween is the default; switch it in Admin > Geluiden.
+        if SoundTheme.query.count() == 0:
+            db.session.add(SoundTheme(slug='halloween', name='Halloween', skin='halloween', is_default=True,
+                                      description='Enge sfeer: hartslag, gefluister en dreigende geluiden.'))
+            db.session.add(SoundTheme(slug='klassiek', name='Klassiek', skin='classic', is_default=False,
+                                      description='Het normale VenTrax-uiterlijk met simpele pieptonen.'))
+            db.session.commit()
+        if not Changelog.query.filter_by(version='3.0.0').first():
+            db.session.add(Changelog(version='3.0.0', title='Halloween-update: geluidsthema\'s, nieuwe look, bewerkbare pagina\'s', type='feature',
+                          body='- Geluidsthema\'s: kies per thema geluidjes bij start, einde, lootbox, offline, target, buiten de zone en Hunter in de buurt\n- Admin > Geluiden: upload en beluister geluidjes per gebeurtenis\n- Eng Halloween-uiterlijk voor site en spel\n- Admin kan pagina\'s en teksten zelf aanpassen\n- Kapotte logo\'s en achtergronden hersteld\n- Eenmalige toestemmingen (locatie/geluid) en installeerbare app zodat de popup niet steeds terugkomt'))
             db.session.commit()
         # Seed game catalog if empty
         if GameCatalog.query.count() == 0:
