@@ -198,6 +198,12 @@ path.zone-next{animation:march 2.4s linear infinite reverse}
 path.zone-cloud{animation:cloud 7s ease-in-out infinite}
 @keyframes march{to{stroke-dashoffset:-32}}
 @keyframes cloud{0%,100%{fill-opacity:.80}50%{fill-opacity:.92}}
+#missionBar{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);z-index:430;width:min(92vw,360px);background:rgba(20,12,36,.92);color:#fff;border:1px solid #a78bfa;border-radius:16px;padding:10px 14px;display:none;backdrop-filter:blur(8px)}
+#missionBar.show{display:block;animation:fadeUp .3s ease}
+#missionBar .mb-t{font-size:12.5px;font-weight:600;display:flex;justify-content:space-between;gap:8px}
+#missionBar .mb-track{height:8px;background:rgba(255,255,255,.18);border-radius:99px;overflow:hidden;margin-top:7px}
+#missionBar .mb-fill{height:100%;width:0;background:linear-gradient(90deg,#a78bfa,#34d399);transition:width .4s}
+.mission-pin{width:34px;height:34px;border-radius:50%;background:#7c3aed;border:2px solid #fff;display:grid;place-items:center;color:#fff;font-size:15px;box-shadow:0 0 16px #7c3aedaa;animation:pulse 1.8s infinite}
 #soundHint{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:420;background:rgba(0,0,0,.78);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:8px 16px;font-size:12px;font-weight:600;display:none;white-space:nowrap;cursor:pointer;backdrop-filter:blur(8px)}
 #soundHint.show{display:block;animation:fadeUp .3s ease}
 html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:0;z-index:340;pointer-events:none;box-shadow:inset 0 0 120px 30px rgba(0,0,0,.55)}
@@ -248,6 +254,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
 
     <div id="dangerPulse"></div>
     <div id="zoneBanner"></div>
+    <div id="missionBar"></div>
     <div id="soundHint" onclick="VXSound.unlock()"><i class="fas fa-volume-high"></i> Tik ergens om het geluid aan te zetten</div>
 
     <!-- Notification popup -->
@@ -833,6 +840,44 @@ function claimLootbox(id) {
     }).catch(() => showToast('Dropbox openen mislukt', 'error'));
 }
 
+// ---- Missions: a spot to reach and hold ----
+let missionMarkers = {}, missionList = [], missionSyncAt = 0, missionProg = null, missionProgAt = 0;
+function updateMissions(list) {
+  missionList = list || []; missionSyncAt = Date.now();
+  const seen = new Set();
+  missionList.forEach(m => {
+    seen.add(String(m.id));
+    if (!missionMarkers[m.id] && typeof L !== 'undefined' && map) {
+      const circle = L.circle([m.lat, m.lng], {radius: m.radius, color: '#a78bfa', fillColor: '#7c3aed', fillOpacity: .22, weight: 2, dashArray: '6 5', interactive: false}).addTo(map);
+      const pin = L.marker([m.lat, m.lng], {interactive: false, icon: L.divIcon({className: '', iconSize: [34, 34], iconAnchor: [17, 17], html: '<div class="mission-pin"><i class="fas fa-flag"></i></div>'})}).addTo(map);
+      missionMarkers[m.id] = [circle, pin];
+    }
+  });
+  Object.keys(missionMarkers).forEach(id => {
+    if (!seen.has(String(id))) { missionMarkers[id].forEach(l => map.removeLayer(l)); delete missionMarkers[id]; }
+  });
+  updateMissionBar();
+}
+function updateMissionBar() {
+  const el = document.getElementById('missionBar'); if (!el) return;
+  if (!missionList.length || lastLat === null) { el.classList.remove('show'); return; }
+  let best = null;
+  missionList.forEach(m => { const d = distM(lastLat, lastLon, m.lat, m.lng); if (!best || d < best.d) best = {m, d}; });
+  const left = Math.max(0, best.m.expires_in - Math.floor((Date.now() - missionSyncAt) / 1000));
+  const near = missionProg && Date.now() - missionProgAt < 20000 && missionProg.id === best.m.id && best.d <= best.m.radius + 5;
+  if (MY_ROLE === 'runner' && near) {
+    const pct = Math.min(100, Math.round(missionProg.held / missionProg.need * 100));
+    el.innerHTML = `<div class="mb-t"><span><i class="fas fa-flag"></i> Missie: blijf in de cirkel</span><span>${Math.max(0, missionProg.need - missionProg.held)}s</span></div><div class="mb-track"><div class="mb-fill" style="width:${pct}%"></div></div>`;
+  } else {
+    const dir = bearingText(lastLat, lastLon, best.m.lat, best.m.lng);
+    el.innerHTML = MY_ROLE === 'runner'
+      ? `<div class="mb-t"><span><i class="fas fa-flag"></i> Missie ${fmtDist(best.d)} naar het ${dir}</span><span>${fmtMM(left)}</span></div><div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:4px">Blijf ${best.m.hold_sec}s in de cirkel voor +${best.m.points} punten</div>`
+      : `<div class="mb-t"><span><i class="fas fa-flag"></i> Runner-missie ${fmtDist(best.d)} naar het ${dir}</span><span>${fmtMM(left)}</span></div>`;
+  }
+  el.classList.add('show');
+}
+setInterval(updateMissionBar, 1000);
+
 function startGPS() {
   if (!navigator.geolocation) { document.getElementById('gpsBadge').textContent = 'GPS niet ondersteund'; return; }
   requestWakeLock();
@@ -881,6 +926,10 @@ function onGPS(pos) {
       document.getElementById('ip-dist').textContent = Math.round(d.distance) + 'm';
     }
     updateZoneBar(d.zone_pressure);
+    if (d.mission) {
+      missionProg = d.mission; missionProgAt = Date.now(); updateMissionBar();
+      if (d.mission.done) { showToast(`Missie gelukt! +${fmtPts(d.mission.done)} punten`, 'success', 8000); VXSound.play('mission_done'); setTimeout(pollState, 400); }
+    }
     if (MY_ROLE === 'runner' && headstartOver && !isPaused) VXSound.nearby(d.nearest_hunter);
     (d.hazard_messages || []).forEach(m => showToast(m, 'warn', 8000));
   }).catch(() => {});
@@ -925,6 +974,7 @@ function pollState() {
       if (!introHandled && d.status === 'active') maybePlayIntro(d.elapsed);
       if (!d.headstart_over) sawHeadstart = true;
       else if (sawHeadstart && !headstartOver) playGoOnce();
+      if (d.missions) updateMissions(d.missions);
       if (d.zone) {
         if (d.zone_points && PLAYFIELD && JSON.stringify(d.zone_points) !== JSON.stringify(PLAYFIELD.points)) applyZone(d.zone_points);
         if (d.zone.pending && !zonePending) showZonePreview(d.zone.pending, Math.max(0, d.zone.next_in || 0));
@@ -2027,6 +2077,16 @@ function connectWS() {
         break;
       case 'game_ended':
         showEndScreen(d);
+        break;
+      case 'mission_new':
+        VXSound.play('mission_new');
+        if (MY_ROLE === 'runner') showToast(`Nieuwe missie! Ga naar de cirkel en blijf ${d.hold_sec}s binnen voor +${d.points} punten.`, 'info', 9000);
+        else if (d.hunters_see) showToast('Er is een nieuwe runner-missie op de kaart.', 'info', 6000);
+        setTimeout(pollState, 300);
+        break;
+      case 'mission_done':
+        if (d.user_id !== MY_ID) { VXSound.play('mission_done'); showToast(`${d.codename || 'Een runner'} heeft een missie gehaald (+${fmtPts(d.points)})`, 'info', 6000); }
+        setTimeout(pollState, 300);
         break;
       case 'zone_warning':
         showZonePreview(d, d.in_sec); updateZoneBanner();

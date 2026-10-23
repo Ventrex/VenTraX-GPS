@@ -685,6 +685,8 @@ SOUND_EVENTS = [
     ('zone_shrink',  'Gevaar',      'Zone wordt kleiner',            'De krimpende zone wordt aangekondigd of gaat in.', False),
     ('speed_warning','Gevaar',      'Niet rennen',                   'Waarschuwing bij te hoge snelheid.', False),
     ('caught',       'Acties',      'Runner gepakt',                 'Iemand is gepakt.', False),
+    ('mission_new', 'Acties',      'Nieuwe missie',                 'Er verschijnt een nieuwe missie op de kaart.', False),
+    ('mission_done','Acties',      'Missie gelukt',                 'Een runner heeft een missie voltooid.', False),
     ('lootbox_open', 'Acties',      'Lootbox openen',                'Een dropbox/lootbox wordt geopend.', False),
     ('offline_start','Acties',      'Offline knop gebruikt',         'Een Runner gaat offline.', False),
     ('offline_end',  'Acties',      'Offline knop voorbij',          'De offline tijd is afgelopen.', False),
@@ -1163,6 +1165,11 @@ def save_game_extras(game, form):
         'dropbox_max_m': dropbox_max_m,
         'dropbox_wait_enabled': form.get('dropbox_wait_enabled') == 'on',
         'dropbox_wait_sec': form_int('dropbox_wait_sec', 20, 5, 120),
+        'missions': form.get('missions') == 'on',
+        'mission_hold_sec': form_int('mission_hold_sec', 45, 15, 180),
+        'mission_duration_min': form_int('mission_duration_min', 12, 4, 40),
+        'mission_points': form_int('mission_points', 5, 1, 20),
+        'mission_hunters_see': form.get('mission_hunters_see', 'on') == 'on' if 'mission_hunters_see' in form else True,
         'shrinking_zone': form.get('shrinking_zone') == 'on',
         'zone_first_min': form_int('zone_first_min', 10, 1, 120),
         'zone_interval_min': form_int('zone_interval_min', 8, 2, 60),
@@ -3569,6 +3576,7 @@ def api_state(code):
         class_cooldown=class_cooldown_remaining(game, current_user.id),
         hazards=[h for h in effects.get('hazards', []) if h.get('owner_id') == current_user.id],
         zone=zone_info(game),
+        missions=missions_for_role(game, me.role),
         zone_points=(get_playfield(game) or {}).get('points') if zone_config(game) else None,
     )
 
@@ -3757,8 +3765,15 @@ def api_location(code):
         dists = [haversine(lat, lon, p.last_lat, p.last_lon)
                  for p in game.players if p.role == 'hunter' and p.last_lat is not None and not p.is_caught]
         if dists: nearest_hunter = round(min(dists))
+    mission = None
+    try:
+        mission = mission_progress(game, me, current_user, lat, lon, _now_ts())
+        if mission and mission.get('done'):
+            db.session.commit()
+    except Exception:
+        app.logger.exception('mission progress failed')
     return jsonify(success=True, points=round(me.points, 2), distance=round(me.distance, 1),
-                   hazard_messages=hazard_messages, nearest_hunter=nearest_hunter,
+                   hazard_messages=hazard_messages, nearest_hunter=nearest_hunter, mission=mission,
                    zone_pressure=get_zone_pressure(game, current_user.id))
 
 @app.route('/api/game/<code>/offline', methods=['POST'])
@@ -5175,7 +5190,7 @@ IMAGE_SLOTS = [
                  ('img_extra_echo', 'Echo')]),
     ('Spelstijl', [('img_style_classic', 'Classic'), ('img_style_adventure', 'Adventure'),
                    ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'),
-                   ('img_style_zone', 'Krimpende zone')]),
+                   ('img_style_zone', 'Krimpende zone'), ('img_style_missions', 'Missies')]),
     ("Class-thema's", [('img_classtheme_street', 'Street Ops'), ('img_classtheme_space', 'Space Scouts'),
                        ('img_classtheme_forest', 'Boswachters'), ('img_classtheme_spy', 'Spy Kids')]),
     ('Classes', [('img_class_signal_scout', 'Signal Scout'), ('img_class_codekraker', 'Codekraker'),
@@ -5339,6 +5354,124 @@ def service_worker():
     resp.headers['Service-Worker-Allowed'] = '/'
     resp.mimetype = 'application/javascript'
     return resp
+
+# -- Runner missions: a spot to reach and hold, so runners keep moving -----------------------------
+MISSION_RADIUS_M = 25
+MISSION_MAX = 3
+
+def mission_config(game):
+    ex = get_game_extras(game)
+    if not ex.get('missions'):
+        return None
+    return {'hold_sec': int(ex.get('mission_hold_sec', 45)), 'duration_sec': int(ex.get('mission_duration_min', 12)) * 60,
+            'points': int(ex.get('mission_points', 5)), 'hunters_see': bool(ex.get('mission_hunters_see', True))}
+
+def _missions_key(game_id):
+    return f'missions:{game_id}'
+
+def _load_missions(game):
+    try:
+        st = json.loads(SiteSetting.get(_missions_key(game.id), '') or '{}')
+    except Exception:
+        st = {}
+    st.setdefault('missions', []); st.setdefault('next_id', 1); st.setdefault('history', [])
+    return st
+
+def _mission_point(game, st, runners):
+    """A spot inside the field (never in a forbidden area), away from earlier spots, other missions and the runners."""
+    pf = get_playfield(game)
+    avoid = [(h[0], h[1], 150) for h in st['history'][-8:]] + [(m['lat'], m['lng'], 150) for m in st['missions']] + \
+            [(r.last_lat, r.last_lon, 100) for r in runners if r.last_lat is not None]
+    best = None
+    for attempt in range(80):
+        lat, lng = _random_lootbox_point(game)
+        if pf and forbidden_penetration_m(pf, lat, lng) > 0:
+            continue
+        best = best or (lat, lng)
+        limit = 1.0 if attempt < 50 else 0.0                      # later attempts ignore the distances
+        if all(botlib.haversine(lat, lng, a, b) >= d * limit for a, b, d in avoid):
+            return lat, lng
+    return best or _random_lootbox_point(game)
+
+def get_game_missions(game, announce=True):
+    """Active missions (created / replaced when needed). Time runs on game time, so a pause freezes them."""
+    cfg = mission_config(game)
+    if not cfg or game.status != 'active' or not game.is_headstart_over:
+        return []
+    st = _load_missions(game)
+    now = game.effective_elapsed
+    runners = [p for p in game.players.all() if p.role == 'runner' and not p.is_caught]
+    st['missions'] = [m for m in st['missions'] if m['expires'] > now]
+    want = max(1, min(MISSION_MAX, (len(runners) + 1) // 2)) if runners else 0
+    created = []
+    while len(st['missions']) < want:
+        lat, lng = _mission_point(game, st, runners)
+        m = {'id': st['next_id'], 'lat': lat, 'lng': lng, 'radius': MISSION_RADIUS_M,
+             'expires': now + cfg['duration_sec'], 'holds': {}}
+        st['next_id'] += 1
+        st['missions'].append(m); created.append(m)
+        st['history'] = (st['history'] + [[lat, lng]])[-12:]
+    if created:
+        SiteSetting.set(_missions_key(game.id), json.dumps(st))
+        if announce:
+            for m in created:
+                hub.broadcast(game.code, 'mission_new', {'id': m['id'], 'lat': m['lat'], 'lng': m['lng'],
+                                                         'minutes': cfg['duration_sec'] // 60, 'hold_sec': cfg['hold_sec'],
+                                                         'points': cfg['points'], 'hunters_see': cfg['hunters_see']})
+    return st['missions']
+
+def missions_for_role(game, role):
+    cfg = mission_config(game)
+    if not cfg:
+        return []
+    if role == 'hunter' and not cfg['hunters_see']:
+        return []
+    now = game.effective_elapsed
+    return [{'id': m['id'], 'lat': m['lat'], 'lng': m['lng'], 'radius': m['radius'],
+             'expires_in': max(0, int(m['expires'] - now)), 'hold_sec': cfg['hold_sec'], 'points': cfg['points']}
+            for m in get_game_missions(game)]
+
+def mission_progress(game, me, user, lat, lon, now_ts):
+    """Called on every location update of a runner: holds time inside a mission circle; completes it.
+    Returns {'id','held','need','dist'} for the nearest mission within 80 m, plus 'done' when completed."""
+    cfg = mission_config(game)
+    if not cfg or me.role != 'runner' or me.is_caught:
+        return None
+    missions = get_game_missions(game)
+    if not missions:
+        return None
+    st = _load_missions(game)
+    by_id = {m['id']: m for m in st['missions']}
+    nearest = None
+    for m in missions:
+        sm = by_id.get(m['id'])
+        if not sm:
+            continue
+        d = botlib.haversine(lat, lon, sm['lat'], sm['lng'])
+        key = str(me.user_id)
+        hold = sm['holds'].get(key) or {'sec': 0.0, 'ts': now_ts, 'in': False}
+        if d <= sm['radius']:
+            # time only counts between two pings that were both inside; the first ping inside just starts the clock
+            delta = max(0.0, min(15.0, now_ts - float(hold['ts']))) if hold.get('in') else 0.0
+            hold = {'sec': float(hold['sec']) + delta, 'ts': now_ts, 'in': True}
+        else:
+            hold = {'sec': 0.0, 'ts': now_ts, 'in': False}      # leaving the circle resets the hold
+        sm['holds'][key] = hold
+        if d <= 80 and (nearest is None or d < nearest['dist']):
+            nearest = {'id': sm['id'], 'held': round(hold['sec']), 'need': cfg['hold_sec'], 'dist': round(d)}
+        if hold['sec'] >= cfg['hold_sec']:
+            pts = round(cfg['points'] * game.multiplier_for('runner'), 2)
+            me.points = (me.points or 0) + pts
+            user.total_points = (user.total_points or 0) + pts
+            st['missions'] = [x for x in st['missions'] if x['id'] != sm['id']]
+            st['history'] = (st['history'] + [[sm['lat'], sm['lng']]])[-12:]
+            SiteSetting.set(_missions_key(game.id), json.dumps(st))
+            hub.broadcast(game.code, 'mission_done', {'user_id': me.user_id, 'codename': me.codename or user.username,
+                                                       'points': pts, 'id': sm['id']})
+            get_game_missions(game)                              # the next mission appears somewhere else
+            return {'id': sm['id'], 'held': cfg['hold_sec'], 'need': cfg['hold_sec'], 'dist': round(d), 'done': pts}
+    SiteSetting.set(_missions_key(game.id), json.dumps(st))
+    return nearest
 
 # -- Shrinking zone (Fortnite-style) --------------------------------------------------------------
 import zone as zonelib
