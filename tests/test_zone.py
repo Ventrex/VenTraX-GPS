@@ -62,8 +62,8 @@ def test_catching_up_after_a_server_restart_does_not_skip_the_announcement_logic
 
 
 def test_it_stops_at_a_final_zone():
-    pts = zone.regular_polygon(LAT, LON, 90, 16)
-    state, ev = zone.step({}, 99999, CFG, pts, random.Random(5))        # 90 m * 0.7 = 63 m < the 70 m minimum
+    pts = zone.regular_polygon(LAT, LON, 190, 16)
+    state, ev = zone.step({}, 99999, CFG, pts, random.Random(5))        # already about the 200 m minimum
     assert [e[0] for e in ev] == ["final"]
     state, ev = zone.step(state, 999999, CFG, pts, random.Random(5))
     assert ev == []                                                      # and it says so only once
@@ -88,7 +88,7 @@ def zone_game(appmodule, with_field, started_min_ago, first=1, interval=2):
                                                       gps_enabled=True, last_seen=datetime.utcnow()))
         appmodule.SiteSetting.set(appmodule._extras_key(g.id), json.dumps(
             {"shrinking_zone": True, "zone_first_min": first, "zone_interval_min": interval,
-             "zone_shrink_pct": 30, "zone_warning_sec": 60}))
+             "zone_shrink_pct": 30}))
         if with_field:
             appmodule.SiteSetting.set(appmodule._playfield_key(g.id), json.dumps(
                 {"enabled": True, "color": "storm", "points": zone.regular_polygon(LAT, LON, 500, 12), "forbidden": []}))
@@ -143,7 +143,7 @@ def test_without_a_field_a_circle_around_the_players_is_made(appmodule, monkeypa
 
 
 def test_state_endpoint_tells_late_joiners_about_the_zone(appmodule, client, monkeypatch):
-    gid, uid = zone_game(appmodule, True, started_min_ago=1.2)       # in the warning window (shrink at 2.0, warn 60 s before)
+    gid, uid = zone_game(appmodule, True, started_min_ago=1.7)       # in the warning window (shrink at 2.0, warn 30 s before)
     run_zone_loop(appmodule, monkeypatch, 0.3)
     with client.session_transaction() as sess:
         sess["_user_id"] = str(uid); sess["_fresh"] = True
@@ -162,11 +162,29 @@ def test_new_game_stores_the_zone_settings(appmodule, client):
     r = client.post("/new_game", data={"name": "Krimp", "role": "hunter", "duration": "60", "headstart": "5", "difficulty": "medium",
                                        "hunter_interval": "600", "runner_interval": "600", "target_duration": "300",
                                        "target_cooldown": "600", "max_offline": "300", "shrinking_zone": "on",
-                                       "zone_first_min": "15", "zone_interval_min": "10", "zone_shrink_pct": "40", "zone_warning_sec": "120"})
+                                       "zone_first_min": "15", "zone_interval_min": "10", "zone_shrink_pct": "40"})
     assert r.status_code == 302
     with appmodule.app.app_context():
         g = appmodule.Game.query.filter_by(name="Krimp").first()
         ex = appmodule.get_game_extras(g)
         assert ex["shrinking_zone"] and ex["zone_first_min"] == 15 and ex["zone_shrink_pct"] == 40
         cfg = appmodule.zone_config(g)
-        assert cfg["factor"] == 0.6 and cfg["first_sec"] == 900 and cfg["warning_sec"] == 120
+        assert cfg["factor"] == 0.6 and cfg["first_sec"] == 900 and cfg["warning_sec"] == 300     # announced halfway through the 10 min interval
+
+
+def test_last_field_is_never_smaller_than_the_minimum_and_not_shrunk_in_the_last_5_minutes():
+    cfg = dict(CFG, min_radius_m=200, duration_sec=3600)
+    pts = zone.regular_polygon(LAT, LON, 260, 16)               # 260 * 0.7 = 182 m is below 200 m
+    state, ev = zone.step({}, 900 - 90, cfg, pts, random.Random(6))
+    assert ev[0][0] == "warn"
+    assert 190 < zone.mean_radius_m(ev[0][1]["points"]) <= 205  # the last step stops at the minimum
+    big = zone.regular_polygon(LAT, LON, 900, 16)
+    state, ev = zone.step({}, 99999, dict(cfg, first_sec=3600 - 100), big, random.Random(7))
+    assert [e[0] for e in ev] == ["final"]                      # a shrink in the last 5 minutes is not done
+
+
+def test_announcement_comes_halfway_the_interval():
+    cfg = dict(CFG, warning_sec=240, min_radius_m=70)
+    pts = zone.regular_polygon(LAT, LON, 600, 16)
+    state, ev = zone.step({"phase": 1}, 300 + 600 + 480 - 240, cfg, pts, random.Random(8))
+    assert ev and ev[0][0] == "warn" and ev[0][1]["in_sec"] == 240

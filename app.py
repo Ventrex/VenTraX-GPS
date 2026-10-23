@@ -1187,7 +1187,7 @@ def save_game_extras(game, form):
         'zone_first_min': form_int('zone_first_min', 10, 1, 120),
         'zone_interval_min': form_int('zone_interval_min', 8, 2, 60),
         'zone_shrink_pct': form_int('zone_shrink_pct', 30, 10, 60),
-        'zone_warning_sec': form_int('zone_warning_sec', 90, 30, 300),
+        'zone_min_m': form_int('zone_min_m', 200, 50, 1000),
     }
     SiteSetting.set(_extras_key(game.id), json.dumps(extras))
     return extras
@@ -1473,9 +1473,13 @@ def get_game_end_result(game):
     except Exception:
         return {}
 
+ZONE_LIFE_DRAIN_SEC = 30      # seconds outside the field until the life bar is empty
+ZONE_LIFE_RECOVER_SEC = 120   # seconds inside the field to fill an empty life bar again
+
 def update_zone_pressure(game, player, outside_distance_m, forbidden=False):
-    """Track how long a player is safely outside the playfield margin."""
-    limit_sec = 30
+    """Life bar of a player: it drains while outside the field (or in a forbidden area) and slowly
+    refills inside. `seconds` is the used part of the bar (0 = full life, limit_sec = empty = out)."""
+    limit_sec = ZONE_LIFE_DRAIN_SEC
     margin_m = 5
     now_ts = _now_ts()
     try:
@@ -1489,15 +1493,19 @@ def update_zone_pressure(game, player, outside_distance_m, forbidden=False):
     seconds = float(item.get('seconds') or 0)
     last_ts = float(item.get('last_ts') or now_ts)
     delta = max(0, min(15, now_ts - last_ts))
-    if outside_distance_m > margin_m:
+    was_outside = bool(item.get('outside'))
+    outside = outside_distance_m > margin_m
+    if outside:
         seconds = min(limit_sec, seconds + delta)
     else:
-        seconds = 0
+        seconds = max(0.0, seconds - delta * limit_sec / ZONE_LIFE_RECOVER_SEC)
     item.update({
         'seconds': seconds,
         'last_ts': now_ts,
+        'outside': outside,
+        'just_left': outside and not was_outside,
         'outside_m': round(float(outside_distance_m or 0), 1),
-        'forbidden': bool(forbidden) and outside_distance_m > margin_m,
+        'forbidden': bool(forbidden) and outside,
         'limit_sec': limit_sec,
         'margin_m': margin_m,
     })
@@ -1518,6 +1526,7 @@ def get_zone_pressure(game, user_id):
         'limit_sec': limit_sec,
         'margin_m': int(item.get('margin_m') or 5),
         'outside_m': float(item.get('outside_m') or 0),
+        'outside': bool(item.get('outside')),
         'forbidden': bool(item.get('forbidden')),
         'pct': round(min(100, (seconds / max(1, limit_sec)) * 100), 1),
     }
@@ -3743,22 +3752,23 @@ def api_location(code):
     outside_m = playfield_outside_distance_m(game, lat, lon)
     forbidden = in_forbidden_area(game, lat, lon)
     zone_pressure = update_zone_pressure(game, me, outside_m, forbidden)
+    eliminated = False
     if outside_m > 5:
-        msg = ('Je bent in een verboden gebied. Ga direct weg!' if forbidden
-               else 'Je bent buiten het speelveld. Ga direct terug!')
-        hazard_messages.append(msg)
-        # Not flagged as suspicious: leaving the playfield happens during normal play too.
-        # Flagging is reserved for real anti-cheat signals (see 'high_speed' below).
-        log_activity('playfield_violation', f'{me.codename or current_user.username} buiten speelveld in {game.code}')
+        # One warning when you step outside (the life bar shows the rest), not one on every GPS update.
+        if zone_pressure.get('just_left'):
+            hazard_messages.append('Je bent in een verboden gebied. Ga direct weg!' if forbidden
+                                   else 'Je bent buiten het speelveld. Ga direct terug!')
+            log_activity('playfield_violation', f'{me.codename or current_user.username} buiten speelveld in {game.code}')
         if zone_pressure.get('seconds', 0) >= zone_pressure.get('limit_sec', 30) and not me.is_caught:
             me.is_caught = True
-            hazard_messages.append('Je was te lang in een verboden gebied en bent af.' if forbidden
-                                   else 'Je was te lang buiten het speelveld en bent af.')
+            eliminated = True
             hub.broadcast(code, 'player_zone_out', {
                 'user_id': current_user.id,
                 'codename': me.codename or current_user.username,
                 'role': me.role,
+                'forbidden': bool(forbidden),
             })
+    eliminated = eliminated or bool(me.is_caught)
     # Anti-cheat: flag suspiciously high speed (>25 km/h = ~7 m/s)
     if speed_ms and speed_ms > 7.0:
         log_activity('high_speed', f'{speed_ms_to_kmh(speed_ms):.1f} km/h', flag=True)
@@ -3767,7 +3777,7 @@ def api_location(code):
 
     if me.is_caught and ensure_game_finished_if_needed(game):
         return jsonify(error='Spel afgelopen', status='finished',
-                       hazard_messages=hazard_messages,
+                       hazard_messages=hazard_messages, eliminated=True,
                        zone_pressure=get_zone_pressure(game, current_user.id)), 410
 
     if me.role == 'runner' and not me.is_caught and not me.is_offline and not me.is_paused:
@@ -3790,7 +3800,7 @@ def api_location(code):
         app.logger.exception('mission progress failed')
     return jsonify(success=True, points=round(me.points, 2), distance=round(me.distance, 1),
                    hazard_messages=hazard_messages, nearest_hunter=nearest_hunter, mission=mission,
-                   zone_pressure=get_zone_pressure(game, current_user.id))
+                   eliminated=eliminated, zone_pressure=get_zone_pressure(game, current_user.id))
 
 @app.route('/api/game/<code>/offline', methods=['POST'])
 @login_required
@@ -5651,8 +5661,11 @@ def zone_config(game):
         'headstart_sec': game.headstart_minutes * 60,
         'first_sec': int(ex.get('zone_first_min', 10)) * 60,
         'interval_sec': int(ex.get('zone_interval_min', 8)) * 60,
-        'warning_sec': int(ex.get('zone_warning_sec', 90)),
+        'warning_sec': int(ex.get('zone_interval_min', 8)) * 30,     # announced halfway: time to walk to the new centre
         'factor': 1.0 - int(ex.get('zone_shrink_pct', 30)) / 100.0,
+        'min_radius_m': float(ex.get('zone_min_m', 200)),
+        'duration_sec': (game.duration_minutes or 0) * 60,
+        'final_hold_sec': 300,
     }
 
 def zone_state(game):

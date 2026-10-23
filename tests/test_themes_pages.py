@@ -259,7 +259,7 @@ def test_uploaded_font_overrides_and_is_validated(appmodule, client):
         assert fn and fn.endswith(".woff2")
     html = client.get("/").get_data(as_text=True)
     assert "@font-face{font-family:'VX Head'" in html and f"/static/fonts/{fn}" in html
-    assert "--hfont:'VX Head'" in html
+    assert "--hfont:'VXNum','VX Head'" in html
     # removing it deletes the file and goes back to the Google font
     client.post(f"/admin/sounds/theme/{tid}/save", data={**base, "clear_font_head_upload": "1"}, content_type="multipart/form-data")
     import os
@@ -270,5 +270,5 @@ def test_uploaded_font_overrides_and_is_validated(appmodule, client):
 def test_select_options_are_readable_and_default_font_is_not_syne(appmodule, client):
     html = client.get("/").get_data(as_text=True)
     assert "color-scheme:dark" in html and "select option" in html
-    assert "--hfont:'Space Grotesk'" in html
+    assert "--hfont:'VXNum','Space Grotesk'" in html
     assert "'Syne'" not in html

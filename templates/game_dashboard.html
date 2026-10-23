@@ -160,6 +160,8 @@
 .notif-box{background:rgba(10,10,15,.95);border:1px solid var(--warn);border-radius:10px;padding:11px 14px;font-size:13px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.6);cursor:pointer}
 #endScreen{position:fixed;inset:0;z-index:1200;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(30,41,59,.96);color:#fff}
 #endScreen.show{display:flex}
+#outScreen{position:fixed;inset:0;z-index:1150;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(127,29,29,.94);color:#fff}
+#outScreen.show{display:flex}
 .end-title{font-family:var(--hfont);font-size:32px;font-weight:800;margin-bottom:8px}
 .end-stats{display:grid;grid-template-columns:repeat(3,minmax(82px,1fr));gap:10px;width:min(420px,100%);margin-bottom:16px}
 .end-stat{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:10px}
@@ -336,6 +338,15 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
 </div>
 
 <!-- End screen -->
+<div id="outScreen">
+  <div style="font-size:64px;margin-bottom:8px"><i class="fas fa-skull"></i></div>
+  <div class="end-title">Je bent af</div>
+  <div id="outWhy" style="margin:6px 0 18px;font-size:15px;opacity:.9"></div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+    <button class="btn btn-ghost btn-lg" onclick="document.getElementById('outScreen').classList.remove('show')"><i class="fas fa-eye"></i> Blijf meekijken</button>
+    <a href="/dashboard" class="btn btn-primary btn-lg"><i class="fas fa-right-from-bracket"></i> Verlaat spel</a>
+  </div>
+</div>
 <div id="endScreen">
   <div id="endEmoji" style="font-size:64px;margin-bottom:8px"><i class="fas fa-flag-checkered"></i></div>
   <div class="end-title" id="endTitle">Spel Afgelopen!</div>
@@ -971,6 +982,7 @@ function onGPS(pos) {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({lat, lon, accuracy: acc, speed: speed || null})
   }).then(r => r.json()).then(d => {
+    if (d.eliminated && d.status !== 'finished') showOutScreen(d.zone_pressure && d.zone_pressure.pct >= 100 ? (d.zone_pressure.forbidden ? 'Je stond te lang in een verboden gebied.' : 'Je was te lang buiten het speelveld.') : 'Je bent gepakt.');
     if (d.status === 'finished') { showEndScreen(d); return; }
     if (d.points !== undefined) {
       document.getElementById('ip-pts').textContent  = fmtPts(d.points||0);
@@ -993,19 +1005,32 @@ function updateZoneBar(z) {
   const bar = document.getElementById('zoneBar');
   if (!bar) return;
   const pct = z ? Math.max(0, Math.min(100, Number(z.pct || 0))) : 0;
-  if (pct <= 0) {
-    bar.style.display = 'none';
-    return;
-  }
+  if (pct <= 0 && !(z && z.outside)) { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
   const lifePct = Math.max(0, 100 - pct);
   document.getElementById('zoneBarFill').style.width = lifePct + '%';
   document.getElementById('zoneBarPct').textContent = Math.round(lifePct) + '%';
   const remaining = Math.max(0, Math.ceil((z.limit_sec || 30) - (z.seconds || 0)));
-  document.querySelector('#zoneBar .zb-title span').textContent = z.forbidden ? 'Verboden gebied' : 'Buiten speelveld';
-  document.getElementById('zoneBarText').textContent = z.forbidden
-    ? `Je staat in een verboden gebied. Ga direct weg! Nog ${remaining}s tot af.`
-    : `Je bent ${Math.round(z.outside_m || 0)}m buiten de grens. Nog ${remaining}s tot af.`;
+  const title = document.querySelector('#zoneBar .zb-title span');
+  if (z.outside) {
+    title.textContent = z.forbidden ? 'Verboden gebied' : 'Buiten speelveld';
+    document.getElementById('zoneBarText').textContent = z.forbidden
+      ? `Ga direct weg! Nog ${remaining}s tot je af bent.`
+      : `${Math.round(z.outside_m || 0)}m buiten de grens. Nog ${remaining}s tot je af bent.`;
+  } else {
+    title.textContent = 'Leven herstelt';
+    document.getElementById('zoneBarText').textContent = 'Je bent terug in het speelveld. Je leven loopt langzaam weer vol.';
+  }
+}
+let outShown = false;
+function lastOutWhy() { return 'Je bent af.'; }
+function showOutScreen(why) {
+  if (outShown) return;
+  outShown = true;
+  VXSound.play('caught');
+  const el = document.getElementById('outScreen');
+  document.getElementById('outWhy').textContent = why || '';
+  el.classList.add('show');
 }
 
 // â”€â”€ State polling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1022,6 +1047,7 @@ function pollState() {
         return;
       }
       if (d.status === 'active') hideCountdownOverlay();
+      if (d.is_caught && d.status === 'active') showOutScreen(lastOutWhy());
       if (!introHandled && d.status === 'active') maybePlayIntro(d.elapsed);
       if (!d.headstart_over) sawHeadstart = true;
       else if (sawHeadstart && !headstartOver) playGoOnce();
@@ -2016,6 +2042,7 @@ function connectWS() {
       case 'runner_caught':
         VXSound.play('caught');
         showToast(`${d.runner_codename} is gepakt door ${d.caught_by_codename}!`, d.runner_id===MY_ID?'error':'success', 7000);
+        if (d.runner_id === MY_ID) showOutScreen('Je bent gepakt door ' + d.caught_by_codename + '.');
         showNotif(`${d.runner_codename} gevangen genomen door ${d.caught_by_codename}!`, 7000);
         break;
       case 'runner_offline':
@@ -2155,7 +2182,8 @@ function connectWS() {
       case 'bot_notice':
         showToast(d.message, 'warn', 9000); break;
       case 'player_zone_out':
-        VXSound.play('caught');
+        if (d.user_id === MY_ID) showOutScreen(d.forbidden ? 'Je stond te lang in een verboden gebied.' : 'Je was te lang buiten het speelveld.');
+        else VXSound.play('caught');
         showToast(`${d.codename || 'Speler'} was te lang buiten het speelveld en is af.`, 'warn', 8000);
         showNotif(`${d.codename || 'Speler'} is af buiten het speelveld.`, 7000);
         break;
