@@ -190,6 +190,14 @@
 #dangerPulse.close{background:radial-gradient(ellipse at center,transparent 30%,rgba(220,38,38,.6) 100%);animation-duration:.7s}
 #dangerPulse.zone{background:radial-gradient(ellipse at center,transparent 35%,rgba(162,28,175,.55) 100%);animation-duration:1.2s}
 @keyframes dpulse{0%,100%{opacity:0}50%{opacity:1}}
+#zoneBanner{position:absolute;left:50%;top:54px;transform:translateX(-50%);z-index:430;background:rgba(0,0,0,.82);color:#fff;border:1px solid #fff;border-radius:999px;padding:9px 16px;font-size:12.5px;font-weight:600;display:none;max-width:94vw;text-align:center;backdrop-filter:blur(8px)}
+#zoneBanner.show{display:block;animation:fadeUp .3s ease}
+.zone-center{width:30px;height:30px;border-radius:50%;background:#fff;color:#111;display:grid;place-items:center;font-size:15px;box-shadow:0 0 0 6px rgba(255,255,255,.3);animation:pulse 1.6s infinite}
+path.zone-edge{animation:march 1.2s linear infinite;filter:drop-shadow(0 0 6px currentColor)}
+path.zone-next{animation:march 2.4s linear infinite reverse}
+path.zone-cloud{animation:cloud 7s ease-in-out infinite}
+@keyframes march{to{stroke-dashoffset:-32}}
+@keyframes cloud{0%,100%{fill-opacity:.80}50%{fill-opacity:.92}}
 #soundHint{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:420;background:rgba(0,0,0,.78);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:8px 16px;font-size:12px;font-weight:600;display:none;white-space:nowrap;cursor:pointer;backdrop-filter:blur(8px)}
 #soundHint.show{display:block;animation:fadeUp .3s ease}
 html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:0;z-index:340;pointer-events:none;box-shadow:inset 0 0 120px 30px rgba(0,0,0,.55)}
@@ -239,6 +247,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     {% endif %}
 
     <div id="dangerPulse"></div>
+    <div id="zoneBanner"></div>
     <div id="soundHint" onclick="VXSound.unlock()"><i class="fas fa-volume-high"></i> Tik ergens om het geluid aan te zetten</div>
 
     <!-- Notification popup -->
@@ -499,7 +508,7 @@ const CODE    = '{{ game.code }}';
 const MY_ID   = {{ current_user.id }};
 const MY_ROLE = '{{ me.role }}';
 const IS_MAKER= {{ 'true' if me.user_id == game.creator_id else 'false' }};
-const PLAYFIELD = {% if playfield %}{{ playfield|tojson }}{% else %}null{% endif %};
+let PLAYFIELD = {% if playfield %}{{ playfield|tojson }}{% else %}null{% endif %};
 const MY_CLASS = {% if my_class %}{{ my_class|tojson }}{% else %}null{% endif %};
 const SOUND_THEME = {{ sound_theme|tojson }};
 const GAME_STATUS = '{{ game.status }}';
@@ -705,28 +714,72 @@ function scaleForbiddenLines(){           // draw a "12 m wide" corridor about 1
   const px=Math.abs(p2.x-p1.x)/(0.0001*111320*Math.cos(c.lat*Math.PI/180));
   forbiddenLines.forEach(f=>f.layer.setStyle({weight:Math.max(4,f.width*px)}));
 }
+let pfDrawn=[], pfFirstDraw=true, zonePending=null, zonePreview=[];
+function clearPf(list){ list.forEach(l=>{ try{ map.removeLayer(l); }catch(e){} }); list.length=0; }
 function drawPlayfieldOnMap(){
   if(!PLAYFIELD || !PLAYFIELD.points || PLAYFIELD.points.length < 3 || typeof L === 'undefined') return;
+  clearPf(pfDrawn); forbiddenLines.length=0;
+  const add=l=>{ l.addTo(map); pfDrawn.push(l); return l; };
   const pts=PLAYFIELD.points.map(p=>[p.lat,p.lng]);
   const st=playfieldStyle(PLAYFIELD.color);
-  const inner=L.polygon(pts,{color:st.stroke,fillColor:st.fill,fillOpacity:.12,weight:3,dashArray:'8 5'}).addTo(map);
+  const inner=add(L.polygon(pts,{color:st.stroke,fillColor:st.fill,fillOpacity:.10,weight:4,dashArray:'10 6',className:'zone-edge'}));
   const world=[[[-90,-360],[-90,360],[90,360],[90,-360]]];
-  L.polygon(world.concat([pts]),{stroke:false,fillColor:st.fill,fillOpacity:.88,interactive:false}).addTo(map);
+  add(L.polygon(world.concat([pts]),{stroke:false,fillColor:st.fill,fillOpacity:.86,interactive:false,className:'zone-cloud'}));
   // Forbidden areas inside the field: red, hatched, never to be entered
   (PLAYFIELD.forbidden||[]).forEach(f=>{
     const red={color:'#ef4444',fillColor:'#ef4444',fillOpacity:.38,weight:2,dashArray:'5 4',interactive:false};
-    if(f.type==='circle') L.circle([f.lat,f.lng],Object.assign({radius:f.radius},red)).addTo(map);
+    if(f.type==='circle') add(L.circle([f.lat,f.lng],Object.assign({radius:f.radius},red)));
     else if(f.type==='line'){
       const lp=f.points.map(p=>[p.lat,p.lng]);
-      forbiddenLines.push({pts:lp,width:f.width,layer:L.polyline(lp,{color:'#ef4444',opacity:.4,weight:4,lineCap:'butt',interactive:false}).addTo(map)});
-      L.polyline(lp,{color:'#ef4444',weight:2,dashArray:'5 4',interactive:false}).addTo(map);
+      forbiddenLines.push({pts:lp,width:f.width,layer:add(L.polyline(lp,{color:'#ef4444',opacity:.4,weight:4,lineCap:'butt',interactive:false}))});
+      add(L.polyline(lp,{color:'#ef4444',weight:2,dashArray:'5 4',interactive:false}));
     }
   });
-  scaleForbiddenLines(); map.on('zoomend',scaleForbiddenLines);
-  const bounds=inner.getBounds();
-  const padded=bounds.pad(.20);
-  map.setMaxBounds(padded);
-  map.on('drag',()=>map.panInsideBounds(padded,{animate:false}));
+  scaleForbiddenLines();
+  if(pfFirstDraw){                          // limits and handlers: once, from the ORIGINAL (largest) field
+    pfFirstDraw=false;
+    map.on('zoomend',scaleForbiddenLines);
+    const padded=inner.getBounds().pad(.20);
+    map.setMaxBounds(padded);
+    map.on('drag',()=>map.panInsideBounds(padded,{animate:false}));
+  }
+}
+// ---- Shrinking zone: announcement (preview + countdown) and the shrink itself ----
+function bearingText(lat1,lon1,lat2,lon2){
+  const y=Math.sin((lon2-lon1)*Math.PI/180)*Math.cos(lat2*Math.PI/180);
+  const x=Math.cos(lat1*Math.PI/180)*Math.sin(lat2*Math.PI/180)-Math.sin(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.cos((lon2-lon1)*Math.PI/180);
+  const b=(Math.atan2(y,x)*180/Math.PI+360)%360;
+  return ['noorden','noordoosten','oosten','zuidoosten','zuiden','zuidwesten','westen','noordwesten'][Math.round(b/45)%8];
+}
+function distM(lat1,lon1,lat2,lon2){
+  const R=6371000,p1=lat1*Math.PI/180,p2=lat2*Math.PI/180,dp=p2-p1,dl=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2; return 2*R*Math.asin(Math.sqrt(a));
+}
+function showZonePreview(info, inSec){
+  zonePending={points:info.points,center:info.center,at:Date.now()+inSec*1000,phase:info.phase};
+  if(typeof L==='undefined'||!map) return;
+  clearPf(zonePreview);
+  zonePreview.push(L.polygon(info.points.map(p=>[p.lat,p.lng]),{color:'#ffffff',weight:3,fillOpacity:0,dashArray:'3 8',interactive:false,className:'zone-next'}).addTo(map));
+  zonePreview.push(L.marker([info.center.lat,info.center.lng],{interactive:false,icon:L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],
+    html:'<div class="zone-center"><i class="fas fa-bullseye"></i></div>'})}).addTo(map));
+}
+function updateZoneBanner(){
+  const el=document.getElementById('zoneBanner'); if(!el) return;
+  if(!zonePending){ el.classList.remove('show'); return; }
+  const left=Math.max(0,Math.ceil((zonePending.at-Date.now())/1000));
+  let where='';
+  if(lastLat!==null){
+    const d=distM(lastLat,lastLon,zonePending.center.lat,zonePending.center.lng);
+    where=` · nieuw centrum ${fmtDist(d)} naar het ${bearingText(lastLat,lastLon,zonePending.center.lat,zonePending.center.lng)}`;
+  }
+  el.innerHTML=`<i class="fas fa-triangle-exclamation"></i> Zone krimpt over <b>${fmtMM(left)}</b>${where}`;
+  el.classList.add('show');
+  if(left<=0 && Date.now()-zonePending.at>8000){ zonePending=null; clearPf(zonePreview); el.classList.remove('show'); }
+}
+setInterval(updateZoneBanner,1000);
+function applyZone(points, inSec, info){
+  PLAYFIELD=Object.assign({},PLAYFIELD,{points});
+  drawPlayfieldOnMap();
 }
 
 function mkIcon(col, label, pulse) {
@@ -872,6 +925,10 @@ function pollState() {
       if (!introHandled && d.status === 'active') maybePlayIntro(d.elapsed);
       if (!d.headstart_over) sawHeadstart = true;
       else if (sawHeadstart && !headstartOver) playGoOnce();
+      if (d.zone) {
+        if (d.zone_points && PLAYFIELD && JSON.stringify(d.zone_points) !== JSON.stringify(PLAYFIELD.points)) applyZone(d.zone_points);
+        if (d.zone.pending && !zonePending) showZonePreview(d.zone.pending, Math.max(0, d.zone.next_in || 0));
+      }
       lastState = d;
       lastStatePlayers = d.players || [];
       syncDeadlinesFromState(d);
@@ -1971,6 +2028,20 @@ function connectWS() {
       case 'game_ended':
         showEndScreen(d);
         break;
+      case 'zone_warning':
+        showZonePreview(d, d.in_sec); updateZoneBanner();
+        VXSound.play('zone_shrink');
+        showToast(`De zone wordt over ${fmtMM(d.in_sec)} kleiner. Loop naar het nieuwe centrum!`, 'warn', 9000);
+        showNotif('<i class="fas fa-bullseye"></i> De zone wordt kleiner! Kijk op de kaart voor het nieuwe centrum.', 9000);
+        break;
+      case 'zone_shrunk':
+        zonePending=null; clearPf(zonePreview); updateZoneBanner();
+        applyZone(d.points);
+        VXSound.play('zone_shrink');
+        showToast('De zone is kleiner geworden! Blijf binnen de lijn.', 'error', 8000);
+        break;
+      case 'zone_final':
+        showToast('Dit is de laatste zone. Hij wordt niet kleiner.', 'info', 7000); break;
       case 'bot_notice':
         showToast(d.message, 'warn', 9000); break;
       case 'player_zone_out':

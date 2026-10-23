@@ -451,6 +451,26 @@ details.more summary::-webkit-details-marker{display:none}
       </div>
 
       <div class="panel">
+        <div class="panel-h"><div class="panel-ic" style="--c:#ef4444"><i class="fas fa-circle-dot"></i></div><div class="panel-t">Krimpende zone {{ ibtn('Krimpende zone', 'Net als bij Fortnite wordt het speelveld steeds kleiner. Iedereen krijgt vooraf een melding met een aftelling en het nieuwe centrum (ook op de kaart). Wie buiten de nieuwe zone staat loopt af. Dit werkt het mooist met een getekend speelveld; zonder speelveld maakt VenTrax een cirkel van 600 m rond de spelers.') }}</div></div>
+        <p class="panel-sub">Het speelveld wordt tijdens het spel kleiner. Je kunt dit aan- en uitzetten.</p>
+        {% if img('img_style_zone') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_zone') }}')"></div></div>{% endif %}
+        <div class="set" style="border-top:none;padding-top:0">
+          <div class="set-ic" style="color:#ef4444"><i class="fas fa-circle-dot"></i></div>
+          <div class="set-tx"><div class="set-t">Zone laten krimpen</div><div class="set-s">Iedereen krijgt een melding en het nieuwe centrum</div></div>
+          <label class="switch"><input type="checkbox" name="shrinking_zone" id="shrinkOn" onchange="tog('shrinkOpts',this)"><span class="slider"></span></label>
+        </div>
+        <div id="shrinkOpts" style="display:none;margin-top:6px">
+          <div class="two">
+            <div class="fld"><label>Eerste krimp na de voorsprong</label><select name="zone_first_min" class="form-control"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></div>
+            <div class="fld"><label>Daarna elke</label><select name="zone_interval_min" class="form-control"><option value="5">5 min</option><option value="8" selected>8 min</option><option value="10">10 min</option><option value="15">15 min</option></select></div>
+            <div class="fld"><label>Elke keer kleiner met</label><select name="zone_shrink_pct" class="form-control"><option value="20">20%</option><option value="30" selected>30%</option><option value="40">40%</option><option value="50">50%</option></select></div>
+            <div class="fld"><label>Melding vooraf</label><select name="zone_warning_sec" class="form-control"><option value="60">1 min</option><option value="90" selected>1,5 min</option><option value="120">2 min</option><option value="180">3 min</option></select></div>
+          </div>
+          <div class="pts-note">Het veld stopt met krimpen als het ongeveer 70 m groot is.</div>
+        </div>
+      </div>
+
+      <div class="panel">
         <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-volume-high"></i></div><div class="panel-t">Geluid &amp; sfeer {{ ibtn('Geluid & sfeer', 'Een thema bepaalt de geluidjes (start, hunter in de buurt, lootbox, ...) en het uiterlijk van het spel, bijvoorbeeld een enge Halloween-sfeer. De beheerder maakt en wijzigt thema\'s in het Admin Panel.') }}</div></div>
         <p class="panel-sub">Kies het thema voor geluid en uiterlijk.</p>
         <div class="picks three">
@@ -773,6 +793,9 @@ function applyGameTemplate(idx){
   setFormValue('dropboxes_global', e.dropboxes_global);
   setFormValue('dropbox_min_m', e.dropbox_min_m);
   setFormValue('dropbox_max_m', e.dropbox_max_m);
+  setFormValue('shrinking_zone', e.shrinking_zone); setFormValue('zone_first_min', e.zone_first_min); setFormValue('zone_interval_min', e.zone_interval_min);
+  setFormValue('zone_shrink_pct', e.zone_shrink_pct); setFormValue('zone_warning_sec', e.zone_warning_sec);
+  tog('shrinkOpts', document.getElementById('shrinkOn'));
   if(e.game_style) selectGameStyle(e.game_style);
   if(t.playfield && t.playfield.points) loadPlayfieldData(t.playfield);
   ['targetOpts','offlineOpts','pauseOpts','dropboxOpts'].forEach(id=>{
@@ -1022,6 +1045,7 @@ function buildSummary(){
       <div class="sum-sec">Extra's</div>
       <div class="chips">${extras.map(([n,l])=>chip(l,'',nm(n))).join('')}</div>
       <div class="sum-sec">Speelveld en sfeer</div>
+      <div class="chips" style="margin-bottom:10px">${chip('Krimpende zone','',nm('shrinking_zone'))}</div>
       <div class="sum-grid">
         ${box('Speelveld',pfPoints.length>=3?pfPoints.length+' punten'+(pfForb.length?' · '+pfForb.length+' verboden':''):'Niet ingesteld')}
         ${box('Geluid & sfeer',e(theme))}
