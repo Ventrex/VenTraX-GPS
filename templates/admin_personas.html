@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Personages – {{ site_name }}{% endblock %}
+{% block extra_head %}
+<style>
+.pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.pcard{border:1px solid var(--border);border-radius:18px;background:var(--bg2);padding:14px;display:flex;flex-direction:column;gap:10px}
+.pph{width:84px;height:84px;border-radius:18px;background:var(--bg3);display:grid;place-items:center;font-size:30px;color:var(--text2);overflow:hidden}
+.pph img{width:100%;height:100%;object-fit:cover}
+.pcard .row{display:flex;gap:12px;align-items:center}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container">
+  {% include '_admin_nav.html' %}
+  <h1 style="font-family:var(--hfont);font-size:30px;font-weight:800;margin-bottom:6px"><i class="fas fa-masks-theater" style="color:var(--accent)"></i> Personages</h1>
+  <p style="color:var(--text2);margin-bottom:18px;max-width:760px;line-height:1.6">
+    Personages zijn figuren die spelers in de lobby kiezen, per thema en per rol (bijv. Ghostface als Hunter, Sidney als Runner).
+    Ze zijn voor het uiterlijk: je ziet ze in de lobby en als plaatje op de kaart. Ze veranderen niets aan de punten.
+    Upload zelf een plaatje (vierkant werkt het best); zonder plaatje zie je het icoon.
+  </p>
+  <div class="card" style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <b style="font-size:14px">Thema:</b>
+    <select class="form-control" style="max-width:280px" onchange="location='{{ url_for('admin_personas') }}?theme='+this.value">
+      {% for t in themes %}<option value="{{ t.id }}" {{ 'selected' if selected and selected.id == t.id else '' }}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </div>
+  {% if selected %}
+  <div class="pg">
+    {% for r in personas %}
+    <form class="pcard" method="POST" action="{{ url_for('admin_persona_save') }}" enctype="multipart/form-data">
+      <input type="hidden" name="id" value="{{ r.id }}"><input type="hidden" name="theme_id" value="{{ selected.id }}">
+      <div class="row">
+        <div class="pph">{% if r.image %}<img src="{{ r.image }}" alt="">{% else %}<i class="fas {{ r.icon }}"></i>{% endif %}</div>
+        <div style="flex:1;min-width:0">
+          <input class="form-control" name="name" value="{{ r.name }}" placeholder="Naam" required style="margin-bottom:6px">
+          <select class="form-control" name="role"><option value="hunter" {{ 'selected' if r.role=='hunter' else '' }}>Hunter</option><option value="runner" {{ 'selected' if r.role=='runner' else '' }}>Runner</option></select>
+        </div>
+      </div>
+      <input class="form-control" name="blurb" value="{{ r.blurb }}" placeholder="Korte omschrijving">
+      <input class="form-control" name="icon" value="{{ r.icon }}" placeholder="Icoon (bijv. fa-skull)">
+      <input type="file" name="image" accept="image/*" class="form-control">
+      {% if r.image %}<label style="font-size:12px;color:var(--text2)"><input type="checkbox" name="clear_image"> plaatje verwijderen</label>{% endif %}
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" style="flex:1"><i class="fas fa-floppy-disk"></i> Opslaan</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" formaction="{{ url_for('admin_persona_delete', pid=r.id) }}" formnovalidate onclick="return confirm('Personage verwijderen?')"><i class="fas fa-trash"></i></button>
+      </div>
+    </form>
+    {% endfor %}
+    <form class="pcard" method="POST" action="{{ url_for('admin_persona_save') }}" enctype="multipart/form-data" style="border-style:dashed">
+      <input type="hidden" name="theme_id" value="{{ selected.id }}">
+      <b><i class="fas fa-plus"></i> Nieuw personage</b>
+      <input class="form-control" name="name" placeholder="Naam" required>
+      <select class="form-control" name="role"><option value="hunter">Hunter</option><option value="runner">Runner</option></select>
+      <input class="form-control" name="blurb" placeholder="Korte omschrijving">
+      <input class="form-control" name="icon" placeholder="Icoon (bijv. fa-ghost)">
+      <input type="file" name="image" accept="image/*" class="form-control">
+      <button class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Toevoegen</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
