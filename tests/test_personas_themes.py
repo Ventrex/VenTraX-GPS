@@ -108,10 +108,12 @@ def test_classes_are_chosen_per_side_and_each_side_keeps_at_least_one(appmodule,
         form = MultiDict([("classes_enabled", "on"), ("classes_hunter", "codekraker"), ("classes_hunter", "glitcher")])   # runner side left empty
         ex = appmodule.save_game_extras(g, form)
         assert ex["classes_hunter"] == ["codekraker", "glitcher"]
-        assert len(ex["classes_runner"]) == len(appmodule.CLASS_LOADOUTS)            # empty side falls back to all
+        # empty side falls back to every class of that side (Lokvogel is runner-only, Trackerschutter hunter-only)
+        assert ex["classes_runner"] == [c["id"] for c in appmodule.class_loadouts_for("runner")]
+        assert "lokvogel" in ex["classes_runner"] and "trackerschutter" not in ex["classes_runner"]
         assigned = appmodule.assign_game_classes(g)
         assert assigned[str(uid)]["id"] in ("codekraker", "glitcher")
-        assert assigned[str(other)]["id"] in {c["id"] for c in appmodule.CLASS_LOADOUTS}
+        assert assigned[str(other)]["id"] in {c["id"] for c in appmodule.class_loadouts_for("runner")}
 
 
 def test_picture_slots_for_field_modes_colours_and_theme_cards(appmodule, client):
