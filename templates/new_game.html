@@ -310,6 +310,20 @@ details.more summary::-webkit-details-marker{display:none}
           <div class="custom-input-row" id="hunterIvCustom"><input name="hunter_interval_custom" type="number" class="form-control" placeholder="Seconden (bijv. 1800 = 30 min)" min="60" max="7200" oninput="calcMulti()"></div>
         </div>
 
+        <div class="fld">
+          <label>Manier van vangen {{ ibtn('Manier van vangen', 'Tikken: de hunter moet binnen 2 meter komen. Lasso: de hunter gooit naar de dichtste runner binnen 20 meter. Dichtbij is altijd raak, verder weg is het een gok; daarna moet de lasso 1 minuut laden. Freezegun: de hunter bevriest de dichtste runner binnen 25 meter. Die moet 20 seconden blijven staan (wegrennen = gepakt) en de hunter moet binnen 8 meter komen om te pakken. Lasso en freezegun voorkomen dat kinderen in paniek wegrennen zonder op te letten.') }}</label>
+          <div class="picks three" id="catchPicks">
+            {% for val, title, desc, ico in [('tag','Tikken','Binnen 2 m komen','fa-hand'),('lasso','Lasso','Gooien binnen 20 m','fa-circle-notch'),('freeze','Freezegun','Bevriezen binnen 25 m','fa-snowflake')] %}
+            <label class="pick small {{ 'sel' if val == 'tag' }}" style="--c:var(--hunter)" onclick="setTimeout(()=>markPicks('catch_mode'))">
+              <input type="radio" name="catch_mode" value="{{ val }}" style="display:none" {{ 'checked' if val == 'tag' }}>
+              {% if img('img_catch_' ~ val) %}<div class="bg" style="background-image:url('{{ img('img_catch_' ~ val) }}')"></div>{% else %}<div class="ph"><i class="fas {{ ico }}"></i></div>{% endif %}
+              <div class="pick-ck"><i class="fas fa-check"></i></div>
+              <div class="pick-body"><div class="pick-t">{{ title }}</div><div class="pick-d">{{ desc }}</div></div>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
         <div class="set">
           <div class="set-ic" style="color:var(--warn)"><i class="fas fa-bullseye"></i></div>
           <div class="set-tx">
@@ -445,6 +459,14 @@ details.more summary::-webkit-details-marker{display:none}
           {{ tile('feat_hacker', 'img_extra_hacker', 'Hacker', 'fa-user-secret') }}
           {{ tile('feat_glitch', 'img_extra_glitch', 'Glitch', 'fa-bolt') }}
           {{ tile('extra_echo', 'img_extra_echo', 'Echo', 'fa-wave-square') }}
+          {{ tile('extra_shelter', 'img_extra_shelter', 'Schuilkelders', 'fa-house-chimney', 'onchange="tog(\'shelterOpts\',this)"') }}
+        </div>
+        <div id="shelterOpts" style="display:none;margin-top:18px">
+          <div class="grp-h"><i class="fas fa-house-chimney" style="color:var(--runner)"></i> Schuilkelders {{ ibtn('Schuilkelders', 'Iedereen ziet de schuilkelders op de kaart. Staat een runner in een schuilkelder op het moment dat de hunters zijn locatie krijgen, en is hij er minder dan 90 seconden in, dan komt die locatie pas 90 seconden na binnenkomst. De tijd van de volgende locatie loopt gewoon door. Twee keer achter elkaar uitstellen kan niet. Werkt niet bij live volgen.') }}</div>
+          <div class="two" style="margin-top:12px">
+            <div class="fld"><label>Aantal op de kaart</label><select name="shelters" class="form-control"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option></select></div>
+          </div>
+          <div class="pts-note">Een runner in de kelder krijgt zijn locatie 90 seconden later door aan de hunters. Hunters weten waar de kelders zijn, dus het kan ook een val zijn!</div>
         </div>
         <div id="dropboxOpts" style="display:none;margin-top:18px">
           <div class="grp-h"><i class="fas fa-box-open" style="color:var(--accent)"></i> Dropbox-instellingen</div>
@@ -464,19 +486,19 @@ details.more summary::-webkit-details-marker{display:none}
     <!-- ===================== 4. STIJL & SFEER ===================== -->
     <div class="step" id="step5">
       <div class="panel" id="missionsPanel" data-feat="missions">
-        <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-flag"></i></div><div class="panel-t">Missies voor runners {{ ibtn('Missies', 'Zodat runners niet de hele tijd op dezelfde plek blijven zitten: er verschijnt een missiepunt op de kaart. Wie als runner de cirkel bereikt en daar de ingestelde tijd blijft, krijgt bonuspunten. Daarna verschijnt de volgende missie ergens anders. Een verlopen missie verhuist ook. Lootboxen blijven zoals ze zijn.') }}</div></div>
-        <p class="panel-sub">Een missiepunt trekt de runners over de kaart. Bonuspunten voor wie hem haalt.</p>
+        <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-flag"></i></div><div class="panel-t">Missies voor runners {{ ibtn('Missies', 'Zodat runners niet de hele tijd op dezelfde plek blijven zitten: er verschijnt een missiepunt op de kaart. Een runner die er komt, kiest een makkelijke, middel of moeilijke missie (of Laat maar). Halen geeft bonuspunten: middel x2, moeilijk x3. Mislukken kost niets, behalve bij de Spion-missie: die geeft je de plek van een hunter, dus mislukken of stoppen kost daar punten. Daarna verschijnt het volgende missiepunt ergens anders.') }}</div></div>
+        <p class="panel-sub">Bij een missiepunt kiest de runner zelf: makkelijk, middel of moeilijk. Of Laat maar.</p>
         {% if img('img_style_missions') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_missions') }}')"></div></div>{% endif %}
         <div class="set" style="border-top:none;padding-top:0">
           <div class="set-ic" style="color:#a78bfa"><i class="fas fa-flag"></i></div>
-          <div class="set-tx"><div class="set-t">Missies aan</div><div class="set-s">Runners halen bonuspunten bij een missiepunt</div></div>
+          <div class="set-tx"><div class="set-t">Missies aan</div><div class="set-s">Runners kiezen een missie bij een missiepunt</div></div>
           <label class="switch"><input type="checkbox" name="missions" id="missionsOn" onchange="tog('missionOpts',this)"><span class="slider"></span></label>
         </div>
         <div id="missionOpts" style="display:none;margin-top:6px">
           <div class="two">
-            <div class="fld"><label>Blijven in de cirkel</label><select name="mission_hold_sec" class="form-control"><option value="30">30 seconden</option><option value="45" selected>45 seconden</option><option value="60">1 minuut</option><option value="90">1,5 minuut</option></select></div>
-            <div class="fld"><label>Missie blijft staan</label><select name="mission_duration_min" class="form-control"><option value="8">8 min</option><option value="12" selected>12 min</option><option value="15">15 min</option><option value="20">20 min</option></select></div>
-            <div class="fld"><label>Bonuspunten</label><select name="mission_points" class="form-control"><option value="3">3</option><option value="5" selected>5</option><option value="8">8</option><option value="10">10</option></select></div>
+            <div class="fld"><label>Makkelijk: blijven bij het punt</label><select name="mission_hold_sec" class="form-control"><option value="30">30 seconden</option><option value="45" selected>45 seconden</option><option value="60">1 minuut</option><option value="90">1,5 minuut</option></select></div>
+            <div class="fld"><label>Missiepunt blijft staan</label><select name="mission_duration_min" class="form-control"><option value="8">8 min</option><option value="12" selected>12 min</option><option value="15">15 min</option><option value="20">20 min</option></select></div>
+            <div class="fld"><label>Punten makkelijk (middel x2, moeilijk x3)</label><select name="mission_points" class="form-control"><option value="3">3</option><option value="5" selected>5</option><option value="8">8</option><option value="10">10</option></select></div>
             <div class="fld"><label>Hunters zien de missie</label><select name="mission_hunters_see" class="form-control"><option value="on" selected>Ja (spannender)</option><option value="off">Nee</option></select></div>
           </div>
           <div class="pts-note">De bonus wordt ook eerlijk vermenigvuldigd met de runner-punten van dit spel. Pas na de voorsprong verschijnt de eerste missie.</div>
@@ -531,7 +553,7 @@ details.more summary::-webkit-details-marker{display:none}
           {% for side, label, ico in [('hunter','Classes voor Hunters','fa-crosshairs'),('runner','Classes voor Runners','fa-person-running')] %}
           <div class="grp-h"><i class="fas {{ ico }}" style="color:var(--{{ side }})"></i> {{ label }} <small id="clsCnt-{{ side }}" style="color:var(--text2);font-weight:500"></small></div>
           <div class="tiles cls-tiles" style="margin-bottom:14px">
-            {% for c in class_loadouts %}
+            {% for c in class_loadouts if side in (c.sides or ['hunter','runner']) %}
             <label class="tile cls-tile"><input type="checkbox" name="classes_{{ side }}" value="{{ c.id }}" checked onchange="clsCount()">
               <div class="tile-img" {% if img('img_class_' ~ c.id) %}style="background-image:url('{{ img('img_class_' ~ c.id) }}')"{% endif %}>{% if not img('img_class_' ~ c.id) %}<i class="fas fa-id-badge"></i>{% endif %}</div>
               <div class="tile-t">{{ c.name }}<small style="display:block;font-weight:500;color:var(--text2);font-size:11px;margin-top:3px;line-height:1.35">{{ c.desc }}</small></div></label>
@@ -722,11 +744,11 @@ const STYLE_INFO={
   classic:{name:'Classic',loot:false,zone:false,missions:false,extras:[],text:'Jachtseizoen: alleen hunters tegen runners. Er komen geen lootboxen, krimpende zone, missies of extra\'s in het spel.'},
   adventure:{name:'Adventure',loot:true,zone:false,missions:false,extras:['extra_echo'],text:'Met lootboxen en Echo. Je stelt het in bij “Lootboxen & extra\'s”.'},
   battlefield:{name:'Battlefield',loot:false,zone:true,missions:false,extras:['extra_landmine','extra_laser','extra_tripwire'],text:'Met krimpende zone en vallen (landmijn, laser, tripwire). De zone werkt het best met een getekend speelveld.'},
-  stealth:{name:'Shadow Ops',loot:true,zone:true,missions:true,extras:['extra_tripwire','feat_hacker','feat_glitch','extra_echo'],text:'Krimpende zone, missies voor runners, lootboxen en sluipextra\'s: tripwire, hacker, glitch en echo.'},
+  stealth:{name:'Shadow Ops',loot:true,zone:true,missions:true,extras:['extra_tripwire','feat_hacker','feat_glitch','extra_echo','extra_shelter'],text:'Krimpende zone, missies voor runners, lootboxen en sluipextra\'s: tripwire, hacker, glitch, echo en schuilkelders.'},
   custom:{name:'Custom',custom:true,loot:true,zone:true,missions:true,extras:[],text:'Je stelt alles zelf in: je ziet in de volgende stappen alle opties.'},
   survival:{name:'Survival',loot:true,zone:true,missions:false,extras:['extra_landmine','extra_laser'],text:'Krimpende zone, lootboxen en vallen (landmijn, laser).'}
 };
-const ALL_EXTRAS=['extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo'];
+const ALL_EXTRAS=['extra_landmine','extra_laser','extra_tripwire','feat_hacker','feat_glitch','extra_echo','extra_shelter'];
 function selectGameStyle(style, opts){
   opts=opts||{};
   if(!STYLE_INFO[style]) style='classic';
@@ -744,6 +766,7 @@ function selectGameStyle(style, opts){
     const ms=document.getElementById('missionsOn'); if(ms){ ms.checked=st.missions; tog('missionOpts',ms); }
     const sh=document.getElementById('shrinkOn'); if(sh){ sh.checked=st.zone; tog('shrinkOpts',sh); }
     const drop=document.querySelector('[name=extra_dropboxes]'); if(drop) tog('dropboxOpts', drop);
+    const shl=document.querySelector('[name=extra_shelter]'); if(shl) tog('shelterOpts', shl);
     if(typeof renderShrinkPlan==='function') renderShrinkPlan();
   }
   applyStyleVisibility();
@@ -883,6 +906,9 @@ function applyGameTemplate(idx){
   setFormValue('feat_hacker', e.hacker);
   setFormValue('feat_glitch', e.glitch);
   setFormValue('extra_echo', e.echo);
+  setFormValue('extra_shelter', (e.shelters||0)>0); if(e.shelters) setFormValue('shelters', e.shelters);
+  tog('shelterOpts', document.querySelector('[name=extra_shelter]'));
+  if(e.catch_mode) setFormValue('catch_mode', e.catch_mode);
   setFormValue('classes_enabled', e.classes_enabled);
   ['hunter','runner'].forEach(side=>{
     const list=e['classes_'+side]; if(!Array.isArray(list)) return;
@@ -1171,7 +1197,7 @@ function buildSummary(){
   const theme=document.querySelector('[name=sound_theme]:checked')?.closest('.pick')?.querySelector('.pick-t')?.textContent||'-';
   const nCls=s=>document.querySelectorAll('[name=classes_'+s+']:checked').length;
   const chip=(label,icon,isOn)=>`<span class="chip ${isOn?'on':''}"><i class="fas ${isOn?'fa-check':'fa-xmark'}"></i> ${label}</span>`;
-  const extras=[['extra_dropboxes','Dropboxes'],['extra_landmine','Landmijn'],['extra_laser','Laser'],['extra_tripwire','Tripwire'],['feat_hacker','Hacker'],['feat_glitch','Glitch'],['extra_echo','Echo']];
+  const extras=[['extra_dropboxes','Dropboxes'],['extra_landmine','Landmijn'],['extra_laser','Laser'],['extra_tripwire','Tripwire'],['feat_hacker','Hacker'],['feat_glitch','Glitch'],['extra_echo','Echo'],['extra_shelter','Schuilkelders']];
   const box=(k,v)=>`<div class="sum-box"><small>${k}</small><b>${v}</b></div>`;
   const [h,r]=[window.currentHunterMulti||1.25,currentMulti];
   const e=escHtml;
@@ -1194,6 +1220,7 @@ function buildSummary(){
       <div class="sum-grid" style="margin-top:12px">
         ${box('Hunters zien runners',e(hunterTxt))}
         ${box('Runners zien afstand',e(runnerTxt))}
+        ${box('Vangen',({tag:'Tikken (2 m)',lasso:'Lasso (20 m)',freeze:'Freezegun (25 m)'})[document.querySelector('[name=catch_mode]:checked')?.value||'tag'])}
       </div>
       <div class="sum-sec">Extra's</div>
       <div class="chips">${extras.map(([n,l])=>chip(l,'',nm(n))).join('')}</div>
