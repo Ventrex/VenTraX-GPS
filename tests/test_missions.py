@@ -145,12 +145,12 @@ def test_failing_a_mission_costs_nothing(appmodule, client, monkeypatch):
         m = appmodule.get_game_missions(g)[0]
     _as(client, rids[0])
     client.post("/api/game/MIS123/location", json={"lat": m["lat"], "lon": m["lng"], "accuracy": 5})
-    r = client.post("/api/game/MIS123/mission/choose", json={"point": m["id"], "tier": "hard"}).get_json()
-    assert r["active"]["kind"] == "far" and r["active"]["targets"]
+    r = client.post("/api/game/MIS123/mission/choose", json={"point": m["id"], "tier": "medium"}).get_json()
+    assert r["active"]["kind"] == "relay" and len(r["active"]["targets"]) == 1 and r["active"]["penalty"] == 0
     before = client.get("/api/game/MIS123/state").get_json()["my_points"]
     with appmodule.app.app_context():
         g = appmodule.db.session.get(appmodule.Game, gid)
-        g.started_at = g.started_at - timedelta(minutes=11)                     # 10 minutes are over
+        g.started_at = g.started_at - timedelta(minutes=9)                      # 8 minutes are over
         appmodule.db.session.commit()
     s = client.get("/api/game/MIS123/state").get_json()
     assert s["my_mission"] is None and "Geen straf" in s["mission_note"] and s["my_points"] == before
@@ -159,26 +159,56 @@ def test_failing_a_mission_costs_nothing(appmodule, client, monkeypatch):
     assert client.post("/api/game/MIS123/mission/stop").status_code == 400            # nothing to stop now
 
 
-def test_scout_mission_asks_where_the_hunter_is(appmodule, client, monkeypatch):
-    gid, hid, rids = setup_game(appmodule)
-    monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
+def _start_scout(appmodule, client, monkeypatch, gid, hid, rids, hunter_dlat=0.004):
     with appmodule.app.app_context():
         g = appmodule.db.session.get(appmodule.Game, gid)
         m = appmodule.get_game_missions(g)[0]
         hunter = appmodule.GamePlayer.query.filter_by(game_id=gid, user_id=hid).first()
-        hunter.last_lat, hunter.last_lon = m["lat"] + 0.004, m["lng"]          # ~450 m north of the point
+        hunter.last_lat, hunter.last_lon = m["lat"] + hunter_dlat, m["lng"]   # ~450 m north of the point
         appmodule.db.session.commit()
     real = appmodule.random.choice
     monkeypatch.setattr(appmodule.random, "choice", lambda seq: "scout" if "scout" in seq else real(seq))
     _as(client, rids[0])
-    client.post("/api/game/MIS123/location", json={"lat": m["lat"], "lon": m["lng"], "accuracy": 5})
+    r = client.post("/api/game/MIS123/location", json={"lat": m["lat"], "lon": m["lng"], "accuracy": 5}).get_json()
+    hard = r["mission"]["offer"]["options"][2]
+    assert hard["kind"] == "scout" and hard["penalty"] == hard["points"]        # the offer says what failing costs
     r = client.post("/api/game/MIS123/mission/choose", json={"point": m["id"], "tier": "hard"}).get_json()
-    assert r["active"]["kind"] == "scout" and r["active"]["phase"] == "go"
-    assert client.post("/api/game/MIS123/mission/answer", json={"direction": "noord"}).status_code == 400   # not close yet
+    return m, r["active"]
+
+
+def test_scout_mission_shows_where_a_hunter_is_and_is_done_within_100_m(appmodule, client, monkeypatch):
+    gid, hid, rids = setup_game(appmodule)
+    monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
+    m, active = _start_scout(appmodule, client, monkeypatch, gid, hid, rids)
+    t = active["targets"][0]
+    assert active["kind"] == "scout" and t["radius"] == 100
+    assert abs(t["lat"] - (m["lat"] + 0.004)) < 1e-6                           # the runner got the hunter's spot
+    r = client.post("/api/game/MIS123/location", json={"lat": m["lat"] + 0.002, "lon": m["lng"], "accuracy": 5}).get_json()
+    assert r["mission"]["active"]["kind"] == "scout"                          # still 220 m away
     r = client.post("/api/game/MIS123/location", json={"lat": m["lat"] + 0.0033, "lon": m["lng"], "accuracy": 5}).get_json()
-    assert r["mission"]["active"]["phase"] == "ask"                            # within 100 m of the hunter
-    r = client.post("/api/game/MIS123/mission/answer", json={"direction": "noordoost"}).get_json()   # next to north: fine
-    assert r["correct"] and r["done"] > 0
+    assert r["mission"]["done"] > 0                                           # within 100 m
+
+
+def test_failing_or_stopping_the_scout_mission_costs_points(appmodule, client, monkeypatch):
+    gid, hid, rids = setup_game(appmodule)
+    monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
+    m, active = _start_scout(appmodule, client, monkeypatch, gid, hid, rids)
+    before = client.get("/api/game/MIS123/state").get_json()["my_points"]
+    r = client.post("/api/game/MIS123/mission/stop").get_json()               # took it, ran the other way
+    assert "-" in r["message"] and round(before - r["points"], 2) == active["penalty"]
+    # time running out costs the same
+    with appmodule.app.app_context():
+        g = appmodule.db.session.get(appmodule.Game, gid)
+        m2 = appmodule.get_game_missions(g)[0]
+    client.post("/api/game/MIS123/location", json={"lat": m2["lat"], "lon": m2["lng"], "accuracy": 5})
+    active2 = client.post("/api/game/MIS123/mission/choose", json={"point": m2["id"], "tier": "hard"}).get_json()["active"]
+    before = client.get("/api/game/MIS123/state").get_json()["my_points"]
+    with appmodule.app.app_context():
+        g = appmodule.db.session.get(appmodule.Game, gid)
+        g.started_at = g.started_at - timedelta(minutes=11); appmodule.db.session.commit()
+    s = client.get("/api/game/MIS123/state").get_json()
+    assert s["my_mission"] is None and "punten" in s["mission_note"]
+    assert round(before - s["my_points"], 2) == active2["penalty"]
 
 
 def test_lootbox_mission_is_done_by_opening_a_lootbox(appmodule, client, monkeypatch):
@@ -194,7 +224,7 @@ def test_lootbox_mission_is_done_by_opening_a_lootbox(appmodule, client, monkeyp
     monkeypatch.setattr(appmodule.random, "choice", lambda seq: "lootbox" if "lootbox" in seq else real(seq))
     _as(client, rids[0])
     client.post("/api/game/MIS123/location", json={"lat": m["lat"], "lon": m["lng"], "accuracy": 5})
-    r = client.post("/api/game/MIS123/mission/choose", json={"point": m["id"], "tier": "medium"}).get_json()
+    r = client.post("/api/game/MIS123/mission/choose", json={"point": m["id"], "tier": "easy"}).get_json()
     assert r["active"]["kind"] == "lootbox"
     client.post("/api/game/MIS123/location", json={"lat": box["lat"], "lon": box["lng"], "accuracy": 5})
     r = client.post(f"/api/game/MIS123/lootbox/{box['id']}/claim").get_json()
@@ -250,3 +280,25 @@ def test_new_game_saves_mission_settings(appmodule, client):
         assert cfg == {"hold_sec": 60, "duration_sec": 900, "points": 8, "hunters_see": True}
         ex = appmodule.get_game_extras(g)
         assert ex["catch_mode"] == "freeze" and ex["shelters"] == 3
+
+
+def test_every_mission_type_can_be_started_and_shown(appmodule, monkeypatch):
+    gid, hid, rids = setup_game(appmodule)
+    monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
+    with appmodule.app.app_context():
+        g = appmodule.db.session.get(appmodule.Game, gid)
+        ex = appmodule.get_game_extras(g); ex.update({"shelters": 2})
+        appmodule.SiteSetting.set(appmodule._extras_key(gid), json.dumps(ex))
+        assert len(appmodule.get_game_shelters(g)) == 2
+        me = appmodule.GamePlayer.query.filter_by(game_id=gid, user_id=rids[0]).first()
+        point = appmodule.get_game_missions(g)[0]
+        tiers = {t["tier"] for t in appmodule.MISSION_TYPES.values()}
+        assert tiers == {"easy", "medium", "hard"} and len(appmodule.MISSION_TYPES) >= 15
+        for kind, t in appmodule.MISSION_TYPES.items():
+            opt = {"tier": t["tier"], "kind": kind, "title": t["title"], "desc": t.get("desc", ""), "points": 5,
+                   "minutes": t["minutes"], "need": t.get("need") or 45}
+            a = appmodule._start_mission(g, me, opt, point, 100.0)
+            view = appmodule._mission_view(a, 100.0)
+            assert view["left"] == t["minutes"] * 60 and view["title"] == t["title"], kind
+            if kind in appmodule.ROUTE_KINDS:
+                assert len(view["targets"]) == 1, kind

@@ -483,6 +483,7 @@ class GamePlayer(db.Model):
     last_accuracy    = db.Column(db.Float,    nullable=True)
     last_speed_ms    = db.Column(db.Float,    nullable=True)  # m/s from GPS
     last_seen        = db.Column(db.DateTime, nullable=True)
+    last_gps_at      = db.Column(db.DateTime, nullable=True)   # time of the last real location update
     joined_at        = db.Column(db.DateTime, default=datetime.utcnow)
     persona_id       = db.Column(db.Integer, nullable=True)     # chosen ThemePersona (looks only, no effect on play)
 
@@ -1167,6 +1168,8 @@ CLASS_LOADOUTS = [
      'desc': 'Geeft richting en afstand naar de dichtstbijzijnde tegenstander.'},
     {'id': 'lokvogel', 'name': 'Lokvogel', 'power': 'Lokaas', 'requires': 'decoy', 'sides': ['runner'],
      'desc': 'Zet 2 minuten een nep-versie van jezelf op de kaart van de hunters. Welke is echt?'},
+    {'id': 'trackerschutter', 'name': 'Trackerschutter', 'power': 'Tracker-dart', 'requires': None, 'sides': ['hunter'],
+     'desc': 'Schiet een tracker op de dichtste runner binnen 25 m. Alle hunters zien hem dan 90 seconden live.'},
 ]
 
 def class_sides(c):
@@ -1817,7 +1820,15 @@ FREEZE_COOLDOWN_SEC = 90
 FREEZE_IMMUNE_SEC = 30
 CATCH_GPS_FRESH_SEC = 45        # only runners with a recent GPS position can be lassoed / frozen
 CLASS_MIN_COOLDOWN = {'codekraker': 300, 'bomexpert': 300, 'laserwachter': 300, 'saboteur': 360,
-                      'glitcher': 300, 'lokvogel': 300}
+                      'glitcher': 300, 'lokvogel': 300, 'trackerschutter': 300}
+TRACKER_RANGE_M = 25
+TRACKER_SEC = 90
+
+def tracker_left(effects, runner_id):
+    tr = (effects.get('trackers') or {}).get(str(runner_id))
+    if not tr:
+        return 0
+    return max(0, int(math.ceil(float(tr['until']) - _now_ts())))
 
 def class_cooldown_for(cls):
     return max(int(cls.get('cooldown_sec') or 180), CLASS_MIN_COOLDOWN.get(cls.get('id'), 180))
@@ -1987,7 +1998,7 @@ def do_catch(game, me, runner, hunter_user, how='tag'):
         if elapsed_min < 15:
             award_badge(hunter_user.id, 'speed_hunter', game.id)
     effects = get_game_effects(game)
-    for k in ('frozen', 'shelter_in', 'decoys'):
+    for k in ('frozen', 'shelter_in', 'decoys', 'trackers'):
         (effects.get(k) or {}).pop(str(runner.user_id), None)
     save_game_effects(game, effects)
     db.session.commit()
@@ -2010,7 +2021,7 @@ def _catch_candidates(game, me):
     fresh = datetime.utcnow() - timedelta(seconds=CATCH_GPS_FRESH_SEC)
     out = []
     for p in game.players:
-        if p.role != 'runner' or p.is_caught or p.last_lat is None or not p.last_seen or p.last_seen < fresh:
+        if p.role != 'runner' or p.is_caught or p.last_lat is None or not p.last_gps_at or p.last_gps_at < fresh:
             continue
         out.append((haversine(me.last_lat, me.last_lon, p.last_lat, p.last_lon), p))
     return sorted(out, key=lambda x: x[0])
@@ -2042,8 +2053,9 @@ def api_catch_action(code):
     cd_left = max(0, int(math.ceil(float((effects.get('catch_cd') or {}).get(key, 0) or 0) - now)))
     cands = _catch_candidates(game, me)
 
-    if action == 'grab':
-        frozen = [(d, p) for d, p in cands if freeze_view(effects, p.user_id)]
+    frozen = [(d, p) for d, p in cands if freeze_view(effects, p.user_id)]
+    if action == 'grab' or (action == 'freeze' and mode == 'freeze' and frozen and frozen[0][0] <= FREEZE_GRAB_M):
+        # one button: a frozen runner within reach is grabbed, otherwise the freezegun fires
         if not frozen:
             return jsonify(error='Er is geen bevroren runner. Bevries eerst iemand.'), 400
         d, runner = frozen[0]
@@ -2056,6 +2068,9 @@ def api_catch_action(code):
     if action != mode or mode == 'tag':
         return jsonify(error='Die manier van vangen staat niet aan in dit spel'), 400
     if cd_left > 0:
+        if mode == 'freeze' and frozen and frozen[0][0] <= FREEZE_RANGE_M:   # what matters now is the frozen runner
+            return jsonify(error=f'Nog {round(frozen[0][0])} m. Kom binnen {FREEZE_GRAB_M} m van de bevroren runner.',
+                           cooldown=cd_left), 400
         return jsonify(error=f'Nog even laden: {cd_left}s', cooldown=cd_left), 400
 
     if mode == 'lasso':
@@ -2078,6 +2093,8 @@ def api_catch_action(code):
     inrange = [(d, p) for d, p in cands if d <= FREEZE_RANGE_M and not freeze_view(effects, p.user_id)
                and float(immune.get(str(p.user_id), 0) or 0) <= now]
     if not inrange:
+        if frozen and frozen[0][0] <= FREEZE_RANGE_M:
+            return jsonify(error=f'Nog {round(frozen[0][0])} m. Kom binnen {FREEZE_GRAB_M} m van de bevroren runner.'), 400
         return jsonify(error=f'Geen runner binnen {FREEZE_RANGE_M} m die je kunt bevriezen.'), 400
     d, runner = inrange[0]
     effects.setdefault('frozen', {})[str(runner.user_id)] = {'until': now + FREEZE_SEC, 'lat': runner.last_lat,
@@ -2220,6 +2237,22 @@ def api_class_power(code):
         save_game_effects(game, effects)
         msg = 'Glitch actief: jouw locatie wordt 60 seconden verstoord voor tegenstanders'
         payload.update({'type': 'glitch', 'expires_in': 60})
+
+    elif cid == 'trackerschutter':
+        if me.role != 'hunter':
+            return jsonify(error='De tracker-dart is voor hunters'), 400
+        targets = [(d, p) for d, p in _catch_candidates(game, me) if d <= TRACKER_RANGE_M]
+        if not targets:
+            return jsonify(error=f'Geen runner binnen {TRACKER_RANGE_M} m om te raken. Je dart is niet gebruikt.'), 400
+        d, runner = targets[0]
+        effects.setdefault('trackers', {})[str(runner.user_id)] = {'until': _now_ts() + TRACKER_SEC, 'by': current_user.id}
+        (effects.get('decoys') or {}).pop(str(runner.user_id), None)              # a tracked runner has no fake twin
+        save_game_effects(game, effects)
+        msg = f'Raak! {runner.codename or "De runner"} heeft een tracker: alle hunters zien hem {TRACKER_SEC} seconden live.'
+        public_msg = f'Tracker-dart op {runner.codename or "een runner"}: hunters zien hem {TRACKER_SEC} seconden live!'
+        hub.broadcast(code, 'runner_tracked', {'runner_id': runner.user_id, 'runner_codename': runner.codename,
+                                               'by_codename': me.codename, 'seconds': TRACKER_SEC})
+        payload.update({'type': 'tracker', 'runner_id': runner.user_id, 'expires_in': TRACKER_SEC})
 
     elif cid == 'lokvogel':
         if me.role != 'runner':
@@ -3957,8 +3990,14 @@ def api_state(code):
             if glitch_until > _now_ts() and 'lat' in pd:
                 pd['lat'], pd['lon'] = _destination_point(pd['lat'], pd['lon'], 90, (p.user_id * 47) % 360)
                 pd['glitched'] = True
+            tracked = tracker_left(effects, p.user_id)
+            if tracked:                                                 # tracker-dart: the real spot, live
+                pd['lat'], pd['lon'] = p.last_lat, p.last_lon
+                pd['location_live'] = True
+                pd['tracked_left'] = tracked
+                pd.pop('glitched', None); pd.pop('location_delayed', None)
             decoy = (effects.get('decoys') or {}).get(str(p.user_id))
-            if decoy and float(decoy.get('until') or 0) > _now_ts() and 'lat' in pd:
+            if decoy and not tracked and float(decoy.get('until') or 0) > _now_ts() and 'lat' in pd:
                 fake = {'lat': decoy['lat'], 'lon': decoy['lng']}
                 if decoy.get('swap'):                                  # which of the two is real? you can't tell
                     pd['alt'] = {'lat': pd['lat'], 'lon': pd['lon']}
@@ -3997,6 +4036,7 @@ def api_state(code):
     if pause_active:
         offline_allowed_now = False
     end_result = get_game_end_result(game)
+    my_mission = get_my_mission(game, me)                  # first: a failed mission can change my points
 
     return jsonify(
         status=game.status, players=players, elapsed=elapsed,
@@ -4038,13 +4078,14 @@ def api_state(code):
         hazards=[h for h in effects.get('hazards', []) if h.get('owner_id') == current_user.id],
         zone=zone_info(game),
         missions=missions_for_role(game, me.role),
-        my_mission=get_my_mission(game, me),
+        my_mission=my_mission,
         mission_note=pop_mission_note(game, current_user.id) if mission_config(game) else None,
         items=items_view(effects, current_user.id),
         shelters=get_game_shelters(game),
         catch_mode=catch_mode(game),
         catch_cooldown=max(0, int(math.ceil(float((effects.get('catch_cd') or {}).get(str(current_user.id), 0) or 0) - _now_ts()))),
         my_frozen=freeze_view(effects, current_user.id),
+        my_tracked=tracker_left(effects, current_user.id) if me.role == 'runner' else 0,
         my_decoy=(lambda dcy: {'lat': dcy['lat'], 'lon': dcy['lng'], 'left': int(float(dcy['until']) - _now_ts())}
                   if dcy and float(dcy.get('until') or 0) > _now_ts() else None)((effects.get('decoys') or {}).get(str(current_user.id))),
         zone_points=(get_playfield(game) or {}).get('points') if zone_config(game) else None,
@@ -4192,6 +4233,7 @@ def api_location(code):
     me.last_lat = lat; me.last_lon = lon
     me.last_accuracy = acc; me.last_speed_ms = speed_ms
     me.last_seen = datetime.utcnow(); me.gps_enabled = True
+    me.last_gps_at = me.last_seen
     _maybe_log_location_ping(game, current_user.id, lat, lon)
     hazard_messages = check_hazard_triggers(game, me, code)
     outside_m = playfield_outside_distance_m(game, lat, lon)
@@ -6112,10 +6154,8 @@ MISSION_RADIUS_M = 25          # reach a mission point within this distance to g
 MISSION_MAX = 3
 MISSION_HOLD_RADIUS_M = 10     # easy "hold" mission: stay this close to the point
 MISSION_TARGET_RADIUS_M = 15   # checkpoints of a personal mission
-MISSION_ASK_SEC = 60           # scout mission: time to point out the hunter once you are close
 MISSION_TIER_FACTOR = {'easy': 1, 'medium': 2, 'hard': 3}
 MISSION_TIER_NAME = {'easy': 'Makkelijk', 'medium': 'Middel', 'hard': 'Moeilijk'}
-DIRECTIONS = ['noord', 'noordoost', 'oost', 'zuidoost', 'zuid', 'zuidwest', 'west', 'noordwest']
 
 def _fmt_pts(x):
     x = round(float(x or 0), 2)
@@ -6167,16 +6207,19 @@ def _mission_point(game, st, runners):
     return best or _random_lootbox_point(game)
 
 def _spot_from(game, lat, lng, min_m, max_m):
-    """A reachable spot min_m..max_m from (lat, lng), inside the field and out of forbidden areas."""
+    """A reachable spot min_m..max_m from (lat, lng), inside the field and out of forbidden areas.
+    In a small field it comes closer; it never returns a spot outside the field or in a forbidden area."""
     pf = get_playfield(game)
-    best = None
-    for attempt in range(60):
-        lo = min_m if attempt < 40 else min_m * 0.5             # a small field: accept a bit closer
-        dlat, dlng = _destination_point(lat, lng, random.uniform(lo, max_m), random.uniform(0, 360))
+    for scale in (1.0, 0.6, 0.35, 0.2, 0.1):
+        for _ in range(15):
+            dlat, dlng = _destination_point(lat, lng, random.uniform(min_m * scale, max_m * scale), random.uniform(0, 360))
+            if _point_ok(game, pf, dlat, dlng):
+                return dlat, dlng
+    for _ in range(40):                                          # anywhere in the field that is allowed
+        dlat, dlng = _random_lootbox_point(game)
         if _point_ok(game, pf, dlat, dlng):
             return dlat, dlng
-        best = best or (dlat, dlng)
-    return best
+    return lat, lng
 
 def _field_reach_m(game, lat, lng):
     """How far you can get from (lat, lng) inside the field (no field: no limit)."""
@@ -6226,43 +6269,69 @@ def missions_for_role(game, role):
 def _active_hunters(game):
     return [p for p in game.players.all() if p.role == 'hunter' and not p.is_caught and p.last_lat is not None]
 
+# Every mission type. 'route' types visit their targets in order; 'walk' counts metres; 'hold' and the
+# time types count seconds. The scout mission ('spion') gives the runner the spot of a hunter, so failing
+# or stopping it costs points: otherwise you could take it only to learn where a hunter is.
+MISSION_TYPES = {
+    # easy
+    'hold':       {'tier': 'easy', 'minutes': 4, 'title': 'Houd de plek bezet'},
+    'walk':       {'tier': 'easy', 'minutes': 4, 'need': 250, 'title': 'Op pad', 'desc': 'Loop 250 meter binnen 4 minuten.'},
+    'checkpoint': {'tier': 'easy', 'minutes': 5, 'title': 'Naar het vlaggetje', 'desc': 'Ga binnen 5 minuten naar een nieuw punt in de buurt.'},
+    'shelter':    {'tier': 'easy', 'minutes': 5, 'title': 'Schuilen', 'desc': 'Ga binnen 5 minuten naar een schuilkelder.'},
+    'lootbox':    {'tier': 'easy', 'minutes': 5, 'need': 1, 'title': 'Buit halen', 'desc': 'Open binnen 5 minuten een lootbox.'},
+    # medium
+    'relay':      {'tier': 'medium', 'minutes': 8, 'title': 'Estafette', 'desc': 'Haal binnen 8 minuten 2 punten, na elkaar.'},
+    'circuit':    {'tier': 'medium', 'minutes': 8, 'title': 'Rondje', 'desc': 'Haal binnen 8 minuten 3 punten in de buurt, na elkaar.'},
+    'escape':     {'tier': 'medium', 'minutes': 5, 'title': 'Wegwezen'},
+    'race':       {'tier': 'medium', 'minutes': 6, 'need': 500, 'title': 'Sprintje', 'desc': 'Loop 500 meter binnen 6 minuten.'},
+    'keepaway':   {'tier': 'medium', 'minutes': 6, 'need': 180, 'title': 'Uit de buurt',
+                   'desc': 'Blijf in totaal 3 minuten verder dan 200 m van alle hunters, binnen 6 minuten.'},
+    'loot2':      {'tier': 'medium', 'minutes': 10, 'need': 2, 'title': 'Schatzoeker', 'desc': 'Open binnen 10 minuten 2 lootboxen.'},
+    # hard
+    'scout':      {'tier': 'hard', 'minutes': 10, 'title': 'Spion',
+                   'desc': 'Je krijgt nu de plek van een hunter. Kom binnen 10 minuten binnen 100 m van hem. Lukt het niet, dan gaan er punten af!'},
+    'shadow':     {'tier': 'hard', 'minutes': 10, 'need': 120, 'title': 'Schaduw',
+                   'desc': 'Blijf in totaal 2 minuten binnen 150 m van een hunter, binnen 10 minuten. Niet gepakt worden!'},
+    'far':        {'tier': 'hard', 'minutes': 10, 'title': 'Verre reis', 'desc': 'Ga binnen 10 minuten naar een punt ver weg op de kaart.'},
+    'grandtour':  {'tier': 'hard', 'minutes': 12, 'title': 'Grote tocht', 'desc': 'Haal binnen 12 minuten 3 punten ver uit elkaar, na elkaar.'},
+    'marathon':   {'tier': 'hard', 'minutes': 10, 'need': 900, 'title': 'Marathon', 'desc': 'Loop 900 meter binnen 10 minuten.'},
+    'shelterhop': {'tier': 'hard', 'minutes': 8, 'title': 'Kelderhopper', 'desc': 'Ga binnen 8 minuten langs 2 schuilkelders.'},
+}
+ROUTE_KINDS = ('checkpoint', 'relay', 'circuit', 'far', 'grandtour', 'shelter', 'shelterhop')
+WALK_KINDS = ('walk', 'race', 'marathon')
+LOOT_KINDS = ('lootbox', 'loot2')
+SCOUT_RADIUS_M = 100
+
 def _mission_offer(game, me, point, cfg):
-    """Three missions to choose from at a mission point: one easy, one medium, one hard."""
+    """Three missions to choose from at a mission point: one easy, one medium, one hard (random)."""
     lat, lng = float(point['lat']), float(point['lng'])
     reach = _field_reach_m(game, lat, lng)
     loot = [b for b in get_game_lootboxes(game) if b.get('team') in ('all', 'runner')]
     hunters = _active_hunters(game)
-    pools = {
-        'easy': ['hold', 'walk', 'checkpoint'],
-        'medium': ['relay', 'escape'] + (['lootbox'] if loot else []),
-        'hard': ['far'] + (['scout', 'shadow'] if hunters else []),
-    }
+    shelters = get_game_shelters(game)
+
+    def allowed(kind):
+        if kind in LOOT_KINDS: return bool(loot)
+        if kind in ('scout', 'shadow', 'keepaway'): return bool(hunters)
+        if kind == 'shelter': return bool(shelters)
+        if kind == 'shelterhop': return len(shelters) >= 2
+        if kind in ('grandtour', 'marathon'): return reach > 300
+        return True
+
     out = []
     for tier in ('easy', 'medium', 'hard'):
-        kind = random.choice(pools[tier])
-        o = {'tier': tier, 'kind': kind, 'tier_name': MISSION_TIER_NAME[tier],
-             'points': round(cfg['points'] * MISSION_TIER_FACTOR[tier] * game.multiplier_for('runner'), 2)}
+        kind = random.choice([k for k, t in MISSION_TYPES.items() if t['tier'] == tier and allowed(k)])
+        t = MISSION_TYPES[kind]
+        pts = round(cfg['points'] * MISSION_TIER_FACTOR[tier] * game.multiplier_for('runner'), 2)
+        o = {'tier': tier, 'kind': kind, 'tier_name': MISSION_TIER_NAME[tier], 'points': pts,
+             'minutes': t['minutes'], 'title': t['title'], 'desc': t.get('desc', ''), 'need': t.get('need')}
         if kind == 'hold':
-            o.update(minutes=4, need=cfg['hold_sec'], title='Houd de plek bezet',
-                     desc=f"Blijf {cfg['hold_sec']} seconden binnen {MISSION_HOLD_RADIUS_M} m van dit punt.")
-        elif kind == 'walk':
-            o.update(minutes=4, need=250, title='Op pad', desc='Loop 250 meter binnen 4 minuten.')
-        elif kind == 'checkpoint':
-            o.update(minutes=5, title='Naar het vlaggetje', desc='Ga binnen 5 minuten naar een nieuw punt in de buurt.')
-        elif kind == 'lootbox':
-            o.update(minutes=5, title='Buit halen', desc='Open binnen 5 minuten een lootbox.')
-        elif kind == 'relay':
-            o.update(minutes=8, title='Estafette', desc='Haal binnen 8 minuten 2 punten, na elkaar.')
+            o.update(need=cfg['hold_sec'], desc=f"Blijf {cfg['hold_sec']} seconden binnen {MISSION_HOLD_RADIUS_M} m van dit punt.")
         elif kind == 'escape':
             need = int(min(300, max(120, reach * 0.6)) // 10 * 10)
-            o.update(minutes=5, need=need, title='Wegwezen', desc=f'Kom binnen 5 minuten {need} meter van dit punt vandaan.')
-        elif kind == 'far':
-            o.update(minutes=10, title='Verre reis', desc='Ga binnen 10 minuten naar een punt ver weg op de kaart.')
-        elif kind == 'scout':
-            o.update(minutes=10, title='Spion', desc='Kom binnen 10 minuten binnen 100 m van een hunter. Wijs daarna aan waar hij staat.')
-        elif kind == 'shadow':
-            o.update(minutes=10, need=120, title='Schaduw',
-                     desc='Blijf in totaal 2 minuten binnen 150 m van een hunter, binnen 10 minuten. Niet gepakt worden!')
+            o.update(need=need, desc=f'Kom binnen 5 minuten {need} meter van dit punt vandaan.')
+        if kind == 'scout':
+            o['penalty'] = pts                                         # what you lose when it fails
         out.append(o)
     return out
 
@@ -6270,21 +6339,33 @@ def _start_mission(game, me, opt, point, now):
     """Turn a chosen option into an active personal mission."""
     lat, lng = float(point['lat']), float(point['lng'])
     a = {'tier': opt['tier'], 'kind': opt['kind'], 'title': opt['title'], 'desc': opt['desc'],
-         'points': opt['points'], 'deadline': now + opt['minutes'] * 60, 'started': now,
-         'need': opt.get('need'), 'origin': [lat, lng], 'targets': [], 'idx': 0, 'value': 0.0, 'phase': 'go'}
-    if a['kind'] == 'hold':
+         'points': opt['points'], 'penalty': opt.get('penalty') or 0, 'deadline': now + opt['minutes'] * 60,
+         'started': now, 'need': opt.get('need'), 'origin': [lat, lng], 'targets': [], 'idx': 0, 'value': 0.0}
+    kind = a['kind']
+    here = (me.last_lat, me.last_lon) if me.last_lat is not None else (lat, lng)
+    if kind == 'hold':
         a['targets'] = [[lat, lng, MISSION_HOLD_RADIUS_M]]
-    elif a['kind'] == 'checkpoint':
-        t = _spot_from(game, lat, lng, 150, 250); a['targets'] = [[t[0], t[1], MISSION_TARGET_RADIUS_M]]
-    elif a['kind'] == 'relay':
-        t1 = _spot_from(game, lat, lng, 150, 250); t2 = _spot_from(game, t1[0], t1[1], 150, 250)
-        a['targets'] = [[t1[0], t1[1], MISSION_TARGET_RADIUS_M], [t2[0], t2[1], MISSION_TARGET_RADIUS_M]]
-    elif a['kind'] == 'far':
-        reach = _field_reach_m(game, lat, lng)
-        lo, hi = (400, 600) if reach > 700 else (reach * 0.55, reach * 0.85)
-        t = _spot_from(game, lat, lng, lo, hi); a['targets'] = [[t[0], t[1], MISSION_TARGET_RADIUS_M]]
-    elif a['kind'] == 'walk':
-        a['last'] = [me.last_lat, me.last_lon] if me.last_lat is not None else [lat, lng]
+    elif kind in ('checkpoint', 'relay', 'circuit', 'grandtour', 'far'):
+        n, lo, hi = {'checkpoint': (1, 150, 250), 'relay': (2, 150, 250), 'circuit': (3, 100, 180),
+                     'grandtour': (3, 250, 400), 'far': (1, 400, 600)}[kind]
+        if kind == 'far':
+            reach = _field_reach_m(game, lat, lng)
+            if reach <= 700:
+                lo, hi = reach * 0.55, reach * 0.85
+        cur = (lat, lng)
+        for _ in range(n):
+            cur = _spot_from(game, cur[0], cur[1], lo, hi)
+            a['targets'].append([cur[0], cur[1], MISSION_TARGET_RADIUS_M])
+    elif kind in ('shelter', 'shelterhop'):
+        sh = sorted(get_game_shelters(game), key=lambda s: botlib.haversine(here[0], here[1], s['lat'], s['lng']))
+        a['targets'] = [[s['lat'], s['lng'], s['radius']] for s in sh[:1 if kind == 'shelter' else 2]]
+    elif kind in WALK_KINDS:
+        a['last'] = [here[0], here[1]]
+    elif kind == 'scout':
+        hunters = _active_hunters(game)
+        h = min(hunters, key=lambda p: botlib.haversine(here[0], here[1], p.last_lat, p.last_lon))
+        a['hunter_id'] = h.user_id
+        a['targets'] = [[h.last_lat, h.last_lon, SCOUT_RADIUS_M]]          # where the hunter was when it started
     return a
 
 def _mission_view(a, now):
@@ -6293,28 +6374,25 @@ def _mission_view(a, now):
     need = a.get('need') or 0
     kind = a['kind']
     progress, status = 0.0, ''
-    if kind in ('hold', 'shadow'):
+    targets = [{'lat': t[0], 'lng': t[1], 'radius': t[2]} for t in a['targets']]
+    if kind in ('hold', 'shadow', 'keepaway'):
         progress = min(1.0, a['value'] / max(1, need)); status = f"{int(a['value'])} van {need} s"
-    elif kind == 'walk':
+    elif kind in WALK_KINDS:
         progress = min(1.0, a['value'] / max(1, need)); status = f"{int(a['value'])} van {need} m"
     elif kind == 'escape':
         progress = min(1.0, a['value'] / max(1, need)); status = f"{int(a['value'])} van {need} m weg"
-    elif kind == 'relay':
-        progress = a['idx'] / 2.0; status = f"Punt {min(a['idx'] + 1, 2)} van 2"
+    elif kind in LOOT_KINDS:
+        progress = min(1.0, a['value'] / max(1, need)); status = f"{int(a['value'])} van {need} lootbox" + ('en' if need > 1 else '')
+    elif kind in ROUTE_KINDS:
+        n = len(a['targets'])
+        progress = a['idx'] / max(1, n)
+        status = f"Punt {min(a['idx'] + 1, n)} van {n}" if n > 1 else 'Ga naar het punt'
+        targets = targets[a['idx']:a['idx'] + 1]                        # one at a time
     elif kind == 'scout':
-        status = 'Wijs de hunter aan!' if a['phase'] == 'ask' else 'Zoek een hunter (binnen 100 m)'
-        progress = 0.5 if a['phase'] == 'ask' else 0.0
-    elif kind == 'lootbox':
-        status = 'Open een lootbox'
-    else:
-        status = 'Ga naar het punt'
-    targets = [{'lat': t[0], 'lng': t[1], 'radius': t[2]} for t in a['targets'][a['idx']:a['idx'] + 1]] \
-        if kind in ('relay',) else [{'lat': t[0], 'lng': t[1], 'radius': t[2]} for t in a['targets']]
+        status = 'Hier stond de hunter. Kom binnen 100 m van hem!'
     out = {'tier': a['tier'], 'tier_name': MISSION_TIER_NAME[a['tier']], 'kind': kind, 'title': a['title'],
-           'desc': a['desc'], 'points': a['points'], 'left': left, 'progress': round(progress, 3), 'status': status,
-           'targets': targets, 'phase': a['phase']}
-    if a['phase'] == 'ask':
-        out['ask_left'] = max(0, int(a.get('ask_until', now) - now))
+           'desc': a['desc'], 'points': a['points'], 'penalty': a.get('penalty') or 0, 'left': left,
+           'progress': round(progress, 3), 'status': status, 'targets': targets}
     return out
 
 def _complete_mission(game, me, user, st, key, a):
@@ -6327,10 +6405,19 @@ def _complete_mission(game, me, user, st, key, a):
                                               'points': pts, 'tier': a['tier'], 'tier_name': MISSION_TIER_NAME[a['tier']]})
     return pts
 
-def _end_mission(game, st, key, msg):
+def _fail_mission(game, me, st, key, a, why):
+    """End a mission that was not done. Only the scout mission costs points (it gave away a hunter)."""
     st['active'].pop(key, None)
-    st['notes'][key] = msg
+    pen = float(a.get('penalty') or 0)
+    if pen and not me.is_caught:
+        me.points = (me.points or 0) - pen
+        me.user.total_points = (me.user.total_points or 0) - pen
+        db.session.commit()
+        msg = f"{why}: missie '{a['title']}' niet gehaald. -{_fmt_pts(pen)} punten, want je kreeg de plek van een hunter."
+    else:
+        msg = f"{why}: missie '{a['title']}' niet gehaald. Geen straf, zoek een nieuwe!"
     _save_missions(game, st)
+    return msg
 
 def pop_mission_note(game, user_id):
     st = _load_missions(game)
@@ -6348,18 +6435,19 @@ def get_my_mission(game, me):
     a = st['active'].get(key)
     if not a:
         return None
-    now = game.effective_elapsed
     if me.is_caught:
         st['active'].pop(key, None); _save_missions(game, st)
         return None
-    if now > a['deadline'] or (a['phase'] == 'ask' and now > a.get('ask_until', a['deadline'])):
-        _end_mission(game, st, key, f"Tijd is op: missie '{a['title']}' niet gehaald. Geen straf, zoek een nieuwe!")
+    now = game.effective_elapsed
+    if now > a['deadline']:
+        st['notes'][key] = _fail_mission(game, me, st, key, a, 'Tijd is op')
+        _save_missions(game, st)
         return None
     return _mission_view(a, now)
 
 def mission_progress(game, me, user, lat, lon, now_ts):
     """Called on every location update of a runner. Returns what the screen needs:
-    {'active': ...} for a running mission (plus 'done' points when it was completed now),
+    {'active': ...} for a running mission (or 'done' points when it was completed now),
     {'offer': ...} when standing at a mission point without a mission, or None."""
     cfg = mission_config(game)
     if not cfg or me.role != 'runner' or me.is_caught:
@@ -6370,21 +6458,19 @@ def mission_progress(game, me, user, lat, lon, now_ts):
     now = game.effective_elapsed
     a = st['active'].get(key)
     if a:
-        if now > a['deadline'] or (a['phase'] == 'ask' and now > a.get('ask_until', a['deadline'])):
-            msg = f"Tijd is op: missie '{a['title']}' niet gehaald. Geen straf, zoek een nieuwe!"
-            st['active'].pop(key, None); _save_missions(game, st)
-            return {'ended': msg}
+        if now > a['deadline']:
+            return {'ended': _fail_mission(game, me, st, key, a, 'Tijd is op')}
         kind = a['kind']
         done = False
-        step = float(a.get('ts') or 0)
-        delta = max(0.0, min(15.0, now_ts - step)) if a.get('was_in') else 0.0
+        delta = max(0.0, min(15.0, now_ts - float(a.get('ts') or 0))) if a.get('was_in') else 0.0
+        hunters = _active_hunters(game) if kind in ('shadow', 'keepaway', 'scout') else []
         if kind == 'hold':
             t = a['targets'][0]
             inside = botlib.haversine(lat, lon, t[0], t[1]) <= t[2]
             a['value'] = a['value'] + delta if inside else 0.0          # stepping out starts over
             a['was_in'] = inside; a['ts'] = now_ts
             done = a['value'] >= a['need']
-        elif kind == 'walk':
+        elif kind in WALK_KINDS:
             last = a.get('last') or [lat, lon]
             d = botlib.haversine(last[0], last[1], lat, lon)
             if 2 <= d <= 80:                                            # ignore GPS jitter and jumps
@@ -6392,22 +6478,28 @@ def mission_progress(game, me, user, lat, lon, now_ts):
             elif d > 80:
                 a['last'] = [lat, lon]
             done = a['value'] >= a['need']
-        elif kind in ('checkpoint', 'far', 'relay'):
-            t = a['targets'][a['idx']]
-            if botlib.haversine(lat, lon, t[0], t[1]) <= t[2]:
+        elif kind in ROUTE_KINDS:
+            t = a['targets'][a['idx']] if a['idx'] < len(a['targets']) else None
+            if t and botlib.haversine(lat, lon, t[0], t[1]) <= t[2]:
                 a['idx'] += 1
             done = a['idx'] >= len(a['targets'])
         elif kind == 'escape':
             a['value'] = max(a['value'], botlib.haversine(lat, lon, a['origin'][0], a['origin'][1]))
             done = a['value'] >= a['need']
         elif kind == 'shadow':
-            near = any(botlib.haversine(lat, lon, h.last_lat, h.last_lon) <= 150 for h in _active_hunters(game))
-            a['value'] = a['value'] + (delta if near else 0.0)          # time adds up, leaving does not reset it
-            a['was_in'] = near; a['ts'] = now_ts
+            ok = any(botlib.haversine(lat, lon, h.last_lat, h.last_lon) <= 150 for h in hunters)
+            a['value'] = a['value'] + (delta if ok else 0.0)            # time adds up, leaving does not reset it
+            a['was_in'] = ok; a['ts'] = now_ts
             done = a['value'] >= a['need']
-        elif kind == 'scout' and a['phase'] == 'go':
-            if any(botlib.haversine(lat, lon, h.last_lat, h.last_lon) <= 100 for h in _active_hunters(game)):
-                a['phase'] = 'ask'; a['ask_until'] = now + MISSION_ASK_SEC
+        elif kind == 'keepaway':
+            ok = all(botlib.haversine(lat, lon, h.last_lat, h.last_lon) > 200 for h in hunters)
+            a['value'] = a['value'] + (delta if ok else 0.0)
+            a['was_in'] = ok; a['ts'] = now_ts
+            done = a['value'] >= a['need']
+        elif kind == 'scout':
+            target = next((h for h in hunters if h.user_id == a.get('hunter_id')), None)
+            pool = [target] if target else hunters                      # that hunter, or any if he is gone
+            done = any(botlib.haversine(lat, lon, h.last_lat, h.last_lon) <= SCOUT_RADIUS_M for h in pool)
         if done:
             pts = _complete_mission(game, me, user, st, key, a)
             return {'active': None, 'done': pts, 'tier_name': MISSION_TIER_NAME[a['tier']]}
@@ -6416,8 +6508,7 @@ def mission_progress(game, me, user, lat, lon, now_ts):
         return {'active': _mission_view(a, now)}
     # no active mission: standing at a mission point offers the choice
     for m in missions:
-        d = botlib.haversine(lat, lon, m['lat'], m['lng'])
-        if d <= m['radius']:
+        if botlib.haversine(lat, lon, m['lat'], m['lng']) <= m['radius']:
             offer = st['offers'].get(key)
             if not offer or offer.get('point') != m['id']:
                 offer = {'point': m['id'], 'options': _mission_offer(game, me, m, cfg)}
@@ -6480,39 +6571,13 @@ def api_mission_choose(code):
     if not opt:
         return jsonify(error='Kies een missie uit de lijst'), 400
     now = game.effective_elapsed
+    if opt['kind'] == 'scout' and not _active_hunters(game):
+        return jsonify(error='Er is nu geen hunter met GPS. Kies een andere missie.'), 400
     a = _start_mission(game, me, opt, point, now)
     st['active'][key] = a
     st['offers'].pop(key, None)
     _use_up_point(game, st, point_id)
     return jsonify(success=True, active=_mission_view(a, now), message=f"Missie gestart: {a['title']}")
-
-@app.route('/api/game/<code>/mission/answer', methods=['POST'])
-@login_required
-def api_mission_answer(code):
-    game, me, err = _mission_runner(code)
-    if err: return err
-    st = _load_missions(game)
-    key = str(me.user_id)
-    a = st['active'].get(key)
-    if not a or a['kind'] != 'scout' or a['phase'] != 'ask':
-        return jsonify(error='Er is nu niets om aan te wijzen'), 400
-    guess = (request.get_json(silent=True) or {}).get('direction')
-    if guess not in DIRECTIONS:
-        return jsonify(error='Kies een richting'), 400
-    hunters = _active_hunters(game)
-    if me.last_lat is None or not hunters:
-        return jsonify(error='Geen hunter in beeld'), 400
-    h = min(hunters, key=lambda p: botlib.haversine(me.last_lat, me.last_lon, p.last_lat, p.last_lon))
-    real = _bearing_text(me.last_lat, me.last_lon, h.last_lat, h.last_lon)
-    diff = abs(DIRECTIONS.index(real) - DIRECTIONS.index(guess)) % 8
-    if min(diff, 8 - diff) <= 1:                                       # the right direction or the one next to it
-        pts = _complete_mission(game, me, current_user, st, key, a)
-        db.session.commit()
-        return jsonify(success=True, correct=True, done=pts, real=real,
-                       message=f'Goed gezien! De hunter stond in het {real}. +{_fmt_pts(pts)} punten')
-    st['active'].pop(key, None); _save_missions(game, st)
-    return jsonify(success=True, correct=False, real=real,
-                   message=f'Helaas, de hunter stond in het {real}. Geen straf, probeer een andere missie.')
 
 @app.route('/api/game/<code>/mission/stop', methods=['POST'])
 @login_required
@@ -6520,21 +6585,28 @@ def api_mission_stop(code):
     game, me, err = _mission_runner(code)
     if err: return err
     st = _load_missions(game)
-    if not st['active'].pop(str(me.user_id), None):
+    key = str(me.user_id)
+    a = st['active'].get(key)
+    if not a:
         return jsonify(error='Je hebt geen missie'), 400
-    _save_missions(game, st)
-    return jsonify(success=True, message='Missie gestopt. Geen straf. Zoek een nieuw missiepunt.')
+    msg = _fail_mission(game, me, st, key, a, 'Gestopt')
+    return jsonify(success=True, message=msg, points=round(me.points, 2))
 
 def mission_on_lootbox(game, me, user):
-    """Medium mission 'open a lootbox': done when the runner opens one in time."""
+    """Lootbox missions: done when the runner opened enough lootboxes in time."""
     if not mission_config(game) or me.role != 'runner':
         return None
     st = _load_missions(game)
     key = str(me.user_id)
     a = st['active'].get(key)
-    if not a or a['kind'] != 'lootbox' or game.effective_elapsed > a['deadline']:
+    if not a or a['kind'] not in LOOT_KINDS or game.effective_elapsed > a['deadline']:
         return None
-    return _complete_mission(game, me, user, st, key, a)
+    a['value'] = float(a.get('value') or 0) + 1
+    if a['value'] >= (a.get('need') or 1):
+        return _complete_mission(game, me, user, st, key, a)
+    st['active'][key] = a
+    _save_missions(game, st)
+    return None
 
 # -- Shrinking zone (Fortnite-style) --------------------------------------------------------------
 import zone as zonelib
@@ -6790,6 +6862,7 @@ def _bot_loop(code):
                     continue
                 lat, lon = terrain.to_latlon(*cell)
                 gp.last_lat, gp.last_lon, gp.last_seen = lat, lon, datetime.utcnow()
+                gp.last_gps_at = gp.last_seen
                 states[gp.user_id] = botlib.Bot(gp.user_id, gp.role, lat, lon, difficulty)
             db.session.commit()
 
@@ -6896,6 +6969,7 @@ def init_db():
         ensure_column('game', 'hunter_multiplier', 'FLOAT')
         ensure_column('game', 'runner_multiplier', 'FLOAT')
         ensure_column('game_player', 'persona_id', 'INTEGER')
+        ensure_column('game_player', 'last_gps_at', 'DATETIME')
         ensure_column('theme_persona', 'kind', 'VARCHAR(8)')
         ensure_column('theme_persona', 'gender', 'VARCHAR(8)')
         for col, typ in (('accent', 'VARCHAR(9)'), ('bg_color', 'VARCHAR(9)'), ('font_head', 'VARCHAR(40)'),

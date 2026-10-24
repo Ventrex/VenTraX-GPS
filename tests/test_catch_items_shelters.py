@@ -18,13 +18,14 @@ def setup_game(appmodule, extras=None, started_min_ago=70, duration=120, interva
                            started_at=datetime.utcnow() - timedelta(minutes=started_min_ago))
         appmodule.db.session.add(g); appmodule.db.session.commit()
         appmodule.db.session.add(appmodule.GamePlayer(game_id=g.id, user_id=hid, role="hunter", last_lat=LAT, last_lon=LON,
-                                                      gps_enabled=True, last_seen=datetime.utcnow(), codename="Wolf"))
+                                                      gps_enabled=True, last_seen=datetime.utcnow(), last_gps_at=datetime.utcnow(),
+                                                      codename="Wolf"))
         for i in range(runners):
             uid = make_user(appmodule, username=f"loper{i}", email=f"loper{i}@example.com")
             rids.append(uid)
             appmodule.db.session.add(appmodule.GamePlayer(game_id=g.id, user_id=uid, role="runner", last_lat=LAT + 0.0001 * (i + 1),
                                                           last_lon=LON, gps_enabled=True, last_seen=datetime.utcnow(),
-                                                          codename=f"Vos{i}"))
+                                                          last_gps_at=datetime.utcnow(), codename=f"Vos{i}"))
         appmodule.SiteSetting.set(appmodule._extras_key(g.id), json.dumps(extras or {}))
         pf = {"enabled": True, "color": "storm", "points": zone.regular_polygon(LAT, LON, 700, 16), "forbidden": []}
         appmodule.SiteSetting.set(appmodule._playfield_key(g.id), json.dumps(pf))
@@ -41,6 +42,7 @@ def move(appmodule, gid, uid, lat, lon):
     with appmodule.app.app_context():
         p = appmodule.GamePlayer.query.filter_by(game_id=gid, user_id=uid).first()
         p.last_lat, p.last_lon, p.last_seen = lat, lon, datetime.utcnow()
+        p.last_gps_at = p.last_seen
         appmodule.db.session.commit()
 
 
@@ -94,7 +96,8 @@ def test_runners_with_an_old_gps_position_cannot_be_lassoed(appmodule, client, m
     monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
     with appmodule.app.app_context():
         p = appmodule.GamePlayer.query.filter_by(game_id=gid, user_id=rids[0]).first()
-        p.last_seen = datetime.utcnow() - timedelta(minutes=5); appmodule.db.session.commit()
+        p.last_gps_at = datetime.utcnow() - timedelta(minutes=5)     # app still open (last_seen fresh), no GPS fix
+        p.last_seen = datetime.utcnow(); appmodule.db.session.commit()
     login(client, hid)
     assert client.post(f"/api/game/{CODE}/catch_action", json={"action": "lasso"}).status_code == 400
 
@@ -297,3 +300,62 @@ def test_lobby_explains_the_catch_mode_shelters_and_missions(appmodule, client):
     login(client, hid)
     html = client.get(f"/lobby/{CODE}").get_data(as_text=True)
     assert "Lasso: hunter gooit" in html and "Schuilkelders:" in html and "makkelijk, middel of moeilijk" in html
+
+
+def test_freeze_button_still_freezes_when_someone_else_is_frozen_far_away(appmodule, client, monkeypatch):
+    gid, hid, rids = setup_game(appmodule, {"catch_mode": "freeze"}, runners=2)
+    monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
+    move(appmodule, gid, rids[0], LAT + 0.003, LON)                           # far away, frozen by another hunter
+    with appmodule.app.app_context():
+        g = appmodule.db.session.get(appmodule.Game, gid)
+        fx = appmodule.get_game_effects(g)
+        fx["frozen"] = {str(rids[0]): {"until": appmodule._now_ts() + 15, "lat": LAT + 0.003, "lon": LON, "by": hid}}
+        appmodule.save_game_effects(g, fx)
+    move(appmodule, gid, rids[1], LAT + 0.0001, LON)                          # close by
+    login(client, hid)
+    r = client.post(f"/api/game/{CODE}/catch_action", json={"action": "freeze"}).get_json()
+    assert r["frozen"]
+    # not close enough yet (11 m): the button says how far, it does not freeze someone else
+    r = client.post(f"/api/game/{CODE}/catch_action", json={"action": "freeze"})
+    assert r.status_code == 400 and "8 m" in r.get_json()["error"]
+    # the same button grabs the frozen runner once you are close
+    move(appmodule, gid, hid, LAT + 0.00007, LON)
+    move(appmodule, gid, rids[1], LAT + 0.0001, LON)
+    r = client.post(f"/api/game/{CODE}/catch_action", json={"action": "freeze"}).get_json()
+    assert r["caught"] and caught(appmodule, gid, rids[1])
+
+
+def test_mission_spots_stay_inside_a_small_field(appmodule):
+    gid, hid, rids = setup_game(appmodule)
+    with appmodule.app.app_context():
+        g = appmodule.db.session.get(appmodule.Game, gid)
+        pf = {"enabled": True, "color": "storm", "points": zone.regular_polygon(LAT, LON, 60, 12), "forbidden": []}
+        appmodule.SiteSetting.set(appmodule._playfield_key(gid), json.dumps(pf))
+        for _ in range(20):
+            lat, lng = appmodule._spot_from(g, LAT, LON, 150, 250)               # far bigger than the field
+            assert zone.point_in_polygon(lat, lng, pf["points"])
+
+
+def test_tracker_dart_shows_the_runner_live_to_all_hunters(appmodule, client, monkeypatch):
+    assert any(c["id"] == "trackerschutter" for c in appmodule.class_loadouts_for("hunter"))
+    assert all(c["id"] != "trackerschutter" for c in appmodule.class_loadouts_for("runner"))
+    gid, hid, rids = setup_game(appmodule, {"classes_enabled": True, "classes_hunter": ["trackerschutter"],
+                                            "classes_runner": ["lokvogel"]}, started_min_ago=10)
+    monkeypatch.setattr(appmodule.hub, "broadcast", lambda *a, **k: None)
+    with appmodule.app.app_context():
+        appmodule.assign_game_classes(appmodule.db.session.get(appmodule.Game, gid))
+    login(client, hid)
+    seen = next(p for p in client.get(f"/api/game/{CODE}/state").get_json()["players"] if p["id"] == rids[0])
+    move(appmodule, gid, rids[0], LAT + 0.003, LON)                           # runner walked away: hunters still see the old spot
+    r = client.post(f"/api/game/{CODE}/class_power", json={})
+    assert r.status_code == 400 and "25 m" in r.get_json()["error"]
+    with appmodule.app.app_context():                                          # the dart was not spent
+        assert appmodule.class_cooldown_remaining(appmodule.db.session.get(appmodule.Game, gid), hid) == 0
+    move(appmodule, gid, rids[0], LAT + 0.0002, LON)                          # ~22 m: in range
+    r = client.post(f"/api/game/{CODE}/class_power", json={}).get_json()
+    assert r["type"] == "tracker" and r["runner_id"] == rids[0]
+    move(appmodule, gid, rids[0], LAT + 0.0011, LON)                          # runs off: hunters follow live
+    p = next(p for p in client.get(f"/api/game/{CODE}/state").get_json()["players"] if p["id"] == rids[0])
+    assert p["tracked_left"] > 80 and abs(p["lat"] - (LAT + 0.0011)) < 1e-9 and (p["lat"], p["lon"]) != (seen["lat"], seen["lon"])
+    login(client, rids[0])
+    assert client.get(f"/api/game/{CODE}/state").get_json()["my_tracked"] > 80

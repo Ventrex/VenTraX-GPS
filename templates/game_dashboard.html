@@ -209,18 +209,17 @@ path.zone-cloud{}
 #locCd.hot{border-color:var(--danger);animation:gPulse 1s infinite} #locCd.hot .lc-track i{background:var(--danger)}
 #locCd.now{background:rgba(127,29,29,.92);border-color:#fff}
 #missionBar .mb-x{background:rgba(255,255,255,.14);border:none;color:#fff;border-radius:99px;padding:2px 9px;font-size:11px;cursor:pointer;margin-left:6px}
-#missionBar .mb-tier{display:inline-block;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:800;margin-right:5px;color:#111}
+.mb-tier{display:inline-block;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:800;margin-right:5px;color:#111}
 .tier-easy{background:#22c55e}.tier-medium{background:#f59e0b}.tier-hard{background:#ef4444;color:#fff!important}
-#missionSheet,#missionAsk{position:fixed;inset:0;z-index:910;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center}
-#missionSheet.open,#missionAsk.open{display:flex}
+#trackBadge{position:absolute;left:50%;top:160px;transform:translateX(-50%);z-index:352;display:none;background:rgba(220,38,38,.95);color:#fff;border-radius:99px;padding:7px 14px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.5);animation:gPulse 1.2s infinite}
+#trackBadge.show{display:block}
+#missionSheet{position:fixed;inset:0;z-index:910;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center}
+#missionSheet.open{display:flex}
 .ms-card{display:block;width:100%;text-align:left;background:var(--bg3);border:1px solid var(--border);border-left:5px solid var(--c);border-radius:12px;padding:11px 13px;margin-bottom:9px;color:var(--text);font-family:inherit;cursor:pointer}
 .ms-card:active{transform:scale(.98)}
 .ms-card .ms-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;font-size:14.5px}
 .ms-card .ms-d{font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.4}
 .ms-card .ms-p{font-weight:800;color:var(--warn);white-space:nowrap}
-.dir-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 10px}
-.dir-grid button{padding:14px 4px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-weight:700;font-family:inherit;font-size:13px;cursor:pointer}
-.dir-grid .mid{background:none;border:none;color:var(--text2);font-size:11px;cursor:default}
 #frozenAlert{position:absolute;inset:0;z-index:455;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;pointer-events:none;background:rgba(14,116,144,.93)}
 #frozenAlert.show{display:flex}
 #itemBar{position:absolute;right:8px;top:215px;z-index:300;display:flex;flex-direction:column;gap:8px}
@@ -298,6 +297,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     </div>
     {% endif %}
     <div id="itemBar"></div>
+    {% if me.role == 'runner' %}<div id="trackBadge"><i class="fas fa-crosshairs"></i> Tracker op jou! Hunters zien je live nog <span id="trackLeft">90</span>s</div>{% endif %}
     {% if me.role == 'hunter' %}
     <button class="mab" id="btnCatch" onclick="catchAction()" title="Vangen"><i class="fas fa-circle-notch" id="catchIcon"></i><span class="mab-label" id="catchLabel" style="display:none"></span></button>
     {% endif %}
@@ -545,26 +545,12 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
 <div id="missionSheet">
   <div class="am-box">
     <div class="am-title"><i class="fas fa-flag" style="color:#a78bfa"></i> Missie gevonden!</div>
-    <div class="am-sub">Kies een missie. Halen geeft bonuspunten, mislukken kost niets.</div>
+    <div class="am-sub">Kies een missie. Halen geeft bonuspunten. Mislukken kost niets, tenzij het erbij staat.</div>
     <div id="msOptions"></div>
     <button class="am-btn" onclick="chooseMission('skip')"><i class="fas fa-forward"></i> Laat maar <small style="color:var(--text2);margin-left:auto">missie verhuist</small></button>
     <button class="am-btn" onclick="closeMissionSheet()" style="justify-content:center;color:var(--text2)">Nu niet</button>
   </div>
 </div>
-<!-- Scout mission: point out the hunter -->
-<div id="missionAsk">
-  <div class="am-box">
-    <div class="am-title"><i class="fas fa-user-secret" style="color:#ef4444"></i> Waar staat de hunter?</div>
-    <div class="am-sub">Je bent dichtbij een hunter. Tik de richting aan. Noord is boven op de kaart. <b id="askLeft"></b></div>
-    <div class="dir-grid">
-      <button onclick="answerMission('noordwest')">NW</button><button onclick="answerMission('noord')">N</button><button onclick="answerMission('noordoost')">NO</button>
-      <button onclick="answerMission('west')">W</button><span class="mid"><i class="fas fa-person-running" style="font-size:22px;color:var(--runner)"></i><br>jij</span><button onclick="answerMission('oost')">O</button>
-      <button onclick="answerMission('zuidwest')">ZW</button><button onclick="answerMission('zuid')">Z</button><button onclick="answerMission('zuidoost')">ZO</button>
-    </div>
-    <button class="am-btn" onclick="document.getElementById('missionAsk').classList.remove('open')" style="justify-content:center;color:var(--text2)">Even wachten</button>
-  </div>
-</div>
-
 <!-- Runner action modal (hunter clicks on runner) -->
 <div id="actionModal">
   <div class="am-box">
@@ -979,7 +965,7 @@ function claimLootbox(id) {
 // ---- Missions: reach a mission point, pick easy / medium / hard (or skip) ----
 const TIER_COLOR = {easy: '#22c55e', medium: '#f59e0b', hard: '#ef4444'};
 let missionMarkers = {}, missionList = [], missionSyncAt = 0;
-let myMission = null, myMissionAt = 0, myMissionLayers = [], missionOffer = null, dismissedOffer = null, askOpened = false;
+let myMission = null, myMissionAt = 0, myMissionLayers = [], missionOffer = null, dismissedOffer = null;
 function updateMissions(list) {
   missionList = list || []; missionSyncAt = Date.now();
   const seen = new Set();
@@ -1004,13 +990,12 @@ function setMyMission(a) {
     myMissionLayers.forEach(l => { try { map.removeLayer(l); } catch (e) {} }); myMissionLayers = [];
     if (myMission) (myMission.targets || []).forEach(t => {
       const col = TIER_COLOR[myMission.tier] || '#a78bfa';
-      myMissionLayers.push(L.circle([t.lat, t.lng], {radius: t.radius, color: col, fillColor: col, fillOpacity: .25, weight: 3, interactive: false}).addTo(map));
+      const scout = myMission.kind === 'scout';
+      myMissionLayers.push(L.circle([t.lat, t.lng], {radius: t.radius, color: col, fillColor: col, fillOpacity: scout ? .12 : .25, weight: 3, dashArray: scout ? '8 6' : null, interactive: false}).addTo(map));
       myMissionLayers.push(L.marker([t.lat, t.lng], {interactive: false, icon: L.divIcon({className: '', iconSize: [34, 34], iconAnchor: [17, 17],
-        html: `<div class="mission-pin" style="background:${col}"><i class="fas fa-location-dot"></i></div>`})}).addTo(map));
+        html: `<div class="mission-pin" style="background:${col}"><i class="fas ${scout ? 'fa-crosshairs' : 'fa-location-dot'}"></i></div>${scout ? '<div style="position:absolute;top:38px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:800;color:#fff;background:rgba(239,68,68,.9);padding:1px 6px;border-radius:99px">hunter stond hier</div>' : ''}`})}).addTo(map));
     });
   }
-  if (myMission && myMission.phase === 'ask') { if (!askOpened) { askOpened = true; openAsk(); } }
-  else { askOpened = false; document.getElementById('missionAsk')?.classList.remove('open'); }
   updateMissionBar();
 }
 function updateMissionBar() {
@@ -1023,9 +1008,9 @@ function updateMissionBar() {
       const t = a.targets[0]; extra = ` · ${fmtDist(distM(lastLat, lastLon, t.lat, t.lng))} naar het ${bearingText(lastLat, lastLon, t.lat, t.lng)}`;
     }
     el.innerHTML = `<div class="mb-t"><span><span class="mb-tier tier-${a.tier}">${escHtml(a.tier_name)}</span>${escHtml(a.title)}</span><span>${fmtMM(left)}<button class="mb-x" onclick="stopMission()">Stop</button></span></div>
-      <div style="font-size:11.5px;color:rgba(255,255,255,.8);margin-top:4px">${escHtml(a.status || '')}${extra} · +${fmtPts(a.points)}</div>
+      <div style="font-size:11.5px;color:rgba(255,255,255,.8);margin-top:4px">${escHtml(a.status || '')}${extra} · +${fmtPts(a.points)}${a.penalty ? ` / -${fmtPts(a.penalty)}` : ''}</div>
       <div class="mb-track"><div class="mb-fill" style="width:${pct}%;background:${TIER_COLOR[a.tier]}"></div></div>`;
-    if (a.phase === 'ask') el.onclick = e => { if (!e.target.classList.contains('mb-x')) openAsk(); }; else el.onclick = null;
+    el.onclick = null;
     el.classList.add('show'); return;
   }
   el.onclick = null;
@@ -1071,7 +1056,7 @@ function openMissionSheet(offer) {
   document.getElementById('msOptions').innerHTML = offer.options.map(o => `
     <button class="ms-card" style="--c:${TIER_COLOR[o.tier]}" onclick="chooseMission('${o.tier}')">
       <div class="ms-h"><span><span class="mb-tier tier-${o.tier}">${escHtml(o.tier_name)}</span>${escHtml(o.title)}</span><span class="ms-p">+${fmtPts(o.points)}</span></div>
-      <div class="ms-d">${escHtml(o.desc)} <span style="opacity:.75">(${o.minutes} min)</span></div>
+      <div class="ms-d">${escHtml(o.desc)} <span style="opacity:.75">(${o.minutes} min)</span>${o.penalty ? `<br><b style="color:#f87171">Mislukt of gestopt: -${fmtPts(o.penalty)}</b>` : ''}</div>
     </button>`).join('');
   document.getElementById('missionSheet').classList.add('open');
 }
@@ -1093,30 +1078,14 @@ function chooseMission(tier) {
     }).catch(() => showToast('Missie kiezen mislukt', 'error'));
 }
 function stopMission() {
-  if (!confirm('Stoppen met deze missie? Dat kost niets, maar je krijgt ook geen punten.')) return;
+  const pen = myMission && myMission.penalty;
+  if (!confirm(pen ? `Stoppen met deze missie? Dat kost ${fmtPts(pen)} punten, want je kreeg de plek van een hunter.` : 'Stoppen met deze missie? Dat kost niets, maar je krijgt ook geen punten.')) return;
   fetch('/api/game/' + CODE + '/mission/stop', {method: 'POST'}).then(r => r.json()).then(d => {
     if (d.error) { showToast(d.error, 'error'); return; }
-    setMyMission(null); showToast(d.message, 'info', 5000);
+    setMyMission(null); showToast(d.message, pen ? 'warn' : 'info', 7000);
+    if (d.points !== undefined) document.getElementById('ip-pts').textContent = fmtPts(d.points);
   });
 }
-function openAsk() {
-  if (!myMission || myMission.phase !== 'ask') return;
-  const left = Math.max(0, (myMission.ask_left || 0) - Math.floor((Date.now() - myMissionAt) / 1000));
-  document.getElementById('askLeft').textContent = `Nog ${left}s.`;
-  document.getElementById('missionAsk').classList.add('open');
-  VXSound.play('mission_new'); if (navigator.vibrate) navigator.vibrate([200, 80, 200]);
-}
-function answerMission(direction) {
-  document.getElementById('missionAsk').classList.remove('open');
-  fetch('/api/game/' + CODE + '/mission/answer', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({direction})})
-    .then(r => r.json()).then(d => {
-      if (d.error) { showToast(d.error, 'error'); return; }
-      showToast(d.message, d.correct ? 'success' : 'info', 8000);
-      if (d.correct) VXSound.play('mission_done');
-      setMyMission(null); setTimeout(pollState, 400);
-    });
-}
-
 // ---- Items from lootboxes (EMP, Medkit) ----
 let myItems = [];
 function renderItems(list) {
@@ -1165,6 +1134,23 @@ function handleShelter(s) {
   }
 }
 
+// ---- Tracker-dart (runner) ----
+let trackedUntil = 0;
+function handleTracked(sec) {
+  const was = trackedUntil > Date.now();
+  trackedUntil = sec > 0 ? Date.now() + sec * 1000 : 0;
+  if (sec > 0 && !was) { VXSound.play('target_start'); if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+    showNotif('Er zit een tracker op je! De hunters zien je ' + sec + ' seconden live.', 7000); }
+  tickTracked();
+}
+function tickTracked() {
+  const el = document.getElementById('trackBadge'); if (!el) return;
+  const left = Math.ceil((trackedUntil - Date.now()) / 1000);
+  if (left > 0) { el.classList.add('show'); document.getElementById('trackLeft').textContent = left; }
+  else el.classList.remove('show');
+}
+setInterval(tickTracked, 1000);
+
 // ---- Frozen (runner) ----
 let frozenUntil = 0;
 function handleFrozen(f) {
@@ -1195,7 +1181,7 @@ function updateCatchButton() {
   b.classList.remove('wait', 'grab');
   if (gameCatchMode === 'freeze' && anyFrozen) {
     b.classList.add('grab'); icon.className = 'fas fa-hand'; lbl.style.display = ''; lbl.textContent = 'Pak!';
-    b.title = 'Pak de bevroren runner (binnen 8 m)'; return;
+    b.title = 'Pak de bevroren runner (binnen 8 m), of bevries een andere runner'; return;
   }
   icon.className = gameCatchMode === 'lasso' ? 'fas fa-circle-notch' : 'fas fa-snowflake';
   if (progressPct < CATCH_MIN_PROGRESS_PCT || !headstartOver) {
@@ -1209,9 +1195,11 @@ function updateCatchButton() {
 setInterval(updateCatchButton, 1000);
 function catchAction() {
   if (gameCatchMode === 'tag') return;
-  const action = (gameCatchMode === 'freeze' && anyFrozen) ? 'grab' : gameCatchMode;
-  if (action !== 'grab' && progressPct < CATCH_MIN_PROGRESS_PCT) { showToast(`Vangen kan vanaf ${CATCH_MIN_PROGRESS_PCT}% van de speeltijd`, 'warn'); return; }
-  if (action !== 'grab' && catchCooldownUntil > Date.now()) { showToast('Nog even laden...', 'warn'); return; }
+  // freezegun: the server grabs a frozen runner within 8 m, otherwise it freezes the nearest runner
+  const action = gameCatchMode;
+  const mayGrab = gameCatchMode === 'freeze' && anyFrozen;
+  if (progressPct < CATCH_MIN_PROGRESS_PCT) { showToast(`Vangen kan vanaf ${CATCH_MIN_PROGRESS_PCT}% van de speeltijd`, 'warn'); return; }
+  if (!mayGrab && catchCooldownUntil > Date.now()) { showToast('Nog even laden...', 'warn'); return; }
   fetch('/api/game/' + CODE + '/catch_action', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action})})
     .then(r => r.json()).then(d => {
       if (d.cooldown) catchCooldownUntil = Date.now() + d.cooldown * 1000;
@@ -1396,7 +1384,7 @@ function pollState() {
       if (d.mission_note) showToast(d.mission_note, 'info', 8000);
       renderItems(d.items || []);
       renderShelters(d.shelters || []);
-      if (MY_ROLE === 'runner') { handleFrozen(d.my_frozen || null); renderMyDecoy(d.my_decoy); }
+      if (MY_ROLE === 'runner') { handleFrozen(d.my_frozen || null); renderMyDecoy(d.my_decoy); handleTracked(d.my_tracked || 0); }
       gameCatchMode = d.catch_mode || 'tag';
       if (MY_ROLE === 'hunter') {
         catchCooldownUntil = Date.now() + (d.catch_cooldown || 0) * 1000;
@@ -1550,6 +1538,7 @@ function buildRunnerPanel(players) {
         ${offlineStr}
         ${r.is_paused ? '<span style="color:var(--hunter)">Gepauzeerd</span><br>' : ''}
         ${r.frozen_left > 0 ? `<span style="color:#67e8f9"><i class="fas fa-snowflake"></i> Bevroren ${r.frozen_left}s</span><br>` : ''}
+        ${r.tracked_left > 0 ? `<span style="color:#fca5a5"><i class="fas fa-crosshairs"></i> Tracker live ${r.tracked_left}s</span><br>` : ''}
         ${r.location_delayed ? '<span style="color:#5eead4"><i class="fas fa-house-chimney"></i> Locatie komt later</span><br>' : ''}
         <span style="color:var(--warn)">${fmtPts(r.points||0)}pt</span>
         ${r.last_seen ? ` · ${new Date(r.last_seen).toLocaleTimeString('nl',{hour:'2-digit',minute:'2-digit'})}` : ''}
@@ -2446,6 +2435,11 @@ function connectWS() {
       case 'runner_frozen':
         if (d.runner_id === MY_ID) { setTimeout(pollState, 200); handleFrozen({left: d.seconds || 20}); }
         else if (MY_ROLE === 'hunter') { anyFrozen = true; updateCatchButton(); showToast(`${d.by_codename || 'Een hunter'} heeft ${d.runner_codename || 'een runner'} bevroren! Snel pakken.`, 'info', 6000); }
+        break;
+      case 'runner_tracked':
+        if (d.runner_id === MY_ID) handleTracked(d.seconds || 90);
+        else if (MY_ROLE === 'hunter') showToast(`${d.by_codename || 'Een hunter'} heeft een tracker op ${d.runner_codename || 'een runner'}: ${d.seconds || 90} seconden live!`, 'success', 7000);
+        setTimeout(pollState, 300);
         break;
       case 'emp_blast':
         VXSound.play('power');

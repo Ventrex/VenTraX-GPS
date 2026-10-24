@@ -486,7 +486,7 @@ details.more summary::-webkit-details-marker{display:none}
     <!-- ===================== 4. STIJL & SFEER ===================== -->
     <div class="step" id="step5">
       <div class="panel" id="missionsPanel" data-feat="missions">
-        <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-flag"></i></div><div class="panel-t">Missies voor runners {{ ibtn('Missies', 'Zodat runners niet de hele tijd op dezelfde plek blijven zitten: er verschijnt een missiepunt op de kaart. Een runner die er komt, kiest een makkelijke, middel of moeilijke missie (of Laat maar). Halen geeft bonuspunten: middel x2, moeilijk x3. Mislukken kost niets. Daarna verschijnt het volgende missiepunt ergens anders.') }}</div></div>
+        <div class="panel-h"><div class="panel-ic" style="--c:#a78bfa"><i class="fas fa-flag"></i></div><div class="panel-t">Missies voor runners {{ ibtn('Missies', 'Zodat runners niet de hele tijd op dezelfde plek blijven zitten: er verschijnt een missiepunt op de kaart. Een runner die er komt, kiest een makkelijke, middel of moeilijke missie (of Laat maar). Halen geeft bonuspunten: middel x2, moeilijk x3. Mislukken kost niets, behalve bij de Spion-missie: die geeft je de plek van een hunter, dus mislukken of stoppen kost daar punten. Daarna verschijnt het volgende missiepunt ergens anders.') }}</div></div>
         <p class="panel-sub">Bij een missiepunt kiest de runner zelf: makkelijk, middel of moeilijk. Of Laat maar.</p>
         {% if img('img_style_missions') %}<div class="pick small" style="min-height:140px;margin-bottom:12px;cursor:default"><div class="bg" style="background-image:url('{{ img('img_style_missions') }}')"></div></div>{% endif %}
         <div class="set" style="border-top:none;padding-top:0">
