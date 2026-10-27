@@ -8,16 +8,19 @@
 
 /* â”€â”€ Topbar â”€â”€ */
 .topbar{
-  position:relative;z-index:10;height:52px;flex-shrink:0;
+  position:relative;z-index:10;height:60px;flex-shrink:0;
   background:rgba(10,10,15,.92);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;padding:0 10px;gap:8px;
 }
-.role-pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;white-space:nowrap}
+.role-pill{font-size:12px;font-weight:700;padding:4px 10px;border-radius:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw;min-width:0}
 .role-pill.hunter{background:rgba(59,130,246,.2);color:var(--hunter);border:1px solid rgba(59,130,246,.35)}
 .role-pill.runner{background:rgba(16,185,129,.2);color:var(--runner);border:1px solid rgba(16,185,129,.35)}
 .t-timers{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
 .t-pill{font-family:var(--hfont);font-size:12px;font-weight:700;padding:4px 9px;border-radius:9px;background:var(--bg3);border:1px solid var(--border);display:flex;align-items:center;gap:4px;white-space:nowrap}
+.t-timers .t-pill{font-size:21px;font-weight:800;padding:4px 10px;border-radius:11px;font-variant-numeric:tabular-nums;line-height:1.1}
+.t-timers .t-pill i{font-size:14px}
+@media(max-width:380px){ .t-timers .t-pill{font-size:18px;padding:4px 7px} }
 
 /* â”€â”€ Map overlays (absolute inside map-wrap) â”€â”€ */
 .map-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
@@ -67,13 +70,13 @@
 .rc-info{font-size:10px;color:var(--text2);line-height:1.5}
 
 /* Offline uses */
-#offUsesBadge{position:absolute;bottom:10px;right:8px;z-index:300;background:rgba(10,10,15,.88);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--text2);text-align:center;min-width:52px}
-#btnOffline .mab-label{position:absolute;right:-2px;bottom:-2px;background:rgba(10,10,15,.9);border:1px solid var(--border);border-radius:8px;padding:1px 4px;font-size:9px;line-height:1;color:#fff;font-weight:800;min-width:18px;text-align:center}
+#offUsesBadge{position:absolute;bottom:8px;right:8px;z-index:300;background:rgba(10,10,15,.88);border:1px solid var(--border);border-radius:8px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--text2);text-align:center;min-width:52px}
+#btnOffline .mab-label{position:absolute;right:-6px;bottom:-6px;background:rgba(10,10,15,.92);border:1px solid var(--border);border-radius:9px;padding:2px 6px;font-size:13px;line-height:1.1;color:#fff;font-weight:800;min-width:22px;text-align:center}
 
 /* Map action buttons */
 .mab{position:absolute;z-index:300;width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:22px;transition:all .2s;box-shadow:0 3px 14px rgba(0,0,0,.6)}
 .mab:active{transform:scale(.9)}
-#btnOffline{bottom:38px;right:8px;background:var(--runner);color:#fff}
+#btnOffline{bottom:38px;right:8px;background:var(--runner);color:#fff;width:68px;height:68px;font-size:30px}
 #btnOffline.active{background:var(--danger)}
 #btnOffline.empty{background:#444;color:#777;cursor:not-allowed}
 #btnPowerMap{bottom:38px;left:8px;background:var(--danger);color:#fff}
@@ -88,7 +91,16 @@
 #speedWarn{position:absolute;left:50%;bottom:112px;transform:translateX(-50%);z-index:360;background:rgba(239,68,68,.95);color:#fff;border-radius:14px;padding:10px 16px;font-family:var(--hfont);font-weight:800;font-size:16px;display:none;text-align:center;box-shadow:0 4px 24px rgba(239,68,68,.45)}
 #speedWarn.show{display:block;animation:screenShake .35s linear 2}
 @keyframes screenShake{0%,100%{transform:translateX(-50%)}25%{transform:translateX(calc(-50% - 5px))}75%{transform:translateX(calc(-50% + 5px))}}
-#hunterTargetInfo{position:absolute;top:8px;left:8px;z-index:330;display:none;width:160px;background:rgba(245,158,11,.96);color:#111;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:800;box-shadow:0 4px 18px rgba(0,0,0,.45);text-align:left;line-height:1.3}
+#hunterTargetInfo{position:absolute;top:8px;left:8px;z-index:330;display:none;width:160px;background:rgba(245,158,11,.96);color:#111;border-radius:12px;padding:8px 10px;font-size:12px;font-weight:800;box-shadow:0 4px 18px rgba(0,0,0,.45);text-align:left;line-height:1.3}
+#hunterTargetInfo .hti-t{font-family:var(--hfont);font-size:34px;line-height:1.05;font-variant-numeric:tabular-nums}
+#offBanner{position:absolute;left:50%;top:58px;transform:translateX(-50%);z-index:352;width:min(92vw,330px);text-align:center;background:rgba(124,58,237,.94);color:#fff;border:2px solid #fff;border-radius:18px;padding:8px 14px 10px;display:none;box-shadow:0 8px 28px rgba(0,0,0,.5);pointer-events:none}
+#offBanner.show{display:block}
+#offBanner .ob-l{font-size:13px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
+#offBanner .ob-t{font-family:var(--hfont);font-size:52px;font-weight:800;line-height:1.05;margin:2px 0;font-variant-numeric:tabular-nums}
+#offBanner .ob-s{font-size:12px;opacity:.9}
+#offBanner.ending{background:rgba(220,38,38,.95);animation:gPulse 1s infinite}
+.rc-off{display:block;margin:3px 0;padding:3px 6px;border-radius:7px;background:rgba(245,158,11,.18);color:var(--warn);font-size:13px;font-weight:800}
+.rc-off b{font-size:16px;font-variant-numeric:tabular-nums}
 
 /* â”€â”€ Bottom bar â”€â”€ */
 .bbar{position:relative;z-index:10;flex-shrink:0;background:rgba(10,10,15,.95);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;align-items:stretch;height:58px}
@@ -192,7 +204,7 @@
 #dangerPulse.close{background:radial-gradient(ellipse at center,transparent 30%,rgba(220,38,38,.6) 100%);animation-duration:.7s}
 #dangerPulse.zone{background:radial-gradient(ellipse at center,transparent 35%,rgba(162,28,175,.55) 100%);animation-duration:1.2s}
 @keyframes dpulse{0%,100%{opacity:0}50%{opacity:1}}
-#zoneBanner{position:absolute;left:50%;top:54px;transform:translateX(-50%);z-index:430;background:rgba(0,0,0,.82);color:#fff;border:1px solid #fff;border-radius:999px;padding:9px 16px;font-size:12.5px;font-weight:600;display:none;max-width:94vw;text-align:center;backdrop-filter:blur(8px)}
+#zoneBanner{position:absolute;left:50%;top:54px;transform:translateX(-50%);z-index:430;background:rgba(0,0,0,.85);color:#fff;border:2px solid #fff;border-radius:18px;padding:8px 16px;font-size:14px;font-weight:600;display:none;max-width:94vw;text-align:center;backdrop-filter:blur(8px)}
 #zoneBanner.show{display:block;animation:fadeUp .3s ease}
 .zone-center{width:30px;height:30px;border-radius:50%;background:#fff;color:#111;display:grid;place-items:center;font-size:15px;box-shadow:0 0 0 6px rgba(255,255,255,.3);animation:pulse 1.6s infinite}
 path.zone-edge{animation:march 1.2s linear infinite}
@@ -211,6 +223,12 @@ path.zone-cloud{}
 #missionBar .mb-x{background:rgba(255,255,255,.14);border:none;color:#fff;border-radius:99px;padding:2px 9px;font-size:11px;cursor:pointer;margin-left:6px}
 .mb-tier{display:inline-block;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:800;margin-right:5px;color:#111}
 .tier-easy{background:#22c55e}.tier-medium{background:#f59e0b}.tier-hard{background:#ef4444;color:#fff!important}
+#topStack{position:absolute;left:0;right:0;top:66px;z-index:440;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;padding:0 8px}
+#topStack > *{position:static!important;transform:none!important;left:auto!important;right:auto!important;top:auto!important;margin:0!important}
+#topStack #zoneBar{width:min(94vw,360px)}
+#locCd.off-hide{display:none!important}
+#zoneBanner .zb-t{font-family:var(--hfont);font-size:30px;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+#zoneBanner .zb-s{font-size:12.5px;opacity:.9}
 #trackBadge{position:absolute;left:50%;top:160px;transform:translateX(-50%);z-index:352;display:none;background:rgba(220,38,38,.95);color:#fff;border-radius:99px;padding:7px 14px;font-size:13px;font-weight:800;white-space:nowrap;box-shadow:0 4px 18px rgba(0,0,0,.5);animation:gPulse 1.2s infinite}
 #trackBadge.show{display:block}
 #missionSheet{position:fixed;inset:0;z-index:910;background:rgba(0,0,0,.72);display:none;align-items:flex-end;justify-content:center}
@@ -249,7 +267,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
   <div class="topbar">
     <img src="/static/img/logo_round.png" style="height:32px;width:32px;border-radius:50%;object-fit:cover;flex-shrink:0" alt="VenTrax">
     <span class="role-pill {{ me.role }}">
-      {{ 'Hunter' if me.role=='hunter' else 'Runner' }} {{ me.codename or me.user.username }}
+      <i class="fas {{ 'fa-crosshairs' if me.role=='hunter' else 'fa-person-running' }}"></i> {{ me.codename or me.user.username }}
     </span>
     <button id="muteBtn" class="t-pill" style="cursor:pointer;margin-left:auto" onclick="VXSound.setMuted(!VXSound.isMuted())" title="Geluid aan/uit"><i class="fas fa-volume-high"></i></button>
     <div class="t-timers" style="margin-left:0">
@@ -286,6 +304,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     {% endif %}
 
     <div id="dangerPulse"></div>
+    <div id="topStack"></div>
     <div id="zoneBanner"></div>
     <div id="missionBar"></div>
     {% if me.role == 'runner' %}
@@ -309,6 +328,9 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     {% if me.role == 'runner' and not game.live_tracking %}
     <div id="locCd"><div class="lc-l" id="lcL">Hunters zien je locatie over</div><div class="lc-t" id="lcT">--:--</div><div class="lc-track"><i id="lcFill"></i></div></div>
     {% endif %}
+    {% if me.role == 'runner' and game.offline_button %}
+    <div id="offBanner"><div class="ob-l"><i class="fas fa-eye-slash"></i> Je bent offline</div><div class="ob-t" id="obT">0:00</div><div class="ob-s">De hunters zien je niet. Daarna ben je weer zichtbaar.</div></div>
+    {% endif %}
     <div id="zoneBar">
       <div class="zb-title"><span>Buiten speelveld</span><span id="zoneBarPct">0%</span></div>
       <div class="zb-track"><div id="zoneBarFill"></div></div>
@@ -319,7 +341,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     {% if me.role == 'runner' %}
     <div id="targetAlert">
       <div style="font-family:var(--hfont);font-size:22px;font-weight:800;color:#fff;margin-bottom:8px">JIJ BENT EEN TARGET!</div>
-      <div style="font-family:var(--hfont);font-size:56px;font-weight:800;color:#fff;line-height:1" id="taTimer">--:--</div>
+      <div style="font-family:var(--hfont);font-size:84px;font-weight:800;color:#fff;line-height:1;font-variant-numeric:tabular-nums" id="taTimer">--:--</div>
       <div style="font-size:16px;color:rgba(255,255,255,.85);margin-top:8px" id="taDist"></div>
       <div style="font-size:13px;color:rgba(255,255,255,.7);margin-top:12px;background:rgba(0,0,0,.3);padding:8px 16px;border-radius:10px">
         Offline knop geblokkeerd. Dubbele punten actief.
@@ -597,6 +619,20 @@ function maybePlayIntro(elapsedSec) {
   if (introHandled) return; introHandled = true;
   if (elapsedSec >= 0 && elapsedSec < 90) VXSound.play('intro', {offset: elapsedSec + 5});
 }
+// Vibration that goes with the sounds (Android; iPhone browsers cannot vibrate). Also when the sound is muted.
+const VIBRATE = {
+  zone_out: [400, 150, 400, 150, 400], zone_shrink: [300, 120, 300, 120, 600], zone_back: [100, 60, 100],
+  hunter_close: [200, 80, 200, 80, 200], hunter_near: [150, 100, 150], caught: [600, 200, 600], hazard: [500],
+  target_start: [300, 100, 300, 100, 300], target_end: [120], offline_start: [120, 80, 120], offline_end: [250, 100, 250],
+  mission_new: [120, 60, 120], mission_done: [80, 40, 80, 40, 160], mission_fail: [300, 100, 300], lootbox_open: [80, 40, 160],
+  power: [100], item: [120, 60, 120], freeze: [500, 150, 500], tracked: [200, 80, 200, 80, 200], shelter: [150],
+  location_reveal: [250, 100, 250], go: [300, 100, 300, 100, 600], emergency: [800, 200, 800, 200, 800],
+  speed_warning: [200, 100, 200], pause: [150], resume: [150], badge: [80, 40, 80], player_left: [100],
+};
+document.addEventListener('vx:play', e => {
+  const pat = VIBRATE[e.detail];
+  if (pat && navigator.vibrate) { try { navigator.vibrate(pat); } catch (err) {} }
+});
 // Visual pulse that goes with the scary sounds
 document.addEventListener('vx:play', e => {
   const ev = e.detail, el = document.getElementById('dangerPulse');
@@ -752,13 +788,33 @@ async function requestWakeLock() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   requestWakeLock();
-  // Tab/screen may have suspended the GPS watcher while hidden - force a fresh fix
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(onGPS, () => {}, {
-      enableHighAccuracy: true, timeout: 15000, maximumAge: 0
-    });
-  }
+  restartTracking();
 });
+// Back on the screen (screen lock, other app, back/forward): GPS watcher, live connection and state again.
+function restartTracking() {
+  if (navigator.geolocation && typeof onGPS === 'function') {
+    try { if (gpsWatcher !== null) navigator.geolocation.clearWatch(gpsWatcher); } catch (e) {}
+    gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy: true, timeout: 30000, maximumAge: 5000});
+    navigator.geolocation.getCurrentPosition(onGPS, () => {}, {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
+  }
+  if (typeof connectWS === 'function') connectWS();
+  if (typeof pollState === 'function') setTimeout(pollState, 300);
+}
+// A page that comes back from the browser cache (back/forward) has stopped its GPS: load it fresh.
+window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+// The back button must not take you out of a running game by accident.
+(function guardBackButton() {
+  const push = act => { try { history.pushState({vxGame: 1, act: !!act}, '', location.href); } catch (e) {} };
+  if (!history.state || !history.state.vxGame) push(false);
+  // Chrome skips history entries that were added before a tap, so add one again after a tap
+  document.addEventListener('pointerdown', () => { if (!history.state || !history.state.act) push(true); }, {capture: true});
+  window.addEventListener('popstate', () => {
+    if (endScreenShown) return;
+    push(false);
+    showNotif('<i class="fas fa-hand"></i> Je zit nog in het spel. Stoppen? Kies Menu → Spel verlaten.', 6000);
+    restartTracking();
+  });
+})();
 
 // â”€â”€ Map init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function initMap() {
@@ -897,14 +953,45 @@ function updateZoneBanner(){
     const d=distM(lastLat,lastLon,zonePending.center.lat,zonePending.center.lng);
     where=` · nieuw centrum ${fmtDist(d)} naar het ${bearingText(lastLat,lastLon,zonePending.center.lat,zonePending.center.lng)}`;
   }
-  el.innerHTML=`<i class="fas fa-triangle-exclamation"></i> Zone krimpt over <b>${fmtMM(left)}</b>${where}`;
+  el.innerHTML=`<div><i class="fas fa-triangle-exclamation"></i> Zone krimpt over</div><div class="zb-t">${fmtMM(left)}</div>${where?`<div class="zb-s">${where.replace(/^ · /,'')}</div>`:''}`;
   el.classList.add('show');
   if(left<=0 && Date.now()-zonePending.at>8000){ zonePending=null; clearPf(zonePreview); el.classList.remove('show'); }
 }
 setInterval(updateZoneBanner,1000);
 function applyZone(points, inSec, info){
-  PLAYFIELD=Object.assign({},PLAYFIELD,{points});
+  PLAYFIELD=Object.assign({color:'storm',forbidden:[]},PLAYFIELD||{},{points});
   drawPlayfieldOnMap();
+}
+// The same zone news can come from the live connection or from the 10-second check: announce it once.
+let zonePhaseSeen = null, zoneWarnSeen = null, zoneFinalSeen = false;
+function announceZoneWarning(info, inSec){
+  zoneWarnSeen = info.phase;
+  showZonePreview(info, inSec); updateZoneBanner();
+  VXSound.play('zone_shrink');
+  showToast(`De zone wordt over ${fmtMM(inSec)} kleiner. Loop naar het nieuwe centrum!`, 'warn', 9000);
+  showNotif('<i class="fas fa-bullseye"></i> De zone wordt kleiner! Kijk op de kaart voor het nieuwe centrum.', 9000);
+}
+function announceZoneShrunk(phase, points){
+  zonePhaseSeen = Math.max(zonePhaseSeen || 0, phase || 0);
+  zonePending=null; clearPf(zonePreview); updateZoneBanner();
+  if (points) applyZone(points);
+  VXSound.play('zone_shrink');
+  showToast('De zone is kleiner geworden! Blijf binnen de lijn.', 'error', 8000);
+  showNotif('<i class="fas fa-circle-dot"></i> De zone is nu kleiner!', 7000);
+}
+function zoneFromState(d){
+  if (d.zone_points && (!PLAYFIELD || !PLAYFIELD.points || JSON.stringify(d.zone_points) !== JSON.stringify(PLAYFIELD.points))) applyZone(d.zone_points);
+  if (!d.zone) return;
+  const phase = d.zone.phase || 0, pend = d.zone.pending, inSec = Math.max(0, d.zone.next_in || 0);
+  if (zonePhaseSeen === null) {                         // first check after (re)loading: show it, no alarm
+    zonePhaseSeen = phase; zoneWarnSeen = pend ? pend.phase : phase; zoneFinalSeen = !!d.zone.final;
+    if (pend) showZonePreview(pend, inSec);
+    return;
+  }
+  if (phase > zonePhaseSeen) announceZoneShrunk(phase, null);
+  if (pend && pend.phase !== zoneWarnSeen && pend.phase > zonePhaseSeen) announceZoneWarning(pend, inSec);
+  else if (pend && !zonePending) showZonePreview(pend, inSec);
+  if (d.zone.final && !zoneFinalSeen) { zoneFinalSeen = true; VXSound.play('zone_shrink'); showToast('Dit is de laatste zone. Hij wordt niet kleiner.', 'info', 7000); }
 }
 
 function mkIcon(col, label, pulse, img) {
@@ -1039,12 +1126,12 @@ function handleMissionResult(m) {
     showToast(`Missie gehaald (${m.tier_name || ''})! +${fmtPts(m.done)} punten`, 'success', 8000); VXSound.play('mission_done');
     setMyMission(null); setTimeout(pollState, 400); return;
   }
-  if (m.ended) { showToast(m.ended, 'info', 8000); setMyMission(null); return; }
+  if (m.ended) { showToast(m.ended, 'info', 8000); VXSound.play('mission_fail'); setMyMission(null); return; }
   if ('active' in m) setMyMission(m.active);
   if (m.offer) {
     missionOffer = m.offer;
     if (dismissedOffer !== m.offer.point && !document.getElementById('missionSheet').classList.contains('open')) {
-      VXSound.play('mission_new'); if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+      VXSound.play('mission_new');
       openMissionSheet(m.offer);
     }
     updateMissionBar();
@@ -1082,7 +1169,7 @@ function stopMission() {
   if (!confirm(pen ? `Stoppen met deze missie? Dat kost ${fmtPts(pen)} punten, want je kreeg de plek van een hunter.` : 'Stoppen met deze missie? Dat kost niets, maar je krijgt ook geen punten.')) return;
   fetch('/api/game/' + CODE + '/mission/stop', {method: 'POST'}).then(r => r.json()).then(d => {
     if (d.error) { showToast(d.error, 'error'); return; }
-    setMyMission(null); showToast(d.message, pen ? 'warn' : 'info', 7000);
+    setMyMission(null); showToast(d.message, pen ? 'warn' : 'info', 7000); VXSound.play('mission_fail');
     if (d.points !== undefined) document.getElementById('ip-pts').textContent = fmtPts(d.points);
   });
 }
@@ -1102,7 +1189,7 @@ function useItem(id) {
   fetch('/api/game/' + CODE + '/item', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({item: id})})
     .then(r => r.json()).then(d => {
       if (d.error) { showToast(d.error, 'warn', 6000); return; }
-      renderItems(d.items); VXSound.play('power');
+      renderItems(d.items); VXSound.play('item');
       showToast(d.message, 'success', 7000); showNotif(d.message, 5000);
       if (d.zone_pressure) updateZoneBar(d.zone_pressure);
     }).catch(() => showToast('Gebruiken mislukt', 'error'));
@@ -1130,7 +1217,7 @@ function handleShelter(s) {
   shelterUntil = Date.now() + (s.protect_left || 0) * 1000;
   if (s.just_entered) {
     showToast('Je zit in een schuilkelder! Krijgen de hunters in de komende 90 seconden je locatie, dan komt die pas 90 seconden na binnenkomst.', 'success', 9000);
-    if (navigator.vibrate) navigator.vibrate(150);
+    VXSound.play('shelter');
   }
 }
 
@@ -1139,7 +1226,7 @@ let trackedUntil = 0;
 function handleTracked(sec) {
   const was = trackedUntil > Date.now();
   trackedUntil = sec > 0 ? Date.now() + sec * 1000 : 0;
-  if (sec > 0 && !was) { VXSound.play('target_start'); if (navigator.vibrate) navigator.vibrate([300, 100, 300]);
+  if (sec > 0 && !was) { VXSound.play('tracked');
     showNotif('Er zit een tracker op je! De hunters zien je ' + sec + ' seconden live.', 7000); }
   tickTracked();
 }
@@ -1158,7 +1245,7 @@ function handleFrozen(f) {
   if (f && f.left > 0) {
     const was = frozenUntil > Date.now();
     frozenUntil = Date.now() + f.left * 1000;
-    if (!was) { VXSound.play('target_start'); if (navigator.vibrate) navigator.vibrate([400, 100, 400]); }
+    if (!was) VXSound.play('freeze');
   } else if (f === null) frozenUntil = 0;
   tickFrozen();
 }
@@ -1266,9 +1353,10 @@ function onGPS(pos) {
       document.getElementById('ip-dist').textContent = Math.round(d.distance) + 'm';
     }
     updateZoneBar(d.zone_pressure);
+    if (d.success && d.zone_pressure && !d.eliminated) handleZoneStatus(!!d.zone_pressure.outside, !!d.zone_pressure.forbidden, false);
     if (MY_ROLE === 'runner' && d.success) {
       handleMissionResult(d.mission);
-      if (d.mission_note) showToast(d.mission_note, 'info', 8000);
+      if (d.mission_note) { showToast(d.mission_note, 'info', 8000); VXSound.play('mission_fail'); }
       handleShelter(d.shelter);
       if (d.freeze) handleFrozen(d.freeze.left ? {left: d.freeze.left} : null);
     }
@@ -1297,6 +1385,7 @@ function updateLocCountdown(d) {
       html: '<div style="transform:translate(-50%,-50%);white-space:nowrap;font-size:10px;font-weight:800;color:#fff;background:rgba(239,68,68,.9);padding:2px 7px;border-radius:99px;border:1px solid #fff"><i class="fas fa-eye"></i> hunters zien dit</div>'})}).addTo(map));
     if (locSlot !== null && lv.view.slot !== locSlot) {
       locFlashUntil = Date.now() + 15000;
+      VXSound.play('location_reveal', {cooldown: 20000});
       showToast('De hunters hebben je locatie gekregen (rode stip). Zij lopen daar naartoe. Ren de andere kant op!', 'warn', 9000);
     }
     locSlot = lv.view.slot;
@@ -1349,6 +1438,27 @@ function updateZoneBar(z) {
     document.getElementById('zoneBarText').textContent = 'Je bent terug in het speelveld. Je leven loopt langzaam weer vol.';
   }
 }
+// Out of the field: alarm at once, again every 12 s while outside, and a "back inside" sound.
+let wasOutsideZone = false, zoneOutSoundAt = 0;
+function handleZoneStatus(outside, forbidden, fromPoll) {
+  const now = Date.now();
+  if (outside) {
+    const msg = forbidden ? 'Je bent in een verboden gebied. Ga direct weg!' : 'Je bent buiten het speelveld. Ga direct terug!';
+    if (!wasOutsideZone) {
+      wasOutsideZone = true; zoneOutSoundAt = now;
+      VXSound.play('zone_out');
+      showNotif('<i class="fas fa-triangle-exclamation"></i> ' + msg, 8000);
+      if (fromPoll) showToast(msg, 'error', 10000);
+    } else if (now - zoneOutSoundAt > 12000) {
+      zoneOutSoundAt = now;
+      VXSound.play('zone_out');
+    }
+  } else if (wasOutsideZone) {
+    wasOutsideZone = false;
+    VXSound.play('zone_back');
+    showToast('Je bent weer binnen het speelveld.', 'success', 4000);
+  }
+}
 let outShown = false;
 function lastOutWhy() { return 'Je bent af.'; }
 function showOutScreen(why) {
@@ -1381,7 +1491,7 @@ function pollState() {
       else if (sawHeadstart && !headstartOver) playGoOnce();
       if (d.missions) updateMissions(d.missions);
       if (MY_ROLE === 'runner' && 'my_mission' in d) setMyMission(d.my_mission);
-      if (d.mission_note) showToast(d.mission_note, 'info', 8000);
+      if (d.mission_note) { showToast(d.mission_note, 'info', 8000); VXSound.play('mission_fail'); }
       renderItems(d.items || []);
       renderShelters(d.shelters || []);
       if (MY_ROLE === 'runner') { handleFrozen(d.my_frozen || null); renderMyDecoy(d.my_decoy); handleTracked(d.my_tracked || 0); }
@@ -1390,10 +1500,7 @@ function pollState() {
         catchCooldownUntil = Date.now() + (d.catch_cooldown || 0) * 1000;
         anyFrozen = (d.players || []).some(p => p.role === 'runner' && p.frozen_left > 0);
       }
-      if (d.zone) {
-        if (d.zone_points && PLAYFIELD && JSON.stringify(d.zone_points) !== JSON.stringify(PLAYFIELD.points)) applyZone(d.zone_points);
-        if (d.zone.pending && !zonePending) showZonePreview(d.zone.pending, Math.max(0, d.zone.next_in || 0));
-      }
+      zoneFromState(d);
       lastState = d;
       lastStatePlayers = d.players || [];
       syncDeadlinesFromState(d);
@@ -1410,7 +1517,7 @@ function pollState() {
         const hti = document.getElementById('hunterTargetInfo');
         if (hti && hunterTargetUntil > 0) {
           hti.style.display = 'block';
-          hti.innerHTML = `<i class="fas fa-bullseye"></i> Target<br>${escHtml(hunterTargetName)} nog ${fmtMM(hunterTargetUntil)}`;
+          hti.innerHTML = `<div><i class="fas fa-bullseye"></i> Target: ${escHtml(hunterTargetName)}</div><div class="hti-t">${fmtMM(hunterTargetUntil)}</div>`;
         }
       }
       updatePowerButton();
@@ -1427,20 +1534,11 @@ function pollState() {
       updateMarkers(d.players);
       updateLootboxes(d.lootboxes || []);
 
+      if (!d.is_caught && (d.playfield_status === 'outside' || d.playfield_status === 'forbidden' || d.playfield_status === 'inside'))
+        handleZoneStatus(d.playfield_status !== 'inside', d.playfield_status === 'forbidden', true);
       // Runner UI
       if (MY_ROLE === 'runner') {
         updateTargetAlert(d.active_target);
-        const badZone = d.playfield_status === 'outside' || d.playfield_status === 'forbidden';
-        if (!badZone && wasOutside) VXSound.play('zone_back');
-        wasOutside = badZone;
-        if (badZone && Date.now() - playfieldWarnAt > 12000) {
-          playfieldWarnAt = Date.now();
-          VXSound.play('zone_out');
-          const msgBad = d.playfield_status === 'forbidden' ? 'Je bent in een verboden gebied. Ga direct weg!' : 'Je bent buiten het speelveld. Ga direct terug!';
-          showToast(msgBad, 'error', 10000);
-          showNotif(msgBad, 8000);
-          if (navigator.vibrate) navigator.vibrate([250, 120, 250]);
-        }
       // Live distance update while targeted
       if (d.active_target && d.active_target.distance !== null) {
         const distEl = document.getElementById('taDist');
@@ -1457,7 +1555,7 @@ function pollState() {
       }
 
       // Hunter: runner panel + cooldown
-      if (MY_ROLE === 'hunter') buildRunnerPanel(d.players);
+      if (MY_ROLE === 'hunter') { buildRunnerPanel(d.players); checkNewRunnerSpots(d.players); }
 
       renderHunterTargetInfo();
 
@@ -1465,6 +1563,17 @@ function pollState() {
     }).catch(() => {});
 }
 
+// Hunter: a sound when the runners' spots on the map are renewed (not for live tracking)
+let runnerSlots = null;
+function checkNewRunnerSpots(players) {
+  const now = {};
+  (players || []).forEach(p => { if (p.role === 'runner' && p.lat && !p.location_live) now[p.id] = p.location_slot; });
+  if (runnerSlots !== null && headstartOver && Object.keys(now).some(id => runnerSlots[id] !== undefined && runnerSlots[id] !== now[id])) {
+    VXSound.play('location_reveal', {cooldown: 20000});
+    showToast('Nieuwe locaties van de runners op de kaart!', 'info', 6000);
+  }
+  runnerSlots = now;
+}
 // â”€â”€ Markers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function updateMarkers(players) {
   const visibleRunners = [];
@@ -1528,7 +1637,7 @@ function buildRunnerPanel(players) {
     if (!r.is_offline) delete offlineSince[r.id];
     const offlineSec = r.offline_remaining || 0;
     const offlineUntil = r.offline_until ? parseServerTime(r.offline_until) : (offlineSec ? Date.now() + offlineSec * 1000 : 0);
-    const offlineStr = r.is_offline ? `<span style="color:var(--warn)">Offline nog <span class="offline-countdown" data-until="${offlineUntil}">${fmtMM(offlineSec)}</span></span><br>` : '';
+    const offlineStr = r.is_offline ? `<span class="rc-off"><i class="fas fa-eye-slash"></i> Offline <b class="offline-countdown" data-until="${offlineUntil}">${fmtMM(offlineSec)}</b></span>` : '';
     runnerStore[r.id] = r;  // store by id for safe onclick
     return `<div class="rcard ${cls}" onclick="openActionModal(${r.id})"> 
       <div class="rc-name">${statusIcon} ${r.codename || r.username}</div>
@@ -1730,7 +1839,7 @@ function renderHunterTargetInfo() {
   if (!el) return;
   if (hunterTargetUntil > 0) {
     el.style.display = 'block';
-    el.innerHTML = `<i class="fas fa-bullseye"></i> Target<br>${escHtml(hunterTargetName)} nog ${fmtMM(hunterTargetUntil)}`;
+    el.innerHTML = `<div><i class="fas fa-bullseye"></i> Target: ${escHtml(hunterTargetName)}</div><div class="hti-t">${fmtMM(hunterTargetUntil)}</div>`;
   } else {
     el.style.display = 'none';
     el.innerHTML = '';
@@ -2344,8 +2453,10 @@ function showEndScreen(data) {
 }
 
 // â”€â”€ WebSocket â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-let ws;
+let ws, wsRetry = null;
 function connectWS() {
+  if (wsRetry) { clearTimeout(wsRetry); wsRetry = null; }
+  if (ws && ws.readyState <= 1) return;                 // already open or opening
   const proto = location.protocol==='https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/${CODE}`);
   ws.onmessage = e => {
@@ -2434,15 +2545,18 @@ function connectWS() {
         break;
       case 'runner_frozen':
         if (d.runner_id === MY_ID) { setTimeout(pollState, 200); handleFrozen({left: d.seconds || 20}); }
-        else if (MY_ROLE === 'hunter') { anyFrozen = true; updateCatchButton(); showToast(`${d.by_codename || 'Een hunter'} heeft ${d.runner_codename || 'een runner'} bevroren! Snel pakken.`, 'info', 6000); }
+        else if (MY_ROLE === 'hunter') { anyFrozen = true; updateCatchButton(); VXSound.play('freeze'); showToast(`${d.by_codename || 'Een hunter'} heeft ${d.runner_codename || 'een runner'} bevroren! Snel pakken.`, 'info', 6000); }
         break;
       case 'runner_tracked':
         if (d.runner_id === MY_ID) handleTracked(d.seconds || 90);
-        else if (MY_ROLE === 'hunter') showToast(`${d.by_codename || 'Een hunter'} heeft een tracker op ${d.runner_codename || 'een runner'}: ${d.seconds || 90} seconden live!`, 'success', 7000);
+        else if (MY_ROLE === 'hunter') {
+          VXSound.play('tracked');
+          showToast(`${d.by_codename || 'Een hunter'} heeft een tracker op ${d.runner_codename || 'een runner'}: ${d.seconds || 90} seconden live!`, 'success', 7000);
+        }
         setTimeout(pollState, 300);
         break;
       case 'emp_blast':
-        VXSound.play('power');
+        VXSound.play('item');
         if ((d.hit_ids || []).includes(MY_ID)) { showToast(`EMP van ${d.codename || 'een tegenstander'}! Je power moet opnieuw laden.`, 'error', 8000); showNotif('EMP! Je power moet opnieuw laden.', 6000); }
         setTimeout(pollState, 400);
         break;
@@ -2496,6 +2610,7 @@ function connectWS() {
         }
         break;
       case 'player_left':
+        VXSound.play('player_left');
         if (d.promoted_user_id) {
           showToast(`${d.username} heeft het spel verlaten. ${d.promoted_codename || 'Een runner'} is nu Hunter.`, 'warn', 8000);
           showNotif(`Nieuwe Hunter: ${d.promoted_codename || 'runner'}`, 7000);
@@ -2505,6 +2620,7 @@ function connectWS() {
         }
         break;
       case 'runner_promoted':
+        VXSound.play('player_left');
         if (d.promoted_user_id === MY_ID) {
           showToast('Jij bent gekozen als nieuwe Hunter. Kaart wordt bijgewerkt...', 'warn', 9000);
           showNotif('Jij bent nu Hunter!', 9000);
@@ -2534,20 +2650,17 @@ function connectWS() {
         setTimeout(pollState, 300);
         break;
       case 'zone_warning':
-        showZonePreview(d, d.in_sec); updateZoneBanner();
-        VXSound.play('zone_shrink');
-        showToast(`De zone wordt over ${fmtMM(d.in_sec)} kleiner. Loop naar het nieuwe centrum!`, 'warn', 9000);
-        showNotif('<i class="fas fa-bullseye"></i> De zone wordt kleiner! Kijk op de kaart voor het nieuwe centrum.', 9000);
+        if (d.phase !== zoneWarnSeen) announceZoneWarning(d, d.in_sec);
         break;
       case 'zone_shrunk':
-        zonePending=null; clearPf(zonePreview); updateZoneBanner();
-        applyZone(d.points);
-        VXSound.play('zone_shrink');
-        showToast('De zone is kleiner geworden! Blijf binnen de lijn.', 'error', 8000);
+        if (zonePhaseSeen === null || d.phase > zonePhaseSeen) announceZoneShrunk(d.phase, d.points);
+        else applyZone(d.points);
         break;
       case 'zone_final':
-        showToast('Dit is de laatste zone. Hij wordt niet kleiner.', 'info', 7000); break;
+        if (!zoneFinalSeen) { zoneFinalSeen = true; VXSound.play('zone_shrink'); showToast('Dit is de laatste zone. Hij wordt niet kleiner.', 'info', 7000); }
+        break;
       case 'bot_notice':
+        VXSound.play('chat', {cooldown: 3000});
         showToast(d.message, 'warn', 9000); break;
       case 'player_zone_out':
         if (d.user_id === MY_ID) showOutScreen(d.forbidden ? 'Je stond te lang in een verboden gebied.' : 'Je was te lang buiten het speelveld.');
@@ -2557,9 +2670,9 @@ function connectWS() {
         break;
     }
   };
-  ws.onclose = () => setTimeout(connectWS, 3000);
-  setInterval(()=>ws&&ws.readyState===1&&ws.send(JSON.stringify({event:'ping'})),25000);
+  ws.onclose = () => { if (!wsRetry) wsRetry = setTimeout(connectWS, 3000); };
 }
+setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({event: 'ping'})); }, 25000);
 connectWS();
 
 // â”€â”€ Countdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -2650,6 +2763,16 @@ setInterval(()=>{
     if (ip) ip.textContent = `${offUsesLeft} van {{ game.offline_uses }}`;
     setTimeout(pollState, 400);
   }
+  const ob = document.getElementById('offBanner');
+  if (ob) {
+    const on = isOffline && offlineRemaining > 0;
+    ob.classList.toggle('show', on);
+    if (on) {
+      document.getElementById('obT').textContent = fmtMM(offlineRemaining);
+      ob.classList.toggle('ending', offlineRemaining <= 15);
+      const lc = document.getElementById('locCd'); if (lc) lc.classList.add('off-hide');
+    } else { const lc = document.getElementById('locCd'); if (lc) lc.classList.remove('off-hide'); }
+  }
   document.querySelectorAll('.offline-countdown').forEach(el=>{
     const until = parseInt(el.dataset.until || '0', 10) || 0;
     const left = until > 0 ? Math.max(0, Math.ceil((until - now) / 1000)) : 0;
@@ -2669,6 +2792,16 @@ setInterval(()=>{
   if (targetCooldown > 0) targetCooldown--;
 },1000);
 
+(function stackTopBanners(){
+  const st = document.getElementById('topStack'); if (!st) return;
+  ['offBanner', 'locCd', 'trackBadge', 'zoneBanner', 'zoneBar'].forEach(id => { const e = document.getElementById(id); if (e) st.appendChild(e); });
+})();
+function placeRunnerPanel(){
+  const hti = document.getElementById('hunterTargetInfo'), rp = document.getElementById('runnerPanel');
+  if (!hti || !rp) return;
+  rp.style.top = (hti.style.display === 'block' ? hti.offsetTop + hti.offsetHeight + 8 : 58) + 'px';
+}
+setInterval(placeRunnerPanel, 1000);
 // â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 if (GAME_STATUS === 'active') VXSound.startAmbient();
 if (MY_CLASS && GAME_STATUS === 'active') setTimeout(() => showToast(`Jouw class: ${MY_CLASS.name} · power ${MY_CLASS.power}. ${MY_CLASS.desc || ''} Gebruik de bliksemknop links onderaan zodra de voorsprong voorbij is.`, 'info', 14000), 2500);

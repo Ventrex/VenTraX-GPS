@@ -23,3 +23,6 @@ Thumbs.db
 # Uploaded theme sounds (live in a volume, not in git)
 static/audio/themes/*
 !static/audio/themes/.gitkeep
+
+# Kaarttegels voor het missieverslag (cache)
+instance/tiles/
