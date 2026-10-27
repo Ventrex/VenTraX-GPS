@@ -1534,8 +1534,9 @@ function pollState() {
       updateMarkers(d.players);
       updateLootboxes(d.lootboxes || []);
 
-      if (!d.is_caught && (d.playfield_status === 'outside' || d.playfield_status === 'forbidden' || d.playfield_status === 'inside'))
-        handleZoneStatus(d.playfield_status !== 'inside', d.playfield_status === 'forbidden', true);
+      // same 5 m GPS margin as the location updates (zone_pressure), so the two never disagree
+      if (!d.is_caught && d.zone_pressure && d.playfield_status && d.playfield_status !== 'none' && d.playfield_status !== 'unknown')
+        handleZoneStatus(!!d.zone_pressure.outside, !!d.zone_pressure.forbidden, true);
       // Runner UI
       if (MY_ROLE === 'runner') {
         updateTargetAlert(d.active_target);
