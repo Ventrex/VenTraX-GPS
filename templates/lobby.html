@@ -973,5 +973,9 @@ function pickPersona(id, already) {
 }
 fetch('/api/game/' + CODE + '/lobby_state').then(r => r.json()).then(d => (d.players || []).forEach(p => { if (p.persona) onPersona(p.user_id, p.persona); }));
 loadPersonas();
+
+// Back/forward can show this page from the browser cache while the game already runs: load it fresh,
+// so the server sends you straight to the game (and your location is sent again).
+window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 </script>
 {% endblock %}

@@ -168,7 +168,14 @@
       chat: function (t, v) { tick(t, 520, v * 0.15); },
       photo: function (t, v) { noise(t, 0.1, v * 0.4, 'highpass', 3000, 3000); },
       badge: function (t, v) { bell(t, 523, v * 0.4); bell(t + 0.2, 784, v * 0.4); },
-      emergency: function (t, v) { for (var i = 0; i < 4; i++) { osc('square', 800, 800, t + i * 0.3, 0.14, v * 0.4); osc('square', 600, 600, t + i * 0.3 + 0.15, 0.14, v * 0.4); } }
+      emergency: function (t, v) { for (var i = 0; i < 4; i++) { osc('square', 800, 800, t + i * 0.3, 0.14, v * 0.4); osc('square', 600, 600, t + i * 0.3 + 0.15, 0.14, v * 0.4); } },
+      location_reveal: function (t, v) { bell(t, 196, v * 0.6); whisper(t + 0.1, 1.0, v * 0.3); heartbeat(t + 0.4, v * 0.8, 100); },
+      freeze: function (t, v) { noise(t, 1.2, v * 0.5, 'highpass', 6000, 2500); bell(t, 1047, v * 0.35); bell(t + 0.15, 1319, v * 0.3); },
+      tracked: function (t, v) { for (var i = 0; i < 3; i++) osc('square', 1400, 1400, t + i * 0.18, 0.08, v * 0.3); drone(t, 1.2, 70, v * 0.6); },
+      item: function (t, v) { osc('sawtooth', 120, 900, t, 0.45, v * 0.35); bell(t + 0.4, 523, v * 0.35); },
+      mission_fail: function (t, v) { bell(t, 220, v * 0.5); bell(t + 0.35, 185, v * 0.5); creak(t + 0.6, v * 0.6); },
+      shelter: function (t, v) { creak(t, v * 0.7); osc('sine', 110, 110, t + 0.6, 0.8, v * 0.4); },
+      player_left: function (t, v) { creak(t, v * 0.6); }
     },
     classic: {
       intro: function (t, v) { tick(t, 392, v * 0.3); tick(t + 0.15, 523, v * 0.3); tick(t + 0.3, 659, v * 0.3); },
@@ -177,7 +184,17 @@
       end: function (t, v) { tick(t, 523, v * 0.4); tick(t + 0.2, 392, v * 0.4); tick(t + 0.4, 262, v * 0.5); },
       hunter_near: function (t, v) { tick(t, 440, v * 0.3); tick(t + 0.2, 440, v * 0.3); },
       hunter_close: function (t, v) { tick(t, 880, v * 0.3); tick(t + 0.12, 880, v * 0.3); tick(t + 0.24, 880, v * 0.3); },
-      zone_out: function (t, v) { osc('sawtooth', 330, 330, t, 0.4, v * 0.2); },
+      zone_out: function (t, v) { for (var i = 0; i < 3; i++) { osc('sawtooth', 520, 520, t + i * 0.32, 0.18, v * 0.3); osc('sawtooth', 390, 390, t + i * 0.32 + 0.16, 0.14, v * 0.3); } },
+      zone_back: function (t, v) { tick(t, 523, v * 0.3); tick(t + 0.12, 784, v * 0.35); },
+      end_win: function (t, v) { tick(t, 523, v * 0.35); tick(t + 0.15, 659, v * 0.35); tick(t + 0.3, 784, v * 0.4); tick(t + 0.5, 1047, v * 0.45); },
+      end_lose: function (t, v) { tick(t, 392, v * 0.35); tick(t + 0.2, 330, v * 0.35); tick(t + 0.4, 262, v * 0.4); },
+      location_reveal: function (t, v) { tick(t, 988, v * 0.35); tick(t + 0.14, 988, v * 0.35); tick(t + 0.28, 740, v * 0.4); },
+      freeze: function (t, v) { osc('sine', 1800, 600, t, 0.6, v * 0.3); tick(t + 0.05, 1568, v * 0.2); },
+      tracked: function (t, v) { for (var i = 0; i < 4; i++) tick(t + i * 0.15, 1200, v * 0.3); },
+      item: function (t, v) { osc('sine', 200, 1200, t, 0.35, v * 0.3); tick(t + 0.35, 880, v * 0.3); },
+      mission_fail: function (t, v) { tick(t, 440, v * 0.35); tick(t + 0.2, 349, v * 0.35); tick(t + 0.4, 294, v * 0.4); },
+      shelter: function (t, v) { tick(t, 330, v * 0.3); tick(t + 0.15, 440, v * 0.3); },
+      player_left: function (t, v) { tick(t, 392, v * 0.25); tick(t + 0.15, 330, v * 0.25); },
       zone_shrink: function (t, v) { osc('sawtooth', 600, 200, t, 1.2, v * 0.25); tick(t + 0.1, 440, v * 0.3); tick(t + 0.4, 330, v * 0.3); },
       speed_warning: function (t, v) { osc('sawtooth', 330, 330, t, 0.4, v * 0.2); },
       caught: function (t, v) { tick(t, 330, v * 0.4); tick(t + 0.15, 247, v * 0.4); },
@@ -236,8 +253,9 @@
     }
     fallback(ev);
   }
+  var OPTIONAL = {site_music: 1, ambient: 1};          // only these follow the "built-in sounds" switch
   function fallback(ev) {
-    if (!theme || !theme.synth) return;
+    if (!theme || (!theme.synth && OPTIONAL[ev])) return;
     var fn = synthFor(ev); if (!fn) return;
     try { fn(ctx.currentTime + 0.02, 0.7); } catch (e) {}
   }

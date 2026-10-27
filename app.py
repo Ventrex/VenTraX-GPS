@@ -697,12 +697,19 @@ SOUND_EVENTS = [
     ('target_end',   'Acties',      'Target knop voorbij',           'De target-tijd is afgelopen.', False),
     ('power',        'Acties',      'Class power gebruikt',          'Een speciale kracht wordt ingezet.', False),
     ('hazard',       'Acties',      'Val geactiveerd',               'Landmijn, laser of tripwire gaat af.', False),
+    ('location_reveal','Acties',    'Locatie gedeeld',               'Hunters krijgen een nieuwe locatie van de runners (runner: jouw locatie is nu bekend).', False),
+    ('freeze',       'Acties',      'Bevroren',                      'Een runner is bevroren met de freezegun.', False),
+    ('tracked',      'Acties',      'Tracker-dart raak',             'Een runner heeft een tracker: hunters zien hem live.', False),
+    ('item',         'Acties',      'Item gebruikt',                 'Een EMP of Medkit wordt gebruikt.', False),
+    ('mission_fail', 'Acties',      'Missie mislukt',                'De tijd van een missie is op of de runner stopt ermee.', False),
+    ('shelter',      'Acties',      'Schuilkelder',                  'Een runner stapt een schuilkelder in.', False),
     ('pause',        'Overig',      'Pauze',                         'Het spel wordt gepauzeerd.', False),
     ('resume',       'Overig',      'Pauze voorbij',                 'Het spel gaat verder.', False),
     ('chat',         'Overig',      'Chatbericht',                   'Nieuw chatbericht.', False),
     ('photo',        'Overig',      'Nieuwe foto',                   'Nieuwe foto in de feed.', False),
     ('badge',        'Overig',      'Badge behaald',                 'Je hebt een badge verdiend.', False),
     ('emergency',    'Overig',      'Noodknop',                      'Iemand heeft de noodknop gebruikt.', False),
+    ('player_left',  'Overig',      'Speler weg',                    'Iemand heeft het spel verlaten.', False),
 ]
 SOUND_EVENT_KEYS = [e[0] for e in SOUND_EVENTS]
 SOUND_SKINS = [('classic', 'Standaard (neutraal)'), ('halloween', 'Halloween (eng)')]
@@ -925,27 +932,108 @@ def save_audio(file, folder):
     file.save(os.path.join(folder, name))
     return name
 
-def render_route_sketch(points, size=(360, 360)):
-    """Draw a simple normalized line sketch of a player's route from (lat,lon)
-    points - no map tiles/network calls, just a schematic path for the e-mail."""
-    if len(points) < 2:
+ROUTE_TILE_URL = os.environ.get('ROUTE_TILE_URL') or \
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}'
+ROUTE_TILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instance', 'tiles')
+ROUTE_TILE_BUDGET_SEC = 12          # one e-mail never waits longer than this for map tiles
+
+def _world_px(lat, lon, z):
+    """Web-Mercator pixel position of a point at zoom z (256 px tiles)."""
+    lat = max(-85.0, min(85.0, float(lat)))
+    n = 256 * (2 ** z)
+    x = (float(lon) + 180.0) / 360.0 * n
+    s = math.sin(math.radians(lat))
+    y = (0.5 - math.log((1 + s) / (1 - s)) / (4 * math.pi)) * n
+    return x, y
+
+def _fetch_tile(z, x, y, budget):
+    """One map tile (from the disk cache when we have it). None when it cannot be loaded in time."""
+    n = 2 ** z
+    x %= n
+    if y < 0 or y >= n:
         return None
-    lats = [p[0] for p in points]; lons = [p[1] for p in points]
-    lat_span = max(max(lats) - min(lats), 1e-6)
-    lon_span = max(max(lons) - min(lons), 1e-6)
-    pad = 24
+    path = os.path.join(ROUTE_TILE_DIR, str(z), str(x), f'{y}.png')
+    try:
+        if os.path.exists(path):
+            return Image.open(path).convert('RGB')
+    except Exception:
+        pass
+    if budget['left'] <= 0 or budget.get('failed', 0) >= 3:
+        return None
+    t0 = time.time()
+    try:
+        r = http_requests.get(ROUTE_TILE_URL.format(z=z, x=x, y=y), timeout=min(4.0, max(0.5, budget['left'])),
+                              headers={'User-Agent': 'VenTrax/1.0 (route map in game report)'})
+        if r.status_code != 200:
+            raise ValueError(f'http {r.status_code}')
+        img = Image.open(io.BytesIO(r.content)).convert('RGB')
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            img.save(path, format='PNG')
+        except Exception:
+            pass
+        return img
+    except Exception:
+        budget['failed'] = budget.get('failed', 0) + 1
+        return None
+    finally:
+        budget['left'] -= time.time() - t0
+
+ROUTE_COLORS = {'hunter': (37, 99, 235), 'runner': (16, 185, 129)}
+
+def render_route_sketch(points, size=(360, 360), routes=None, playfield=None, budget=None):
+    """Draw a player's route (or several routes) on a street map, as a PNG for the e-mail.
+    points: [(lat, lon), ...] for one route; routes: [{'points': [...], 'color': (r, g, b)}] for several.
+    The map tiles come from the internet (and are cached); without them the route is drawn on a plain background."""
+    routes = routes or [{'points': points, 'color': (37, 99, 235)}]
+    routes = [r for r in routes if len(r.get('points') or []) >= 2]
+    if not routes:
+        return None
+    budget = budget if budget is not None else {'left': ROUTE_TILE_BUDGET_SEC}
     w, h = size
+    pad = 28
+    every = [p for r in routes for p in r['points']]
+    field = [(p['lat'], p['lng']) for p in (playfield or {}).get('points') or []]
+    lats = [p[0] for p in every]; lons = [p[1] for p in every]
+    # zoom: the closest that still shows the whole route (at most street level)
+    z = 18
+    while z > 3:
+        x0, y0 = _world_px(max(lats), min(lons), z)
+        x1, y1 = _world_px(min(lats), max(lons), z)
+        if (x1 - x0) <= w - 2 * pad and (y1 - y0) <= h - 2 * pad:
+            break
+        z -= 1
+    x0, y0 = _world_px(max(lats), min(lons), z)
+    x1, y1 = _world_px(min(lats), max(lons), z)
+    left, top = (x0 + x1) / 2 - w / 2, (y0 + y1) / 2 - h / 2
     img = Image.new('RGB', size, (241, 245, 249))
-    draw = ImageDraw.Draw(img)
+    got = 0
+    for ty in range(int(top // 256), int((top + h) // 256) + 1):
+        for tx in range(int(left // 256), int((left + w) // 256) + 1):
+            tile = _fetch_tile(z, tx, ty, budget)
+            if tile is not None:
+                img.paste(tile, (int(tx * 256 - left), int(ty * 256 - top)))
+                got += 1
+    if got:                                                   # soften the map a bit so the routes stand out
+        img = Image.blend(img, Image.new('RGB', size, (255, 255, 255)), 0.25)
+    draw = ImageDraw.Draw(img, 'RGBA')
     def to_xy(lat, lon):
-        x = pad + (lon - min(lons)) / lon_span * (w - 2 * pad)
-        y = pad + (1 - (lat - min(lats)) / lat_span) * (h - 2 * pad)  # north = up
-        return (x, y)
-    xy = [to_xy(lat, lon) for lat, lon in points]
-    draw.line(xy, fill=(37, 99, 235), width=3, joint='curve')
-    sx, sy = xy[0]; ex, ey = xy[-1]
-    draw.ellipse([sx - 6, sy - 6, sx + 6, sy + 6], fill=(16, 185, 129))
-    draw.ellipse([ex - 6, ey - 6, ex + 6, ey + 6], fill=(239, 68, 68))
+        x, y = _world_px(lat, lon, z)
+        return (x - left, y - top)
+    if len(field) >= 3:
+        fxy = [to_xy(a, b) for a, b in field]
+        draw.line(fxy + [fxy[0]], fill=(14, 165, 233, 200), width=3)
+    for r in routes:
+        xy = [to_xy(lat, lon) for lat, lon in r['points']]
+        col = tuple(r.get('color') or (37, 99, 235))
+        draw.line(xy, fill=(255, 255, 255, 230), width=7, joint='curve')     # white edge: readable on any map
+        draw.line(xy, fill=col + (255,), width=4, joint='curve')
+        (sx, sy), (ex, ey) = xy[0], xy[-1]
+        draw.ellipse([sx - 7, sy - 7, sx + 7, sy + 7], fill=(16, 185, 129, 255), outline=(255, 255, 255, 255), width=2)
+        draw.ellipse([ex - 7, ey - 7, ex + 7, ey + 7], fill=(239, 68, 68, 255), outline=(255, 255, 255, 255), width=2)
+    if got:
+        draw.rectangle([w - 132, h - 16, w, h], fill=(255, 255, 255, 190))
+        draw.text((w - 128, h - 14), 'Kaart: Esri', fill=(71, 85, 105, 255))
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     return buf.getvalue()
@@ -2991,22 +3079,35 @@ def send_game_summary_email(game):
         for p in audio_posts
     ) or '<li>Geen geluidsfragmenten opgenomen.</li>'
 
-    # Route sketches - a simple schematic line per player from their GPS breadcrumbs
+    # Routes on a street map: everybody together, then one map per player (from their GPS breadcrumbs)
     route_rows = ''
     inline_routes = []
-    for idx, p in enumerate(standings, start=1):
+    tile_budget = {'left': ROUTE_TILE_BUDGET_SEC}
+    pf = get_playfield(game)
+    tracks = []
+    for p in standings:
         pings = (LocationPing.query.filter_by(game_id=game.id, user_id=p.user_id)
                  .order_by(LocationPing.recorded_at.asc()).all())
-        if len(pings) < 2:
-            continue
-        png_bytes = render_route_sketch([(pp.lat, pp.lon) for pp in pings])
+        if len(pings) >= 2:
+            tracks.append((p, [(pp.lat, pp.lon) for pp in pings]))
+    if len(tracks) > 1:
+        png_bytes = render_route_sketch(None, size=(640, 480), playfield=pf, budget=tile_budget,
+                                        routes=[{'points': pts, 'color': ROUTE_COLORS.get(p.role)} for p, pts in tracks])
+        if png_bytes:
+            inline_routes.append(('routeall', png_bytes))
+            route_rows += ('<div style="margin:8px 0 14px"><img src="cid:routeall" alt="alle routes" style="width:100%;max-width:640px;border-radius:12px;border:1px solid #e2e8f0">'
+                           '<div style="font-size:12px;color:#64748b;margin-top:4px">Alle routes: <span style="color:#2563eb">blauw = hunters</span>, '
+                           '<span style="color:#10b981">groen = runners</span>. Groene stip = start, rode stip = einde.</div></div>')
+    for idx, (p, pts) in enumerate(tracks, start=1):
+        png_bytes = render_route_sketch(pts, size=(480, 480), playfield=pf, budget=tile_budget,
+                                        routes=[{'points': pts, 'color': ROUTE_COLORS.get(p.role)}])
         if not png_bytes:
             continue
         cid = f'route{idx}'
         inline_routes.append((cid, png_bytes))
         route_rows += (
-            f'<div style="display:inline-block;text-align:center;margin:8px;width:180px">'
-            f'<img src="cid:{cid}" alt="route" style="width:180px;height:180px;border-radius:10px;border:1px solid #e2e8f0">'
+            f'<div style="display:inline-block;text-align:center;margin:8px;width:240px;vertical-align:top">'
+            f'<img src="cid:{cid}" alt="route" style="width:240px;height:240px;border-radius:10px;border:1px solid #e2e8f0">'
             f'<div style="font-size:12px;color:#64748b;margin-top:4px">{esc(p.codename or p.user.username)} ({p.distance or 0:.0f}m)</div>'
             f'</div>'
         )
@@ -4161,9 +4262,9 @@ def finish_game(game, reason='manual', broadcast=True):
     _clear_gps(game)
     for p in game.players:
         _last_ping_at.pop((game.id, p.user_id), None)
-    send_game_summary_email(game)
     if broadcast:
         hub.broadcast(game.code, 'game_ended', {'code': game.code, 'reason': reason, 'winner_role': winner_role, 'no_points': no_points, 'message': message})
+    send_game_summary_email(game)
     return True
 
 def active_role_counts(game):
