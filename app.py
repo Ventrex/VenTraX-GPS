@@ -1332,7 +1332,7 @@ def save_game_extras(game, form):
         'zone_first_min': form_int('zone_first_min', 10, 1, 120),
         'zone_interval_min': form_int('zone_interval_min', 8, 2, 60),
         'zone_shrink_pct': form_int('zone_shrink_pct', 30, 10, 60),
-        'zone_min_m': form_int('zone_min_m', 200, 50, 1000),
+        'zone_min_m': form_int('zone_min_m', 350, 50, 1000),
     }
     SiteSetting.set(_extras_key(game.id), json.dumps(extras))
     return extras
@@ -1660,14 +1660,21 @@ def get_game_end_result(game):
     except Exception:
         return {}
 
-ZONE_LIFE_DRAIN_SEC = 30      # seconds outside the field until the life bar is empty
-ZONE_LIFE_RECOVER_SEC = 120   # seconds inside the field to fill an empty life bar again
+ZONE_LIFE_DRAIN_SEC = 90      # seconds outside the field until the life bar is empty (time to walk back)
+ZONE_LIFE_RECOVER_SEC = 240   # seconds inside the field to fill an empty life bar again
 
-def update_zone_pressure(game, player, outside_distance_m, forbidden=False):
+def zone_margin_m(accuracy):
+    """GPS is not exact: you only count as outside when you are further out than the GPS error (max 25 m) plus 5 m."""
+    try:
+        return 5 + max(0.0, min(25.0, float(accuracy or 0)))
+    except (TypeError, ValueError):
+        return 5
+
+def update_zone_pressure(game, player, outside_distance_m, forbidden=False, accuracy=0):
     """Life bar of a player: it drains while outside the field (or in a forbidden area) and slowly
     refills inside. `seconds` is the used part of the bar (0 = full life, limit_sec = empty = out)."""
     limit_sec = ZONE_LIFE_DRAIN_SEC
-    margin_m = 5
+    margin_m = zone_margin_m(accuracy)
     now_ts = _now_ts()
     try:
         state = json.loads(SiteSetting.get(_zone_state_key(game.id), '{}') or '{}')
@@ -4380,9 +4387,9 @@ def api_location(code):
     hazard_messages = check_hazard_triggers(game, me, code)
     outside_m = playfield_outside_distance_m(game, lat, lon)
     forbidden = in_forbidden_area(game, lat, lon)
-    zone_pressure = update_zone_pressure(game, me, outside_m, forbidden)
+    zone_pressure = update_zone_pressure(game, me, outside_m, forbidden, acc)
     eliminated = False
-    if outside_m > 5:
+    if outside_m > zone_margin_m(acc):
         # One warning when you step outside (the life bar shows the rest), not one on every GPS update.
         if zone_pressure.get('just_left'):
             hazard_messages.append('Je bent in een verboden gebied. Ga direct weg!' if forbidden
@@ -6785,8 +6792,8 @@ def zone_config(game):
         'first_sec': int(ex.get('zone_first_min', 10)) * 60,
         'interval_sec': int(ex.get('zone_interval_min', 8)) * 60,
         'warning_sec': int(ex.get('zone_interval_min', 8)) * 30,     # announced halfway: time to walk to the new centre
-        'factor': 1.0 - int(ex.get('zone_shrink_pct', 30)) / 100.0,
-        'min_radius_m': float(ex.get('zone_min_m', 200)),
+        'factor': math.sqrt(1.0 - int(ex.get('zone_shrink_pct', 30)) / 100.0),      # 30% = the AREA gets 30% smaller
+        'min_radius_m': float(ex.get('zone_min_m', 350)),
         'duration_sec': (game.duration_minutes or 0) * 60,
         'final_hold_sec': 300,
     }

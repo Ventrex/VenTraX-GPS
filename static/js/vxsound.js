@@ -37,6 +37,7 @@
   }
 
   function unlock() {
+    if (unlocked && ctx && ctx.state === 'running') { hideTapHint(); return; }
     var c = ensureCtx();
     if (!c) { unlocked = true; flush(); return; }
     var go = function () {
@@ -45,7 +46,6 @@
       try { var o = c.createOscillator(), g = c.createGain(); g.gain.value = 0; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.01); } catch (e) {}
       flush();
       if (musicWanted) startMusicNow();
-      removeUnlockListeners();
     };
     if (c.state === 'suspended') c.resume().then(go, go); else go();
   }
@@ -54,7 +54,7 @@
   unlockEvents.forEach(function (e) { document.addEventListener(e, unlock, true); });
   // Returning to the tab/app can suspend the context again.
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible' && ctx && ctx.state === 'suspended' && unlocked) ctx.resume();
+    if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running' && unlocked) ctx.resume();
   });
   // Sounds asked for before the first tap / before the theme loaded wait a few seconds, then are dropped
   // (a "hunter is near" sound that arrives 2 minutes late is worse than none).
@@ -68,7 +68,7 @@
     if (hintEl || !document.body || muted) return;
     hintEl = document.createElement('div');
     hintEl.setAttribute('role', 'button');
-    hintEl.textContent = '\uD83D\uDD0A Tik op het scherm voor geluid';
+    hintEl.textContent = '\uD83D\uDD0A Tik op het scherm voor geluid en trillen';
     hintEl.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:99999;background:rgba(0,0,0,.82);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:999px;padding:9px 16px;font:600 13px system-ui,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.5)';
     document.body.appendChild(hintEl);
   }
@@ -234,6 +234,7 @@
   }
   function doPlay(ev, opts) {
     var c = ensureCtx(); if (!c || muted) return;
+    if (c.state !== 'running') { try { c.resume(); } catch (e) {} }          // phones suspend audio when the screen locks
     var clips = theme.events[ev];
     if (clips && clips.length) {
       var clip = pick(clips);
@@ -361,6 +362,8 @@
     if (c && !unlocked) {
       c.resume().then(function () { if (c.state === 'running') { unlocked = true; hideTapHint(); flush(); if (musicWanted) startMusicNow(); } }, function () {});
     }
+    // Chrome blocks vibration until the page has been tapped once, even when sound already works
+    if (unlocked && navigator.vibrate && navigator.userActivation && !navigator.userActivation.hasBeenActive && !muted) showTapHint();
     if (!unlocked && !muted) {
       if (document.body) showTapHint(); else document.addEventListener('DOMContentLoaded', function () { if (!unlocked) showTapHint(); });
     }

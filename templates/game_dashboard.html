@@ -680,6 +680,8 @@ const VIBRATE = {
   power: [100], item: [120, 60, 120], freeze: [500, 150, 500], tracked: [200, 80, 200, 80, 200], shelter: [150],
   location_reveal: [250, 100, 250], go: [300, 100, 300, 100, 600], emergency: [800, 200, 800, 200, 800],
   speed_warning: [200, 100, 200], pause: [150], resume: [150], badge: [80, 40, 80], player_left: [100],
+  chat: [70, 40, 70], photo: [60, 30, 60], countdown_tick: [40], end: [500, 150, 500], end_win: [200, 80, 200, 80, 400], end_lose: [700, 200, 300],
+  ambient: [30],
 };
 document.addEventListener('vx:play', e => {
   const pat = VIBRATE[e.detail];
@@ -846,7 +848,7 @@ document.addEventListener('visibilitychange', () => {
 function restartTracking() {
   if (navigator.geolocation && typeof onGPS === 'function') {
     try { if (gpsWatcher !== null) navigator.geolocation.clearWatch(gpsWatcher); } catch (e) {}
-    gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy: true, timeout: 30000, maximumAge: 5000});
+    gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy: true, timeout: 20000, maximumAge: 2000});
     navigator.geolocation.getCurrentPosition(onGPS, () => {}, {enableHighAccuracy: true, timeout: 15000, maximumAge: 0});
   }
   if (typeof connectWS === 'function') connectWS();
@@ -1441,16 +1443,27 @@ function startGPS() {
   if (!navigator.geolocation) { document.getElementById('gpsBadge').textContent = 'GPS niet ondersteund'; return; }
   requestWakeLock();
   gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {
-    enableHighAccuracy: true, timeout: 30000, maximumAge: 5000
+    enableHighAccuracy: true, timeout: 20000, maximumAge: 2000
   });
   setInterval(() => {
     if (!navigator.geolocation) return;
-    if (Date.now() - lastGpsAt < 9000) return;
-    navigator.geolocation.getCurrentPosition(onGPS, () => {}, {
-      enableHighAccuracy: true, timeout: 12000, maximumAge: 0
-    });
-  }, 10000);
+    const quiet = Date.now() - lastGpsAt;
+    if (quiet < 9000) return;
+    // One quick fix with the GPS chip, and if that does not answer a rough fix from the network.
+    navigator.geolocation.getCurrentPosition(onGPS, () => {
+      navigator.geolocation.getCurrentPosition(onGPS, () => {}, {enableHighAccuracy: false, timeout: 8000, maximumAge: 60000});
+    }, {enableHighAccuracy: true, timeout: 8000, maximumAge: 0});
+    if (quiet > 20000 && Date.now() - lastGpsRestart > 20000) { lastGpsRestart = Date.now(); restartGpsWatch(); }   // the watcher itself may have died
+    if (quiet > 45000) document.getElementById('gpsBadge').innerHTML = '<i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> GPS zoekt...';
+  }, 6000);
 }
+let lastGpsRestart = 0;
+function restartGpsWatch() {
+  if (!navigator.geolocation) return;
+  try { if (gpsWatcher !== null) navigator.geolocation.clearWatch(gpsWatcher); } catch (e) {}
+  gpsWatcher = navigator.geolocation.watchPosition(onGPS, onGPSErr, {enableHighAccuracy: true, timeout: 20000, maximumAge: 2000});
+}
+window.addEventListener('online', () => { restartGpsWatch(); if (typeof pollState === 'function') pollState(); });
 
 function onGPS(pos) {
   const {latitude: lat, longitude: lon, accuracy: acc, speed} = pos.coords;
@@ -1502,8 +1515,13 @@ function onGPS(pos) {
     (d.hazard_messages || []).forEach(m => showToast(m, 'warn', 8000));
   }).catch(() => {});
 }
-function onGPSErr() {
-  document.getElementById('gpsBadge').innerHTML = '<i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> GPS fout';
+function onGPSErr(err) {
+  const denied = err && err.code === 1;
+  document.getElementById('gpsBadge').innerHTML = denied
+    ? '<i class="fas fa-triangle-exclamation" style="color:var(--danger)"></i> Locatie geweigerd'
+    : '<i class="fas fa-satellite-dish" style="color:var(--warn)"></i> GPS zoekt...';
+  if (denied) { showToast('Locatie staat uit voor deze site. Zet hem aan in je browserinstellingen.', 'error', 9000); return; }
+  if (Date.now() - lastGpsRestart > 4000) { lastGpsRestart = Date.now(); setTimeout(restartGpsWatch, 1500); }     // a timeout kills the watcher on some phones
 }
 
 // ---- Runner: when do the hunters get my location, and which spot do they see? ----

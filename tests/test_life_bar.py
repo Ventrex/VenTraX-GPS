@@ -41,7 +41,7 @@ def test_life_drains_outside_refills_slowly_and_warns_once(appmodule, client, mo
         d = post(client, *outside).get_json()
         msgs.append(len(d["hazard_messages"]))
     assert msgs == [1, 0, 0]                                   # one warning, not one per GPS update
-    assert 40 < d["zone_pressure"]["pct"] < 60 and not d["eliminated"]
+    assert 10 < d["zone_pressure"]["pct"] < 25 and not d["eliminated"]      # 15 s of the 90 s bar
     t[0] += 10
     inside = post(client, LAT, LON).get_json()["zone_pressure"]["pct"]
     t[0] += 5
@@ -55,7 +55,7 @@ def test_empty_life_bar_means_out(appmodule, client, monkeypatch):
     monkeypatch.setattr(appmodule, "_now_ts", lambda: t[0])
     outside = (LAT + 0.01, LON)
     d = None
-    for _ in range(8):
+    for _ in range(40):
         t[0] += 5
         d = post(client, *outside).get_json()
         if d["eliminated"]:
@@ -96,3 +96,24 @@ def test_runner_sees_when_hunters_get_the_location_and_which_spot(appmodule, cli
         g = appmodule.Game.query.filter_by(code="LIV123").first()
         gp = appmodule.GamePlayer.query.filter_by(game_id=g.id, user_id=uid).first(); gp.role = "hunter"; appmodule.db.session.commit()
     assert client.get("/api/game/LIV123/state").get_json()["loc_view"] is None
+
+
+def test_gps_inaccuracy_is_not_counted_as_leaving_the_field(appmodule, client, monkeypatch):
+    setup(appmodule, client)
+    t = [3000.0]
+    monkeypatch.setattr(appmodule, "_now_ts", lambda: t[0])
+    edge_out = LAT + 0.00205                                   # roughly 228 m north of the centre: 28 m outside the 200 m field
+    def at(lat, acc):
+        return client.post("/api/game/LIV123/location", json={"lat": lat, "lon": LON, "accuracy": acc}).get_json()
+    t[0] += 5
+    assert at(edge_out, 50)["zone_pressure"]["pct"] == 0      # 28 m outside, but the GPS may be 50 m off (margin 5+25 = 30 m)
+    t[0] += 5
+    assert at(edge_out, 5)["zone_pressure"]["pct"] > 0         # a precise fix at the same spot does count
+
+
+def test_shrinking_takes_the_chosen_percentage_of_the_area():
+    import random
+    pts = zone.regular_polygon(LAT, LON, 500, 24)
+    area = lambda p: abs(sum(a["lng"] * b["lat"] - b["lng"] * a["lat"] for a, b in zip(p, p[1:] + p[:1]))) / 2
+    new, _ = zone.shrink_polygon(pts, 0.7 ** 0.5, random.Random(1))        # what a "30%" setting passes in
+    assert 0.66 < area(new) / area(pts) < 0.74

@@ -518,8 +518,8 @@ details.more summary::-webkit-details-marker{display:none}
           <div class="two">
             <div class="fld"><label>Eerste krimp na de voorsprong</label><select name="zone_first_min" class="form-control"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option></select></div>
             <div class="fld"><label>Daarna elke</label><select name="zone_interval_min" class="form-control"><option value="5">5 min</option><option value="8" selected>8 min</option><option value="10">10 min</option><option value="15">15 min</option></select></div>
-            <div class="fld"><label>Elke keer kleiner met</label><select name="zone_shrink_pct" class="form-control"><option value="20">20%</option><option value="30" selected>30%</option><option value="40">40%</option><option value="50">50%</option></select><div class="pts-note" style="margin-top:4px">van het <b>vorige</b> veld, niet van het begin</div></div>
-            <div class="fld"><label>Kleinste veld (straal)</label><select name="zone_min_m" class="form-control"><option value="100">100 m</option><option value="150">150 m</option><option value="200" selected>200 m</option><option value="300">300 m</option><option value="400">400 m</option></select></div>
+            <div class="fld"><label>Elke keer kleiner met</label><select name="zone_shrink_pct" class="form-control"><option value="20">20%</option><option value="30" selected>30%</option><option value="40">40%</option><option value="50">50%</option></select><div class="pts-note" style="margin-top:4px">oppervlak, van het <b>vorige</b> veld</div></div>
+            <div class="fld"><label>Kleinste veld (straal)</label><select name="zone_min_m" class="form-control"><option value="100">100 m</option><option value="150">150 m</option><option value="200">200 m</option><option value="300">300 m</option><option value="350" selected>350 m</option><option value="400">400 m</option><option value="500">500 m</option></select></div>
           </div>
           <div class="pts-note" style="margin-bottom:8px">Elke keer wordt het veld een percentage <b>kleiner dan het vorige veld</b>. Het wordt nooit kleiner dan het <b>kleinste veld</b>, en in de <b>laatste 5 minuten</b> krimpt het niet meer. De melding met het nieuwe centrum komt <b>halverwege</b> elk interval, zodat je tijd hebt om erheen te lopen.</div>
           <div id="shrinkPlan" class="panel" style="margin:0;padding:12px 14px;font-size:13px;line-height:1.7"></div>
@@ -841,8 +841,8 @@ function renderShrinkPlan(){
   const box=document.getElementById('shrinkPlan'); if(!box) return;
   const D=numOf('durationSel','duration_custom'), H=numOf('headstartSel','headstart_custom');
   const first=Number(document.querySelector('[name=zone_first_min]').value), every=Number(document.querySelector('[name=zone_interval_min]').value);
-  const f=1-Number(document.querySelector('[name=zone_shrink_pct]').value)/100;
-  const MINR=Number(document.querySelector('[name=zone_min_m]').value||200);
+  const f=Math.sqrt(1-Number(document.querySelector('[name=zone_shrink_pct]').value)/100);    // x% = the AREA gets x% smaller
+  const MINR=Number(document.querySelector('[name=zone_min_m]').value||350);
   let t=H+first, rows=[], R0=pfFieldRadiusM(), cur=R0||null, rel=1;
   rows.push('<div><b>Start</b>'+(R0?': straal ±'+Math.round(R0)+' m':'')+'</div>');
   for(let n=1;n<=12;n++,t+=every){
@@ -850,13 +850,13 @@ function renderShrinkPlan(){
     if(cur!==null && cur<=MINR*1.02){ rows.push('<div><b>Veld is ±'+Math.round(cur)+' m</b>: kleinste veld bereikt, het krimpt niet verder.</div>'); break; }
     let fac=f; if(cur!==null) fac=Math.max(f,MINR/cur);
     rel*=fac; if(cur!==null) cur*=fac;
-    rows.push('<div><b>Melding na '+Math.round(t-(n===1?Math.min(every/2,first/2):every/2))+' min, krimp na '+t+' min</b>: '+Math.round(rel*100)+'% van het begin'+(cur!==null?' · straal ±'+Math.round(cur)+' m':'')+'</div>');
+    rows.push('<div><b>Melding na '+Math.round(t-(n===1?Math.min(every/2,first/2):every/2))+' min, krimp na '+t+' min</b>: '+Math.round(rel*rel*100)+'% van het oppervlak'+(cur!==null?' · straal ±'+Math.round(cur)+' m':'')+'</div>');
   }
   if(rows.length===1) rows.push('<div>Het spel duurt niet lang genoeg voor een krimp.</div>');
   box.innerHTML='<div style="font-weight:700;margin-bottom:4px">Zo gaat het in dit spel ('+D+' min, voorsprong '+H+' min)</div>'+rows.join('');
 }
 ['durationSel','headstartSel'].forEach(id=>document.getElementById(id)?.addEventListener('change',renderShrinkPlan));
-document.querySelectorAll('[name=zone_first_min],[name=zone_interval_min],[name=zone_shrink_pct],[name=duration_custom],[name=headstart_custom]').forEach(el=>el.addEventListener('input',renderShrinkPlan));
+document.querySelectorAll('[name=zone_first_min],[name=zone_interval_min],[name=zone_shrink_pct],[name=zone_min_m],[name=duration_custom],[name=headstart_custom]').forEach(el=>el.addEventListener('input',renderShrinkPlan));
 document.getElementById('shrinkOn')?.addEventListener('change',renderShrinkPlan);
 setTimeout(renderShrinkPlan,0);
 
