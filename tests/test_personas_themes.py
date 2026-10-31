@@ -52,30 +52,28 @@ def lobby_game(appmodule, theme_slug="halloween"):
         return g.id, uid, th.id
 
 
-def test_players_pick_a_persona_for_their_side(appmodule, client, monkeypatch):
-    gid, uid, tid = lobby_game(appmodule)
-    monkeypatch.setattr(appmodule, "get_game_sound_theme", lambda game: appmodule.db.session.get(appmodule.SoundTheme, tid))
-    with client.session_transaction() as s:
-        s["_user_id"] = str(uid); s["_fresh"] = True
-    d = client.get("/api/game/PRS123/personas").get_json()
-    assert d["kind"] == "good"                                          # hunters pick from the good characters (default)
-    assert len(d["personas"]) == 10 and {p["gender"] for p in d["personas"]} == {"guy", "girl"}
-    assert sum(p["gender"] == "guy" for p in d["personas"]) == 5 and sum(p["gender"] == "girl" for p in d["personas"]) == 5
-    names = {p["name"]: p for p in d["personas"]}
-    assert "Sidney Prescott" in names and "Ghostface" not in names
-    r = client.post("/api/game/PRS123/persona", json={"id": names["Sidney Prescott"]["id"]})
-    assert r.get_json()["persona"]["name"] == "Sidney Prescott"
-    assert client.get("/api/game/PRS123/lobby_state").get_json()["players"][0]["persona"]["name"] == "Sidney Prescott"
+def test_codenames_come_from_the_theme_characters(appmodule, client):
+    uid = make_user(appmodule, username="cn", email="cn@example.com")
     with appmodule.app.app_context():
-        bad = appmodule.ThemePersona.query.filter_by(name="Ghostface").first().id
-    assert client.post("/api/game/PRS123/persona", json={"id": bad}).status_code == 400   # a bad character, hunter player
-    client.post("/api/game/PRS123/switch_role", json={"role": "runner"})
-    with appmodule.app.app_context():
-        assert appmodule.GamePlayer.query.first().persona_id is None   # role change clears the persona
-    d = client.get("/api/game/PRS123/personas").get_json()
-    assert d["kind"] == "bad" and "Ghostface" in {p["name"] for p in d["personas"]}          # runners pick from the bad ones
-    # the maker can swap who picks from whom
-    client.post("/admin/personas/map", data={"theme_id": tid, "hunter": "bad"})
+        hw = appmodule.SoundTheme.query.filter_by(slug="halloween").first()
+        g = appmodule.Game(name="CN", code="CDN123", creator_id=uid, status="lobby")
+        appmodule.db.session.add(g); appmodule.db.session.commit()
+        appmodule.SiteSetting.set(appmodule._extras_key(g.id), '{"sound_theme": "%d"}' % hw.id)
+        good = {p.name for p in appmodule.ThemePersona.query.filter_by(theme_id=hw.id) if appmodule.persona_kind(p) == "good"}
+        bad = {p.name for p in appmodule.ThemePersona.query.filter_by(theme_id=hw.id) if appmodule.persona_kind(p) == "bad"}
+        assert len(good) == 10 and len(bad) == 10
+        assert appmodule.assign_codename("hunter", g.id) in good                    # hunters: from the goeden (default map)
+        assert appmodule.assign_codename("runner", g.id) in bad
+        names = {appmodule.assign_codename("hunter", g.id) for _ in range(30)}
+        assert names <= good and len(names) > 1                                        # random, from the scary list
+        appmodule.db.session.add(appmodule.GamePlayer(game_id=g.id, user_id=uid, role="runner", codename="Freddy Krueger"))
+        appmodule.db.session.commit()
+        gp = appmodule.GamePlayer.query.filter_by(game_id=g.id).first()
+        assert appmodule.persona_of(gp)["name"] == "Freddy Krueger"                  # picture for the map comes from the name
+        # a game without themed characters keeps the hero names (John Wick, Marvel ...)
+        g.sound = None
+        appmodule.SiteSetting.set(appmodule._extras_key(g.id), '')
+        assert appmodule.assign_codename("hunter", g.id) in appmodule.CODENAMES_HUNTERS
 
 
 def test_admin_manages_personas(appmodule, client):
@@ -175,3 +173,17 @@ def test_theme_atmosphere_and_calm_switch_render(appmodule, client):
             t.is_default = t.slug == "klassiek"
         appmodule.db.session.commit()
     assert 'class="fx-layer"' not in client.get("/login", follow_redirects=True).get_data(as_text=True)      # the classic theme stays calm
+
+
+def test_new_game_with_halloween_gives_the_creator_a_scary_name(appmodule, client):
+    login(client, appmodule)
+    with appmodule.app.app_context():
+        hw = appmodule.SoundTheme.query.filter_by(slug="halloween").first().id
+    base = {"name": "Eng", "role": "runner", "duration": "60", "headstart": "5", "difficulty": "medium", "hunter_interval": "600",
+            "runner_interval": "600", "target_duration": "300", "target_cooldown": "600", "max_offline": "300", "sound_theme": str(hw)}
+    assert client.post("/new_game", data=base).status_code == 302
+    with appmodule.app.app_context():
+        g = appmodule.Game.query.filter_by(name="Eng").first()
+        gp = appmodule.GamePlayer.query.filter_by(game_id=g.id).first()
+        bad = {p.name for p in appmodule.ThemePersona.query.filter_by(theme_id=hw) if appmodule.persona_kind(p) == "bad"}
+        assert gp.codename in bad                                                  # runner = a scary character

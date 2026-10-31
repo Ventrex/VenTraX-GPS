@@ -1042,9 +1042,20 @@ def render_route_sketch(points, size=(360, 360), routes=None, playfield=None, bu
     img.save(buf, format='PNG')
     return buf.getvalue()
 
+def theme_codenames(theme, role):
+    """Names from the theme's characters (Admin > Personages) for this side. Empty = use the standard hero names."""
+    if not theme:
+        return []
+    want = persona_map(theme.id)[role]
+    return [p.name for p in ThemePersona.query.filter_by(theme_id=theme.id).order_by(ThemePersona.sort_order, ThemePersona.id).all()
+            if persona_kind(p) == want]
+
 def assign_codename(role, game_id):
     """Assign a unique codename per role per game."""
     pool = CODENAMES_HUNTERS if role == 'hunter' else CODENAMES_RUNNERS
+    game = db.session.get(Game, game_id)
+    themed = theme_codenames(get_game_sound_theme(game), role) if game else []
+    pool = themed or pool                    # Halloween: scary characters, other games: heroes like John Wick
     taken = {p.codename for p in GamePlayer.query.filter_by(game_id=game_id, role=role).all()
              if p.codename}
     available = [n for n in pool if n not in taken]
@@ -3534,13 +3545,13 @@ def new_game():
         )
         db.session.add(game); db.session.flush()
         purge_game_state(game.id)
-        codename = assign_codename(f.get('role', 'hunter'), game.id)
-        db.session.add(GamePlayer(
+        creator_gp = GamePlayer(
             game_id=game.id, user_id=current_user.id,
             role=f.get('role', 'hunter'),
-            codename=codename,
+            codename=None,
             offline_uses_left=game.offline_uses,
-        ))
+        )
+        db.session.add(creator_gp)
         saved_playfield = save_playfield(game, f.get('playfield_json', ''))
         if saved_playfield:
             save_profile_playfield(current_user.id, f.get('playfield_json', ''))
@@ -3548,6 +3559,8 @@ def new_game():
             save_named_profile_playfield(current_user.id, f.get('playfield_json', ''),
                                          (f.get('playfield_name') or '').strip() or game.name)
         save_game_extras(game, f)
+        db.session.flush()
+        creator_gp.codename = assign_codename(creator_gp.role, game.id)       # needs the chosen theme
         save_game_template_for_user(current_user.id, game)
         db.session.commit()
         # Generate QR code
@@ -5941,7 +5954,17 @@ def persona_dict(p):
             'image': f'/backgrounds/{name}' if name else ''}
 
 def persona_of(gp):
-    return persona_dict(db.session.get(ThemePersona, gp.persona_id)) if getattr(gp, 'persona_id', None) else None
+    """The character behind a player's codename (picture for the map), if the theme has one with that name."""
+    if getattr(gp, 'persona_id', None):
+        return persona_dict(db.session.get(ThemePersona, gp.persona_id))
+    if not gp.codename:
+        return None
+    try:
+        theme = get_game_sound_theme(gp.game)
+        row = ThemePersona.query.filter_by(theme_id=theme.id, name=gp.codename).first() if theme else None
+    except Exception:
+        row = None
+    return persona_dict(row) if row else None
 
 @app.route('/api/game/<code>/personas')
 @login_required
