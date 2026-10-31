@@ -912,11 +912,15 @@ def save_image(file, folder, max_size=(1400, 1400)):
         raise ValueError('unsupported image type')
     if upload_too_large(file):
         raise ValueError('image too large')
-    name = f"{int(time.time())}_{random.randint(1000,9999)}.{ext}"
-    path = os.path.join(folder, name)
     img  = Image.open(file)
     img.thumbnail(max_size, Image.LANCZOS)
-    if img.mode in ('RGBA', 'P'): img = img.convert('RGB')
+    has_alpha = img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info)
+    if has_alpha and ext in ('png', 'webp'):            # icons with a transparent background stay transparent
+        img = img.convert('RGBA')
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    name = f"{int(time.time())}_{random.randint(1000,9999)}.{ext}"
+    path = os.path.join(folder, name)
     img.save(path, quality=88, optimize=True)
     return name
 
@@ -1823,6 +1827,7 @@ def api_claim_lootbox(code, box_id):
     count = random.choices([1, 2, 3], weights=[65, 28, 7], k=1)[0]
     effects = get_game_effects(game)
     messages = []
+    details = []                                                    # what the player sees in the reveal
     total_points = 0
     rare_reward = False
     for _ in range(count):
@@ -1831,35 +1836,44 @@ def api_claim_lootbox(code, box_id):
             pts = 1 if box.get('team') == 'all' else 2
             total_points += pts
             messages.append(f'+{pts} punten')
+            details.append({'type': 'points_small', 'title': f'+{pts} punten', 'sub': 'Bonuspunten', 'rare': False})
         elif effect == 'points_medium':
             pts = 3 if box.get('team') == 'all' else 4
             total_points += pts
             messages.append(f'+{pts} punten')
+            details.append({'type': 'points_medium', 'title': f'+{pts} punten', 'sub': 'Bonuspunten', 'rare': False})
         elif effect == 'points_big':
             pts = 6 if box.get('team') == 'all' else 8
             total_points += pts
             rare_reward = True
             messages.append(f'zeldzame bonus +{pts} punten')
+            details.append({'type': 'points_big', 'title': f'+{pts} punten', 'sub': 'Zeldzame bonus!', 'rare': True})
         elif effect == 'cooldown':
             effects.setdefault('cooldowns', {})[str(current_user.id)] = _now_ts()
             messages.append('class-power direct klaar')
+            details.append({'type': 'cooldown', 'title': 'Power direct klaar', 'sub': 'Je class-kracht is meteen weer te gebruiken', 'rare': False})
         elif effect == 'intel':
             opp, d = _nearest_opponent(game, me)
             if opp:
-                messages.append(f'intel: dichtste tegenstander {round(d)}m richting {_bearing_text(me.last_lat, me.last_lon, opp.last_lat, opp.last_lon)}')
+                intel = f'dichtste tegenstander {round(d)}m richting {_bearing_text(me.last_lat, me.last_lon, opp.last_lat, opp.last_lon)}'
             else:
-                messages.append('intel: geen tegenstander met GPS gevonden')
+                intel = 'geen tegenstander met GPS gevonden'
+            messages.append('intel: ' + intel)
+            details.append({'type': 'intel', 'title': 'Intel', 'sub': intel, 'rare': False})
         elif effect == 'shield':
             effects.setdefault('shields', {})[str(current_user.id)] = _now_ts() + 120
             rare_reward = True
             messages.append('zeldzaam schild voor 2 minuten')
+            details.append({'type': 'shield', 'title': 'Schild', 'sub': 'Beschermd voor 2 minuten', 'rare': True})
         elif effect in ITEM_INFO:
             if give_item(effects, current_user.id, effect):
                 rare_reward = rare_reward or effect == 'emp'
                 messages.append(f"{ITEM_INFO[effect]['name']} (knop op de kaart)")
+                details.append({'type': effect, 'title': ITEM_INFO[effect]['name'], 'sub': 'Zit in je zak: gebruik hem met de knop op de kaart', 'rare': effect == 'emp'})
             else:
                 total_points += 2
                 messages.append(f"+2 punten (je zak met {ITEM_INFO[effect]['name']} zit vol)")
+                details.append({'type': 'points_small', 'title': '+2 punten', 'sub': f"Je zak met {ITEM_INFO[effect]['name']} zit vol", 'rare': False})
     if total_points:
         me.points += total_points
         current_user.total_points += total_points
@@ -1868,6 +1882,7 @@ def api_claim_lootbox(code, box_id):
     mission_pts = mission_on_lootbox(game, me, current_user)
     if mission_pts:
         messages.append(f'missie gehaald +{_fmt_pts(mission_pts)}')
+        details.append({'type': 'points_big', 'title': f'+{_fmt_pts(mission_pts)} punten', 'sub': 'Missie gehaald', 'rare': True})
     msg = 'Dropbox geopend: ' + ', '.join(messages)
 
     new_lat, new_lng = _random_lootbox_point(game)
@@ -1880,8 +1895,19 @@ def api_claim_lootbox(code, box_id):
         'box_id': box_id,
         'message': msg,
     })
-    return jsonify(success=True, message=msg, points=round(me.points, 2), lootboxes=boxes,
+    return jsonify(success=True, message=msg, points=round(me.points, 2), lootboxes=boxes, rewards=details,
                    items=items_view(effects, current_user.id), mission_done=mission_pts)
+
+def game_icons():
+    """Pictures the admin uploaded for the game screen: map markers, lootbox rewards, class powers."""
+    keys = ['img_marker_hunter', 'img_marker_runner', 'img_loot_box'] + [k for k, _ in IMAGE_SLOTS_FLAT if k.startswith('img_loot_')] \
+           + [f'img_class_{c["id"]}' for c in CLASS_LOADOUTS]
+    out = {}
+    for k in keys:
+        u = site_image(k)
+        if u:
+            out[k[4:]] = u                                  # 'marker_hunter', 'loot_emp', 'class_codekraker'
+    return out
 
 # -- Items (EMP, Medkit), Lokaas, schuilkelders and the ways of catching ----------------------------
 ITEM_MAX = 2                    # at most 2 of the same item in your pocket
@@ -2733,10 +2759,12 @@ def inject_site():
         ctx['nav_pages'] = CmsPage.query.filter_by(published=True, show_in_nav=True).order_by(CmsPage.sort_order, CmsPage.title).all()
         default_theme = get_default_sound_theme()
         ctx['site_skin'] = (default_theme.skin if default_theme else None) or 'classic'
+        ctx['site_theme_slug'] = (default_theme.slug if default_theme else None) or ''
     except Exception:
         db.session.rollback()
         ctx['nav_pages'] = []
         ctx['site_skin'] = 'classic'
+        ctx['site_theme_slug'] = ''
     return ctx
 
 def serialize_post(p, uid):
@@ -3813,7 +3841,7 @@ def game_dashboard(code):
     if game.status == 'lobby' or not me.gps_enabled:
         return redirect(url_for('lobby', code=code))
     missions = PHOTO_MISSIONS if game.feat_photo_missions else []
-    return render_template('game_dashboard.html', game=game, me=me, missions=missions,
+    return render_template('game_dashboard.html', game=game, me=me, missions=missions, game_icons=game_icons(),
                            playfield=get_playfield(game),
                            my_class=get_player_class(game, current_user.id),
                            CATCH_MIN_PROGRESS_PCT=CATCH_MIN_PROGRESS_PCT,
@@ -5792,6 +5820,11 @@ IMAGE_SLOTS = [
     ('Speelveld tekenen', [('img_pf_field', 'Veld'), ('img_pf_circle', 'Verboden zone'), ('img_pf_line', 'Verboden lijn')]),
     ('Kleur buiten het veld', [('img_pfcolor_radiation', 'Radiation groen'), ('img_pfcolor_storm', 'Storm blauw'),
                                ('img_pfcolor_nuclear', 'Nuclear geel'), ('img_pfcolor_heat', 'Heat rood')]),
+    ('Runner- en hunter-icoon op de kaart (liefst PNG met transparante achtergrond)', [('img_marker_hunter', 'Hunter op de kaart'), ('img_marker_runner', 'Runner op de kaart')]),
+    ('Lootbox: wat je eruit haalt (PNG, transparant)', [('img_loot_points_small', '+ Punten (klein)'), ('img_loot_points_medium', '+ Punten (middel)'),
+                                                         ('img_loot_points_big', '+ Punten (zeldzaam)'), ('img_loot_intel', 'Intel'),
+                                                         ('img_loot_cooldown', 'Power direct klaar'), ('img_loot_shield', 'Schild'),
+                                                         ('img_loot_emp', 'EMP'), ('img_loot_medkit', 'Medkit'), ('img_loot_box', 'De lootbox zelf')]),
     ('Spelstijl', [('img_style_classic', 'Classic'), ('img_style_adventure', 'Adventure'),
                    ('img_style_battlefield', 'Battlefield'), ('img_style_stealth', 'Shadow Ops'), ('img_style_survival', 'Survival'), ('img_style_custom', 'Custom'),
                    ('img_style_zone', 'Krimpende zone'), ('img_style_missions', 'Missies')]),
@@ -5800,7 +5833,8 @@ IMAGE_SLOTS = [
                  ('img_class_saboteur', 'Saboteur'), ('img_class_glitcher', 'Glitcher'),
                  ('img_class_spoorzoeker', 'Spoorzoeker')]),
 ]
-IMAGE_KEYS = {k for _, items in IMAGE_SLOTS for k, _ in items}
+IMAGE_SLOTS_FLAT = [(k, l) for _, items in IMAGE_SLOTS for k, l in items]
+IMAGE_KEYS = {k for k, _ in IMAGE_SLOTS_FLAT}
 _THEME_IMG_RE = __import__('re').compile(r'^img_soundtheme_\d+$')
 
 def image_key_ok(key):

@@ -25,6 +25,7 @@
 {% if site_font_faces %}<style>{{ site_font_faces|safe }}</style>{% endif %}
 {% block extra_head %}{% endblock %}
 <style>
+@font-face{font-family:'VXNum';src:local('Arial'),local('Helvetica Neue'),local('Helvetica'),local('Roboto'),local('Segoe UI'),local('Liberation Sans'),local('DejaVu Sans');font-weight:100 900;unicode-range:U+0030-003A,U+002B-002E,U+0025,U+00D7,U+2212}
 :root{
   --accent:{{ site_accent or '#c4161c' }};--accent-glow:{{ site_accent or '#c4161c' }}55;
   --bg:{{ site_bg_color or '#000000' }};--bg2:#0b0b0e;--bg3:#131317;--bg4:#1c1c21;
@@ -34,7 +35,7 @@
   --text:#f0f0f8;--text2:#8888aa;
   --hunter:#3b82f6;--runner:#10b981;--warn:#f59e0b;--danger:#ef4444;
   --r:12px;--r2:8px;--tr:.2s cubic-bezier(.4,0,.2,1);
-  --hfont:'{{ site_font or 'Space Grotesk' }}',sans-serif;--bfont:'{{ site_font_body or 'DM Sans' }}',sans-serif;
+  --hfont:'VXNum','{{ site_font or 'Space Grotesk' }}',sans-serif;--bfont:'VXNum','{{ site_font_body or 'DM Sans' }}',sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{color-scheme:dark;font-synthesis:none}
@@ -67,10 +68,15 @@ button{font-family:inherit}
 @keyframes tOut{from{opacity:1}to{opacity:0;transform:translateY(-8px)}}
 @keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(8px)}to{opacity:1;transform:translateX(-50%)}}
 html[data-skin="halloween"]{--runner:#7ee081;--hunter:#a78bfa}
+/* Minder animaties */
+html.calm .fx,html.calm .radar,html.calm .loot-confetti{display:none!important}
+html.calm *{animation-duration:.01ms!important;animation-iteration-count:1!important}
+@media (prefers-reduced-motion:reduce){.fx,.radar,.loot-confetti{display:none!important}}
 /* Leaflet attribution hide */
 .leaflet-control-attribution{display:none!important}
 </style>
 </head>
+<script>try{if(localStorage.getItem('vx_calm')==='1')document.documentElement.classList.add('calm')}catch(e){}</script>
 <body>
 {% block content %}{% endblock %}
 <div class="toast-wrap" id="toastWrap"></div>

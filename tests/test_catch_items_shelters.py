@@ -193,6 +193,8 @@ def test_lootbox_can_give_emp_and_medkit_and_they_work(appmodule, client, monkey
     move(appmodule, gid, hid, box["lat"], box["lng"])
     r = client.post(f"/api/game/{CODE}/lootbox/{box['id']}/claim").get_json()
     assert {i["id"] for i in r["items"]} == {"emp", "medkit"}
+    assert [x["type"] for x in r["rewards"]] == ["emp", "medkit"]               # what the reveal screen shows
+    assert all(x["title"] and x["sub"] for x in r["rewards"])
     # medkit: only when the life bar is not full
     assert client.post(f"/api/game/{CODE}/item", json={"item": "medkit"}).status_code == 400
     with appmodule.app.app_context():
