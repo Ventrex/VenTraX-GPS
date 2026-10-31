@@ -2,10 +2,10 @@
 <html lang="nl" data-theme="dark" data-skin="{{ page_skin or site_skin or 'classic' }}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0a0a0f">
+<meta name="theme-color" content="{{ site_bg_color or '#000000' }}">
 <meta name="apple-mobile-web-app-title" content="{{ site_name }}">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="/manifest.webmanifest">
@@ -657,6 +657,9 @@ html.calm .fx-layer{display:none}
 {% endif %}
 <button type="button" id="vxCalm" class="vx-mute" style="right:64px" aria-label="Minder animaties" title="Minder animaties aan/uit"><i class="fas fa-wand-sparkles"></i></button>
 <style>
+.nav{height:calc(64px + env(safe-area-inset-top,0px))!important;padding-top:env(safe-area-inset-top,0px)}
+body{padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);background-color:var(--bg)}
+html{background:var(--bg)}
 .vx-mute.calmed{color:var(--text2);opacity:.7}
 html.calm *,html.calm *::before,html.calm *::after{animation-duration:.01ms!important;animation-iteration-count:1!important}
 @media(max-width:768px){body.has-tabbar #vxCalm{bottom:calc(86px + env(safe-area-inset-bottom))}}

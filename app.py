@@ -6294,7 +6294,7 @@ def web_manifest():
     resp = jsonify({
         'name': name, 'short_name': name[:12], 'start_url': '/', 'scope': '/',
         'display': 'standalone', 'orientation': 'portrait',
-        'background_color': '#0a0a0f', 'theme_color': '#0a0a0f',
+        'background_color': theme_ui(get_default_sound_theme())['bg_color'], 'theme_color': theme_ui(get_default_sound_theme())['bg_color'],
         'icons': [
             {'src': '/static/img/icon-192.png', 'sizes': '192x192', 'type': 'image/png', 'purpose': 'any maskable'},
             {'src': '/static/img/icon-512.png', 'sizes': '512x512', 'type': 'image/png', 'purpose': 'any maskable'},
