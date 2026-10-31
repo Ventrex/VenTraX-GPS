@@ -7,7 +7,7 @@ import math
 import random
 
 M_LAT = 111320.0
-MIN_RADIUS_M = 200.0          # the last field: never smaller than this mean radius (runners must still be able to hide)
+MIN_RADIUS_M = 350.0          # the last field: never smaller than this mean radius (runners must still be able to hide)
 FINAL_HOLD_SEC = 300          # the last field stays for at least the last 5 minutes of the game
 
 

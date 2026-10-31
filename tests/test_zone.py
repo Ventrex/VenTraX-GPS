@@ -115,7 +115,7 @@ def test_zone_loop_announces_then_shrinks_and_stores_the_new_field(appmodule, mo
     with appmodule.app.app_context():
         game = appmodule.db.session.get(appmodule.Game, gid)
         after = appmodule.get_playfield(game)["points"]
-        assert zone.mean_radius_m(after) < zone.mean_radius_m(before) * 0.75
+        assert zone.mean_radius_m(after) < zone.mean_radius_m(before) * 0.9          # 30% smaller AREA = radius x 0.84
         assert after == sent[1][1]["points"] == sent[0][1]["points"]            # announced = applied
         info = appmodule.zone_info(game)
         assert info["phase"] == 1 and info["pending"] is None and info["next_in"] > 0
@@ -169,7 +169,7 @@ def test_new_game_stores_the_zone_settings(appmodule, client):
         ex = appmodule.get_game_extras(g)
         assert ex["shrinking_zone"] and ex["zone_first_min"] == 15 and ex["zone_shrink_pct"] == 40
         cfg = appmodule.zone_config(g)
-        assert cfg["factor"] == 0.6 and cfg["first_sec"] == 900 and cfg["warning_sec"] == 300     # announced halfway through the 10 min interval
+        assert abs(cfg["factor"] - (0.6 ** 0.5)) < 1e-9 and cfg["first_sec"] == 900 and cfg["warning_sec"] == 300     # announced halfway through the 10 min interval
 
 
 def test_last_field_is_never_smaller_than_the_minimum_and_not_shrunk_in_the_last_5_minutes():
