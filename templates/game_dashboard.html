@@ -3,12 +3,12 @@
 {% block extra_head %}
 <style>
 /* â”€â”€ Layout â”€â”€ */
-.gw{position:fixed;inset:0;display:flex;flex-direction:column}
+.gw{position:fixed;left:0;right:0;top:0;height:var(--app-h,100dvh);display:flex;flex-direction:column;background:#000}
 #map{flex:1;min-height:0;z-index:1;background:#1a1a24}
 
 /* â”€â”€ Topbar â”€â”€ */
 .topbar{
-  position:relative;z-index:10;height:60px;flex-shrink:0;
+  position:relative;z-index:10;height:calc(60px + env(safe-area-inset-top,0px));padding-top:env(safe-area-inset-top,0px);flex-shrink:0;
   background:rgba(10,10,15,.92);backdrop-filter:blur(14px);
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;padding:0 10px;gap:8px;
@@ -148,7 +148,7 @@
 .rc-off b{font-size:16px;font-variant-numeric:tabular-nums}
 
 /* â”€â”€ Bottom bar â”€â”€ */
-.bbar{position:relative;z-index:10;flex-shrink:0;background:rgba(10,10,15,.95);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;align-items:stretch;height:58px}
+.bbar{position:relative;z-index:10;flex-shrink:0;background:rgba(10,10,15,.95);backdrop-filter:blur(14px);border-top:1px solid var(--border);display:flex;align-items:stretch;height:calc(58px + env(safe-area-inset-bottom,0px));padding-bottom:env(safe-area-inset-bottom,0px)}
 .bb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:none;border:none;color:var(--text2);cursor:pointer;font-size:10px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;transition:color .2s;border-right:1px solid var(--border);position:relative;padding:0 2px}
 .bb:last-child{border-right:none}
 .bb:hover,.bb.active-btn{color:var(--accent)}
@@ -289,6 +289,7 @@ path.zone-cloud{}
 #itemBar .mab{position:relative;width:46px;height:46px;font-size:19px;background:#7c3aed;color:#fff}
 #itemBar .mab.medkit{background:#16a34a}
 #itemBar .mab-label{position:absolute;right:-3px;bottom:-3px;background:rgba(10,10,15,.9);border:1px solid var(--border);border-radius:8px;padding:1px 4px;font-size:9px;line-height:1;color:#fff;font-weight:800}
+#btnFit{bottom:112px;right:8px;width:44px;height:44px;font-size:17px;background:rgba(20,20,26,.9);color:#fff;border:1px solid var(--border)}
 #btnCatch{bottom:38px;right:8px;background:var(--hunter);color:#fff;display:none}
 #btnCatch.wait{background:#444;color:#aaa}
 #btnCatch.grab{background:#0891b2;animation:gPulse 1s infinite}
@@ -363,6 +364,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
     <div id="itemBar"></div>
     {% if me.role == 'runner' %}<div id="trackBadge"><i class="fas fa-crosshairs"></i> Tracker op jou! Hunters zien je live nog <span id="trackLeft">90</span>s</div>{% endif %}
     {% if me.role == 'hunter' %}
+    <button class="mab" id="btnFit" onclick="fitBoth()" title="{{ 'Jij en de dichtstbijzijnde runner in beeld' if me.role=='hunter' else 'Kaart op jou centreren' }}"><i class="fas fa-expand"></i></button>
     <button class="mab" id="btnCatch" onclick="catchAction()" title="Vangen"><i class="fas fa-circle-notch" id="catchIcon"></i><span class="mab-label" id="catchLabel" style="display:none"></span></button>
     {% endif %}
     <div id="soundHint" onclick="VXSound.unlock()"><i class="fas fa-volume-high"></i> Tik ergens om het geluid aan te zetten</div>
@@ -854,6 +856,22 @@ function restartTracking() {
   if (typeof connectWS === 'function') connectWS();
   if (typeof pollState === 'function') setTimeout(pollState, 300);
 }
+// Turning the phone (or the iOS bars appearing/disappearing) changes the screen size: size the game to what is really visible,
+// make the map redraw, and fit the hunter's view again.
+let sizeTimer = null;
+function fixScreenSize() {
+  document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px');
+  if (typeof map !== 'undefined' && map) map.invalidateSize({pan: false});
+}
+function onScreenChange() {
+  fixScreenSize();
+  clearTimeout(sizeTimer);
+  sizeTimer = setTimeout(() => { fixScreenSize(); if (MY_ROLE === 'hunter' && typeof fitMeAndNearest === 'function') fitMeAndNearest(false); }, 350);   // iOS reports the new size late
+}
+window.addEventListener('resize', onScreenChange);
+window.addEventListener('orientationchange', onScreenChange);
+window.addEventListener('pageshow', fixScreenSize);
+fixScreenSize();
 // A page that comes back from the browser cache (back/forward) has stopped its GPS: load it fresh.
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
 // The back button must not take you out of a running game by accident.
@@ -1483,7 +1501,9 @@ function onGPS(pos) {
     myCircle.setLatLng([lat,lon]).setRadius(acc);
     // Follow yourself unless you moved the map. If your dot is off-screen (e.g. after offline / pause /
     // coming back to the app) the map always jumps back to you.
-    if (!mapManuallyMoved) {
+    if (!mapManuallyMoved && MY_ROLE === 'hunter' && nearestSeenRunner()) {
+      fitMeAndNearest(false);
+    } else if (!mapManuallyMoved) {
       map.setView([lat,lon], map.getZoom(), {animate: true});
     } else if (!map.getBounds().contains([lat,lon]) && Date.now() - lastUserMoveAt > 30000) {
       mapManuallyMoved = false;
@@ -1764,12 +1784,34 @@ function updateMarkers(players) {
     const p = players.find(x => String(x.id) === String(id));
     if (!p || !p.alt || p.is_caught) { map.removeLayer(decoyMarkers[id]); delete decoyMarkers[id]; }
   });
-  // Auto-zoom: only on first runner appearance, or if not manually moved
-  if (MY_ROLE === 'hunter' && visibleRunners.length > 0 && !mapManuallyMoved && !autoFitDone) {
-    const bounds = L.latLngBounds(visibleRunners);
-    if (myMarker) bounds.extend(myMarker.getLatLng());
-    if (!autoFitDone) { map.fitBounds(bounds, {padding: [35, 35], maxZoom: 18}); autoFitDone = true; }
-  }
+  seenRunners = visibleRunners;
+  if (MY_ROLE === 'hunter') fitMeAndNearest(false);
+}
+// Hunter: always keep yourself AND the nearest runner on one screen (until you move the map yourself).
+let seenRunners = [];
+function fitBoth() {
+  if (MY_ROLE === 'hunter') fitMeAndNearest(true);
+  else if (myMarker) { mapManuallyMoved = false; map.setView(myMarker.getLatLng(), Math.max(map.getZoom(), 17), {animate: true}); }
+}
+function nearestSeenRunner() {
+  if (!myMarker || !seenRunners.length) return null;
+  const me = myMarker.getLatLng();
+  let best = null, bd = Infinity;
+  seenRunners.forEach(r => { const d = me.distanceTo(L.latLng(r[0], r[1])); if (d < bd) { bd = d; best = r; } });
+  return best;
+}
+function fitMeAndNearest(force) {
+  if (typeof map === 'undefined' || !map || !myMarker) return;
+  if (force) mapManuallyMoved = false;
+  if (mapManuallyMoved) return;
+  const near = nearestSeenRunner();
+  if (!near) { if (force) map.setView(myMarker.getLatLng(), Math.max(map.getZoom(), 17), {animate: true}); return; }
+  const b = L.latLngBounds([myMarker.getLatLng(), L.latLng(near[0], near[1])]);
+  const view = map.getBounds().pad(-0.12);                           // both inside with some margin?
+  const bothIn = view.contains(b.getSouthWest()) && view.contains(b.getNorthEast());
+  const target = map.getBoundsZoom(b.pad(0.35), false, L.point(30, 110));
+  const wellFitted = bothIn && map.getZoom() - target <= 1;          // not zoomed out way too far
+  if (force || !wellFitted) map.fitBounds(b, {paddingTopLeft: [40, 110], paddingBottomRight: [40, 90], maxZoom: 19, animate: !document.documentElement.classList.contains('calm')});
 }
 
 // â”€â”€ Runner panel (hunter) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
