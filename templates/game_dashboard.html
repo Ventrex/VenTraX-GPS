@@ -36,7 +36,52 @@
 #cdOverlay{position:absolute;inset:0;z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px}
 #cdOverlay.show{display:flex}
 .cd-num{font-family:var(--hfont);font-size:120px;font-weight:800;color:#fff;line-height:1;animation:cdPop 1s ease-in-out infinite}
-@keyframes cdPop{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+@keyframes cdPop{0%{transform:scale(.6);opacity:.2}35%{transform:scale(1.25);opacity:1}100%{transform:scale(1)}}
+.cd-num.go{color:#fde047;text-shadow:0 0 40px #facc15;animation:cdGo .7s ease-out both}
+@keyframes cdGo{0%{transform:scale(.4);opacity:0}40%{transform:scale(1.5);opacity:1}100%{transform:scale(1.1)}}
+/* time almost up */
+.t-timers .t-pill.late{color:#fbbf24!important;border-color:#f59e0b}
+.t-timers .t-pill.last{color:#fff!important;background:var(--danger);border-color:#fff;animation:gPulse 1s infinite}
+/* life bar */
+#zoneBar.low{border-color:#fff;animation:barShake .5s infinite}
+@keyframes barShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+/* map markers */
+.rm{position:relative;width:46px;height:56px;transform:translate(-50%,-92%)}
+.rm .rm-b{position:absolute;left:3px;top:0;width:40px;height:40px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,.55);display:grid;place-items:center;color:#fff;font-size:18px;overflow:hidden;background-size:cover;background-position:center}
+.rm.hunter .rm-b{background:linear-gradient(145deg,#60a5fa,#1d4ed8)}
+.rm.runner .rm-b{background:linear-gradient(145deg,#34d399,#047857)}
+.rm.caught .rm-b{background:linear-gradient(145deg,#9ca3af,#4b5563)}
+.rm.sys .rm-b{background:none;border:none;box-shadow:none;border-radius:0;overflow:visible}
+.rm .rm-b img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,.6))}
+.rm .rm-t{position:absolute;left:14px;top:35px;width:18px;height:18px;transform:rotate(45deg);border-radius:3px;background:#fff;z-index:-1}
+.rm.hunter .rm-t{background:#1d4ed8;border:2px solid #fff}.rm.runner .rm-t{background:#047857;border:2px solid #fff}
+.rm.sys .rm-t{display:none}
+.rm .rm-l{position:absolute;top:57px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;font-weight:700;color:#fff;text-shadow:0 0 4px #000;background:rgba(0,0,0,.6);padding:1px 5px;border-radius:5px}
+.radar{position:absolute;left:3px;top:0;width:40px;height:40px;border-radius:50%;border:2px solid currentColor;opacity:0;animation:radarPing 2.6s ease-out infinite;pointer-events:none}
+.radar.r2{animation-delay:1.3s}
+.radar.hot{color:#ef4444;animation-duration:1.1s}.radar.hot.r2{animation-delay:.55s}
+@keyframes radarPing{0%{transform:scale(.8);opacity:.75}100%{transform:scale(3.4);opacity:0}}
+/* lootbox reveal */
+#lootReveal{position:fixed;inset:0;z-index:1180;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 40%,rgba(30,20,50,.92),rgba(0,0,0,.95));color:#fff;text-align:center}
+#lootReveal.show{display:flex;animation:lrIn .25s ease-out}
+@keyframes lrIn{from{opacity:0}to{opacity:1}}
+#lootReveal .lr-title{font-family:var(--hfont);font-size:20px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.85;margin-bottom:14px}
+#lootReveal .lr-box{position:absolute;top:50%;left:50%;margin:-60px 0 0 -60px;width:120px;height:120px;font-size:84px;color:#fbbf24;display:grid;place-items:center;animation:lrShake .6s ease-in-out}
+#lootReveal .lr-box img{width:100%;height:100%;object-fit:contain}
+@keyframes lrShake{0%,100%{transform:rotate(0)}15%{transform:rotate(-14deg) scale(1.05)}30%{transform:rotate(12deg) scale(1.1)}45%{transform:rotate(-10deg) scale(1.15)}60%{transform:rotate(8deg) scale(1.2)}80%{transform:scale(1.35);opacity:.2}100%{transform:scale(1.6);opacity:0}}
+#lootReveal .lr-list{display:flex;flex-direction:column;gap:14px;align-items:center;width:min(92vw,380px)}
+.lr-item{width:100%;padding:18px 16px;border-radius:22px;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);opacity:0;animation:lrPop .7s cubic-bezier(.2,1.4,.4,1) forwards;position:relative;overflow:hidden}
+.lr-item.rare{border-color:#fbbf24;background:linear-gradient(145deg,rgba(251,191,36,.22),rgba(255,255,255,.06));box-shadow:0 0 40px rgba(251,191,36,.5)}
+.lr-ico{width:92px;height:92px;margin:0 auto 6px;font-size:62px;display:grid;place-items:center;color:#fde047;filter:drop-shadow(0 4px 12px rgba(0,0,0,.6))}
+.lr-ico img{width:100%;height:100%;object-fit:contain}
+.lr-name{font-family:var(--hfont);font-size:34px;font-weight:800;line-height:1.1}
+.lr-sub{font-size:14px;opacity:.85;margin-top:4px}
+@keyframes lrPop{0%{opacity:0;transform:scale(.2) rotate(-12deg)}60%{opacity:1;transform:scale(1.12) rotate(3deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+.lr-item::after{content:'';position:absolute;inset:0;background:linear-gradient(110deg,transparent 35%,rgba(255,255,255,.35) 50%,transparent 65%);transform:translateX(-120%);animation:lrShine 1.2s .6s ease-out forwards}
+@keyframes lrShine{to{transform:translateX(120%)}}
+#lootReveal .lr-ok{margin-top:auto;position:absolute;bottom:24px}
+.loot-confetti{position:absolute;top:30%;left:50%;width:10px;height:10px;border-radius:2px;opacity:0;animation:lrConf 1.4s ease-out forwards;pointer-events:none}
+@keyframes lrConf{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) rotate(540deg)}}
 .cd-role{font-size:20px;font-weight:700;color:rgba(255,255,255,.9);margin-bottom:16px}
 .cd-sub{font-size:14px;color:rgba(255,255,255,.7);margin-top:16px;max-width:300px}
 
@@ -407,6 +452,12 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
 </div>
 
 <!-- End screen -->
+<div id="lootReveal" onclick="closeLootReveal()">
+  <div class="lr-title" id="lrTitle">Lootbox!</div>
+  <div class="lr-box" id="lrBox"></div>
+  <div class="lr-list" id="lrList"></div>
+  <button class="btn btn-primary btn-lg lr-ok" id="lrOk" style="display:none"><i class="fas fa-check"></i> Top!</button>
+</div>
 <div id="outScreen">
   <div style="font-size:64px;margin-bottom:8px"><i class="fas fa-skull"></i></div>
   <div class="end-title">Je bent af</div>
@@ -602,6 +653,7 @@ html[data-skin="halloween"] .map-wrap::after{content:'';position:absolute;inset:
 
 <script>
 const CODE    = '{{ game.code }}';
+const GAME_ICONS = {{ game_icons|tojson }};
 const MY_ID   = {{ current_user.id }};
 const MY_ROLE = '{{ me.role }}';
 const IS_MAKER= {{ 'true' if me.user_id == game.creator_id else 'false' }};
@@ -905,6 +957,7 @@ function drawPlayfieldOnMap(){
   const cloud=add(L.polygon(world.concat([pts]),{stroke:false,fillColor:st.fill,fillOpacity:.78,interactive:false,className:'zone-cloud'}));
   const cloud2=add(L.polygon(world.concat([pts]),{stroke:false,fillColor:'#052e16',fillOpacity:.30,interactive:false,className:'zone-cloud'}));
   cloudFilter(cloud,'vxCloud'); cloudFilter(cloud2,'vxCloud2'); cloudFilter(glow,'vxGlow');
+  pfZoneLayers={inner,glow,cloud,cloud2};
   // Forbidden areas inside the field: red, hatched, never to be entered
   (PLAYFIELD.forbidden||[]).forEach(f=>{
     const red={color:'#ef4444',fillColor:'#ef4444',fillOpacity:.38,weight:2,dashArray:'5 4',interactive:false};
@@ -958,9 +1011,40 @@ function updateZoneBanner(){
   if(left<=0 && Date.now()-zonePending.at>8000){ zonePending=null; clearPf(zonePreview); el.classList.remove('show'); }
 }
 setInterval(updateZoneBanner,1000);
+let pfZoneLayers = null, glideTimer = null;
+function resampleRing(pts, n) {                         // [[lat,lng],...] -> n points evenly spread along the outline
+  const closed = pts.concat([pts[0]]), seg = [0];
+  for (let i = 1; i < closed.length; i++) seg.push(seg[i - 1] + Math.hypot(closed[i][0] - closed[i - 1][0], closed[i][1] - closed[i - 1][1]));
+  const total = seg[seg.length - 1] || 1, out = [];
+  for (let k = 0; k < n; k++) {
+    const d = total * k / n; let j = 1; while (j < seg.length - 1 && seg[j] < d) j++;
+    const t = (d - seg[j - 1]) / ((seg[j] - seg[j - 1]) || 1);
+    out.push([closed[j - 1][0] + (closed[j][0] - closed[j - 1][0]) * t, closed[j - 1][1] + (closed[j][1] - closed[j - 1][1]) * t]);
+  }
+  return out;
+}
+function glideZone(oldPts, newPts, done) {
+  const L0 = pfZoneLayers;
+  if (!L0 || document.documentElement.classList.contains('calm') || !oldPts || oldPts.length < 3) { done(); return; }
+  const N = 64, a = resampleRing(roundPts(oldPts), N); let b = resampleRing(roundPts(newPts), N);
+  let best = 0, bestD = Infinity;                       // rotate the new outline so it lines up with the old one
+  for (let r = 0; r < N; r += 2) { let d = 0; for (let i = 0; i < N; i += 4) d += Math.hypot(a[i][0] - b[(i + r) % N][0], a[i][1] - b[(i + r) % N][1]); if (d < bestD) { bestD = d; best = r; } }
+  b = b.map((_, i) => b[(i + best) % N]);
+  const world = [[-90, -360], [-90, 360], [90, 360], [90, -360]], t0 = performance.now(), ms = 2800;
+  clearInterval(glideTimer);
+  glideTimer = setInterval(() => {
+    if (pfZoneLayers !== L0) { clearInterval(glideTimer); return; }
+    const k = Math.min(1, (performance.now() - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const cur = a.map((p, i) => [p[0] + (b[i][0] - p[0]) * e, p[1] + (b[i][1] - p[1]) * e]);
+    L0.inner.setLatLngs(cur); L0.glow.setLatLngs(cur); L0.cloud.setLatLngs([world, cur]); L0.cloud2.setLatLngs([world, cur]);
+    if (k >= 1) { clearInterval(glideTimer); done(); }
+  }, 100);
+}
 function applyZone(points, inSec, info){
+  const old = PLAYFIELD && PLAYFIELD.points && PLAYFIELD.points.length >= 3 ? PLAYFIELD.points.map(p => [p.lat, p.lng]) : null;
   PLAYFIELD=Object.assign({color:'storm',forbidden:[]},PLAYFIELD||{},{points});
-  drawPlayfieldOnMap();
+  if (old && pfZoneLayers) glideZone(old, points.map(p => [p.lat, p.lng]), drawPlayfieldOnMap);   // the line slides to the new zone
+  else drawPlayfieldOnMap();
 }
 // The same zone news can come from the live connection or from the 10-second check: announce it once.
 let zonePhaseSeen = null, zoneWarnSeen = null, zoneFinalSeen = false;
@@ -994,6 +1078,59 @@ function zoneFromState(d){
   if (d.zone.final && !zoneFinalSeen) { zoneFinalSeen = true; VXSound.play('zone_shrink'); showToast('Dit is de laatste zone. Hij wordt niet kleiner.', 'info', 7000); }
 }
 
+// ---- Lootbox reveal: the box shakes open, then every reward pops up big ----
+const LOOT_FA = {points_small: 'fa-coins', points_medium: 'fa-coins', points_big: 'fa-gem', intel: 'fa-binoculars', cooldown: 'fa-bolt', shield: 'fa-shield-halved', emp: 'fa-bolt-lightning', medkit: 'fa-kit-medical'};
+let lootTimer = null;
+function setRadarHot(dist) {
+  window.__hunterNear = dist !== null && dist !== undefined && dist <= 100;
+  document.querySelectorAll('.radar').forEach(r => r.classList.toggle('hot', window.__hunterNear));
+}
+function lootIcon(type) { const u = GAME_ICONS['loot_' + type]; return u ? `<img src="${u}" alt="">` : `<i class="fas ${LOOT_FA[type] || 'fa-gift'}"></i>`; }
+function showLootReveal(rewards) {
+  if (!rewards || !rewards.length) return;
+  const el = document.getElementById('lootReveal'); if (!el) return;
+  clearTimeout(lootTimer);
+  document.getElementById('lrTitle').textContent = rewards.length > 1 ? 'Je hebt ' + rewards.length + ' dingen!' : 'Je hebt gevonden:';
+  document.getElementById('lrBox').innerHTML = GAME_ICONS.loot_box ? `<img src="${GAME_ICONS.loot_box}" alt="">` : '<i class="fas fa-box-open"></i>';
+  const list = document.getElementById('lrList'); list.innerHTML = '';
+  const ok = document.getElementById('lrOk'); ok.style.display = 'none';
+  el.classList.add('show');
+  const reveal = (i) => {
+    if (i >= rewards.length) { ok.style.display = ''; return; }
+    const r = rewards[i];
+    const d = document.createElement('div');
+    d.className = 'lr-item' + (r.rare ? ' rare' : '');
+    d.innerHTML = `<div class="lr-ico">${lootIcon(r.type)}</div><div class="lr-name">${escHtml(r.title)}</div><div class="lr-sub">${escHtml(r.sub || '')}</div>`;
+    list.appendChild(d);
+    if (r.rare) { VXSound.play('badge'); confettiBurst(el); if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 160]); }
+    setTimeout(() => reveal(i + 1), 900);
+  };
+  setTimeout(() => { document.getElementById('lrBox').style.display = 'none'; reveal(0); }, 650);
+  document.getElementById('lrBox').style.display = '';
+  lootTimer = setTimeout(closeLootReveal, 9000 + rewards.length * 1500);
+}
+function confettiBurst(parent) {
+  const cols = ['#fbbf24', '#f472b6', '#60a5fa', '#34d399', '#fff'];
+  for (let i = 0; i < 26; i++) {
+    const c = document.createElement('i'); c.className = 'loot-confetti';
+    c.style.background = cols[i % cols.length];
+    c.style.setProperty('--dx', (Math.random() * 360 - 180) + 'px'); c.style.setProperty('--dy', (Math.random() * 380 - 120) + 'px');
+    c.style.animationDelay = (Math.random() * .2) + 's';
+    parent.appendChild(c); setTimeout(() => c.remove(), 1800);
+  }
+}
+function closeLootReveal() { clearTimeout(lootTimer); const el = document.getElementById('lootReveal'); if (el) el.classList.remove('show'); }
+
+// ---- Role markers: a pin with the role icon (or your own transparent icon from Admin > Afbeeldingen) ----
+function mkRoleIcon(role, label, pulse, personaImg) {
+  const own = GAME_ICONS['marker_' + role];
+  const faIcon = role === 'hunter' ? 'fa-crosshairs' : role === 'runner' ? 'fa-person-running' : 'fa-skull';
+  const inner = personaImg ? '' : (own ? `<img src="${own}" alt="">` : `<i class="fas ${faIcon}"></i>`);
+  const style = personaImg ? `style="background-image:url('${personaImg}')"` : '';
+  const hot = pulse && role === 'runner' && window.__hunterNear ? ' hot' : '';
+  return L.divIcon({className: '', iconSize: [0, 0], iconAnchor: [0, 0],
+    html: `<div class="rm ${role}${own && !personaImg ? ' sys' : ''}">${pulse ? `<i class="radar${hot}"></i><i class="radar r2${hot}"></i>` : ''}<div class="rm-b" ${style}>${inner}</div><i class="rm-t"></i>${label ? `<div class="rm-l">${label}</div>` : ''}</div>`});
+}
 function mkIcon(col, label, pulse, img) {
   const sz = img ? 34 : 22, h = sz / 2;
   const bg = img ? `${col} url('${img}') center/cover` : col;
@@ -1046,6 +1183,7 @@ function claimLootbox(id) {
       if (d.mission_done) { setMyMission(null); VXSound.play('mission_done'); }
       showToast(d.message || 'Dropbox geopend', 'success', 8000);
       VXSound.play('lootbox_open');
+      showLootReveal(d.rewards);
     }).catch(() => showToast('Dropbox openen mislukt', 'error'));
 }
 
@@ -1322,7 +1460,7 @@ function onGPS(pos) {
 
   const col = MY_ROLE === 'hunter' ? '#3b82f6' : '#10b981';
   if (!myMarker) {
-    myMarker = L.marker([lat,lon], {icon: mkIcon(col, 'Jij', true)}).addTo(map);
+    myMarker = L.marker([lat,lon], {icon: mkRoleIcon(MY_ROLE, 'Jij', true, null)}).addTo(map);
     myCircle = L.circle([lat,lon], {radius: acc, color: col, fillOpacity: .05, weight: 1}).addTo(map);
     // First GPS fix: always go to your own position (hunters too, never stay on the default map spot)
     map.setView([lat,lon], 17);
@@ -1360,7 +1498,7 @@ function onGPS(pos) {
       handleShelter(d.shelter);
       if (d.freeze) handleFrozen(d.freeze.left ? {left: d.freeze.left} : null);
     }
-    if (MY_ROLE === 'runner' && headstartOver && !isPaused) VXSound.nearby(d.nearest_hunter);
+    if (MY_ROLE === 'runner' && headstartOver && !isPaused) { VXSound.nearby(d.nearest_hunter); setRadarHot(d.nearest_hunter); }
     (d.hazard_messages || []).forEach(m => showToast(m, 'warn', 8000));
   }).catch(() => {});
 }
@@ -1425,6 +1563,7 @@ function updateZoneBar(z) {
   bar.style.display = 'block';
   const lifePct = Math.max(0, 100 - pct);
   document.getElementById('zoneBarFill').style.width = lifePct + '%';
+  bar.classList.toggle('low', lifePct <= 25 && !!(z && z.outside));
   document.getElementById('zoneBarPct').textContent = Math.round(lifePct) + '%';
   const remaining = Math.max(0, Math.ceil((z.limit_sec || 30) - (z.seconds || 0)));
   const title = document.querySelector('#zoneBar .zb-title span');
@@ -1547,7 +1686,7 @@ function pollState() {
           distEl.textContent = 'Jager op ' + fmtDist(d.active_target.distance) + ' afstand';
       }
         updateNearBadge(d);
-        if (headstartOver && !isPaused && !d.is_caught) VXSound.nearby(d.nearest_hunter);
+        if (headstartOver && !isPaused && !d.is_caught) { VXSound.nearby(d.nearest_hunter); setRadarHot(d.nearest_hunter); }
         updateOfflineBtn(d);
         const ip = document.getElementById('ip-off');
         if (ip) ip.textContent = d.is_offline ? `Offline nog ${fmtMM(offlineRemaining)}` : `${d.offline_uses_left} van {{ game.offline_uses }}`;
@@ -1583,7 +1722,7 @@ function updateMarkers(players) {
     if (MY_ROLE === 'hunter' && p.role === 'runner') {
       if (p.lat && headstartOver && !p.is_caught && !p.is_offline && !p.is_paused) {
         if (!runnerMarkers[p.id]) {
-          runnerMarkers[p.id] = L.marker([p.lat, p.lon], {icon: mkIcon('#10b981', p.codename, false, p.persona && p.persona.image)})
+          runnerMarkers[p.id] = L.marker([p.lat, p.lon], {icon: mkRoleIcon('runner', p.codename, false, p.persona && p.persona.image)})
             .addTo(map).on('click', () => { runnerStore[p.id] = p; openActionModal(p.id); });
         } else {
           runnerMarkers[p.id].setLatLng([p.lat, p.lon]);
@@ -1596,7 +1735,7 @@ function updateMarkers(players) {
         }
       } else if (runnerMarkers[p.id]) {
         if (p.is_caught) {
-          runnerMarkers[p.id].setIcon(mkIcon('#6b7280', p.codename + ' x', false));
+          runnerMarkers[p.id].setIcon(mkRoleIcon('caught', p.codename + ' x', false, null));
         } else if (!p.lat || p.is_offline || !headstartOver) {
           map.removeLayer(runnerMarkers[p.id]); delete runnerMarkers[p.id];
         }
@@ -2692,13 +2831,13 @@ function startCountdown(d) {
   const render = () => {
     const s = Math.ceil((deadline - Date.now()) / 1000);
     if (s <= 0) {
-      numEl.textContent = 'GO!';
+      numEl.textContent = 'GO!'; numEl.classList.add('go');
       hideCountdownOverlay();
       setTimeout(() => pollState(), 450);
       return;
     }
-    if (numEl.textContent !== String(s)) VXSound.play('countdown_tick');
-    numEl.textContent = s;
+    if (numEl.textContent !== String(s)) { VXSound.play('countdown_tick'); numEl.style.animation = 'none'; void numEl.offsetWidth; numEl.style.animation = ''; }
+    numEl.classList.remove('go'); numEl.textContent = s;
   };
   render();
   countdownTimer = setInterval(render, 250);
@@ -2725,6 +2864,7 @@ setInterval(()=>{
   }
   document.getElementById('tv-el').textContent  = fmtMM(elapsed);
   document.getElementById('tv-left').textContent = fmtMM(timeLeft);
+  { const tp = document.getElementById('tp-left'); if (tp && GAME_STATUS === 'active') { tp.classList.toggle('last', timeLeft > 0 && timeLeft <= 60); tp.classList.toggle('late', timeLeft > 60 && timeLeft <= 300); } }
   tickLocCd();
   // Headstart
   if(hsLeft<=0 && !headstartOver){

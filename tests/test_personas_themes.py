@@ -146,3 +146,32 @@ def test_halloween_has_five_of_each_group_and_pasting_lists_works(appmodule, cli
         assert sum(1 for p in appmodule.ThemePersona.query.filter_by(theme_id=tid, name="Ghostface")) == 1      # no duplicate
     old_table = "| Film | Slecht | Goed |\n|---|---|---|\n| **Poltergeist** | The Beast | Diane Freeling |"
     assert [(r["name"], r["kind"]) for r in appmodule.parse_persona_table(old_table)] == [("The Beast", "bad"), ("Diane Freeling", "good")]
+
+
+def test_transparent_icons_stay_transparent_and_reach_the_game_page(appmodule, client):
+    from PIL import Image
+    login(client, appmodule)
+    buf = io.BytesIO(); Image.new("RGBA", (30, 30), (255, 0, 0, 0)).save(buf, "PNG"); buf.seek(0)    # fully transparent
+    r = client.post("/admin/images/img_loot_emp", data={"file": (buf, "emp.png")}, content_type="multipart/form-data").get_json()
+    assert r["success"]
+    with appmodule.app.app_context():
+        path = appmodule.os.path.join(appmodule.app.config["BG_FOLDER"], r["url"].rsplit("/", 1)[1])
+        im = Image.open(path)
+        assert im.mode == "RGBA" and im.getpixel((5, 5))[3] == 0
+        assert appmodule.game_icons()["loot_emp"] == r["url"]
+    r2 = client.post("/admin/images/img_marker_hunter", data={"file": (png_bytes(), "h.png")}, content_type="multipart/form-data").get_json()
+    assert r2["success"]
+
+
+def test_theme_atmosphere_and_calm_switch_render(appmodule, client):
+    with appmodule.app.app_context():
+        for t in appmodule.SoundTheme.query.all():
+            t.is_default = t.slug == "kerst"
+        appmodule.db.session.commit()
+    html = client.get("/login", follow_redirects=True).get_data(as_text=True)
+    assert 'class="fx-layer"' in html and "fx-fall" in html and 'id="vxCalm"' in html
+    with appmodule.app.app_context():
+        for t in appmodule.SoundTheme.query.all():
+            t.is_default = t.slug == "klassiek"
+        appmodule.db.session.commit()
+    assert 'class="fx-layer"' not in client.get("/login", follow_redirects=True).get_data(as_text=True)      # the classic theme stays calm

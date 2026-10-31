@@ -366,6 +366,7 @@ html[data-skin="halloween"] .hw-hide{display:none}
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
 }
 </style>
+<script>try{if(localStorage.getItem('vx_calm')==='1')document.documentElement.classList.add('calm')}catch(e){}</script>
 </head>
 {% set show_tabbar = current_user.is_authenticated and request.endpoint not in ('lobby', 'join_team', 'new_game') %}
 <body class="{{ 'has-tabbar' if show_tabbar else '' }}">
@@ -637,6 +638,35 @@ function fmtDist(m){return m>=1000?`${(m/1000).toFixed(1)}km`:`${Math.round(m)}m
   VXSound.startMusic();           // background music; the lobby and the game have their own sounds
   VXSound.init({});
   {% endif %}
+})();
+</script>
+{% set fx_map = {'halloween': ['🦇','🦇','👻','🕸️'], 'kerst': ['❄','❄','❅','❆'], 'sinterklaas': ['🍪','❄','🎁'], 'pasen': ['🥚','🐣','🌷'], 'oudennieuw': ['✨','🎆','✨'], 'koningsdag': ['🟠','🟠','🎉'], 'zomer': ['☀️','🫧','🫧']} %}
+{% set fx_cls = {'halloween': 'fx-float', 'kerst': 'fx-fall', 'sinterklaas': 'fx-fall', 'pasen': 'fx-fall', 'oudennieuw': 'fx-rise', 'koningsdag': 'fx-fall', 'zomer': 'fx-rise'} %}
+{% if site_theme_slug in fx_map %}
+<div class="fx-layer" aria-hidden="true">{% for i in range(14) %}<span class="fx {{ fx_cls[site_theme_slug] }}" style="left:{{ (i * 7 + 3) % 97 }}%;animation-delay:-{{ (i * 2.3) % 17 }}s;animation-duration:{{ 14 + (i * 3) % 13 }}s;font-size:{{ 14 + (i * 5) % 16 }}px">{{ fx_map[site_theme_slug][i % fx_map[site_theme_slug]|length] }}</span>{% endfor %}</div>
+<style>
+.fx-layer{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.fx{position:absolute;opacity:.4;will-change:transform;animation-timing-function:linear;animation-iteration-count:infinite}
+.fx-fall{top:-30px;animation-name:fxFall}.fx-rise{bottom:-30px;animation-name:fxRise}.fx-float{top:20%;animation-name:fxFloat;animation-timing-function:ease-in-out}
+@keyframes fxFall{0%{transform:translate(0,-30px) rotate(0)}50%{transform:translate(24px,50vh) rotate(180deg)}100%{transform:translate(-10px,110vh) rotate(360deg)}}
+@keyframes fxRise{0%{transform:translate(0,30px);opacity:0}15%{opacity:.5}100%{transform:translate(20px,-110vh);opacity:0}}
+@keyframes fxFloat{0%{transform:translate(-10vw,0)}25%{transform:translate(25vw,-6vh)}50%{transform:translate(55vw,4vh)}75%{transform:translate(85vw,-8vh)}100%{transform:translate(115vw,0)}}
+html.calm .fx-layer{display:none}
+@media (prefers-reduced-motion:reduce){.fx-layer{display:none}}
+</style>
+{% endif %}
+<button type="button" id="vxCalm" class="vx-mute" style="right:64px" aria-label="Minder animaties" title="Minder animaties aan/uit"><i class="fas fa-wand-sparkles"></i></button>
+<style>
+.vx-mute.calmed{color:var(--text2);opacity:.7}
+html.calm *,html.calm *::before,html.calm *::after{animation-duration:.01ms!important;animation-iteration-count:1!important}
+@media(max-width:768px){body.has-tabbar #vxCalm{bottom:calc(86px + env(safe-area-inset-bottom))}}
+</style>
+<script>
+(function(){
+  var b=document.getElementById('vxCalm'); if(!b) return;
+  function paint(){ b.classList.toggle('calmed',document.documentElement.classList.contains('calm')); b.title=document.documentElement.classList.contains('calm')?'Animaties staan uit (tik om aan te zetten)':'Minder animaties'; }
+  b.addEventListener('click',function(){ var on=document.documentElement.classList.toggle('calm'); try{localStorage.setItem('vx_calm',on?'1':'0')}catch(e){} paint(); });
+  paint();
 })();
 </script>
 </body>
